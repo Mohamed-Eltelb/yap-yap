@@ -1,11 +1,18 @@
-import { HistoryItem, PersonalizationCategory, RetentionPolicy } from '../types/app';
+import {
+  DictationMode,
+  HistoryItem,
+  PersonalizationCategory,
+  RetentionPolicy,
+} from '../types/app';
 
 export interface InsightsStats {
   totalWords: number;
   formattedWords: string;
   timeSavedMinutes: number;
+  timeSavedSeconds: number;
   averageWpm: number;
   totalDictationMinutes: number;
+  totalDictationSeconds: number;
   activeDays: number;
   currentStreak: number;
   longestStreak: number;
@@ -57,11 +64,42 @@ export function formatWordCount(words: number): { value: string; unit: string } 
 export function formatDurationParts(totalMinutes: number): {
   hours: number;
   minutes: number;
+  firstVal: number;
+  firstUnit: 'hr' | 'min';
+  secondVal: number;
+  secondUnit: 'min' | 'sec';
 } {
-  const rounded = Math.max(0, Math.round(totalMinutes));
+  const totalSeconds = Math.max(0, Math.round(totalMinutes * 60));
+  if (totalSeconds === 0) {
+    return {
+      hours: 0,
+      minutes: 0,
+      firstVal: 0,
+      firstUnit: 'hr',
+      secondVal: 0,
+      secondUnit: 'min',
+    };
+  }
+  if (totalSeconds < 60) {
+    return {
+      hours: 0,
+      minutes: 0,
+      firstVal: 0,
+      firstUnit: 'min',
+      secondVal: totalSeconds,
+      secondUnit: 'sec',
+    };
+  }
+  const roundedMinutes = Math.max(1, Math.round(totalMinutes));
+  const hours = Math.floor(roundedMinutes / 60);
+  const minutes = roundedMinutes % 60;
   return {
-    hours: Math.floor(rounded / 60),
-    minutes: rounded % 60,
+    hours,
+    minutes,
+    firstVal: hours,
+    firstUnit: 'hr',
+    secondVal: minutes,
+    secondUnit: 'min',
   };
 }
 
@@ -69,6 +107,63 @@ export function countWords(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   return trimmed.split(/\s+/).length;
+}
+
+export function classifyTranscriptCategory(
+  text: string,
+  mode: DictationMode
+): PersonalizationCategory {
+  if (mode === 'ask') return 'AI assistants';
+  const lower = text.toLowerCase();
+
+  if (
+    /\b(git|npm|yarn|pnpm|docker|api|json|cli|bug|deploy|commit|pull request|typescript|javascript|python|rust|react|database|sql|endpoint|localhost|terminal|cursor|vscode|webpack|vite|refactor)\b/.test(
+      lower
+    ) ||
+    /[a-z]+[A-Z][a-zA-Z]+/.test(text) ||
+    /\.(ts|tsx|js|py|rs|go|json|md|yml|sh)\b/.test(lower)
+  ) {
+    return 'Development tools';
+  }
+
+  if (
+    /\b(post|tweet|thread|twitter|reddit|linkedin|instagram|youtube|tiktok|caption|followers|subscribers|hashtag|viral)\b/.test(
+      lower
+    ) ||
+    /#[a-zA-Z0-9_]+/.test(text)
+  ) {
+    return 'Social platforms';
+  }
+
+  if (
+    /^(explain|summarize|write|generate|draft|refactor|analyze|translate|compare|list|how do i|what is|can you)\b/i.test(
+      text.trim()
+    )
+  ) {
+    return 'AI assistants';
+  }
+
+  return 'Messaging';
+}
+
+export function extractAutoDictionaryWords(
+  text: string,
+  existingWords: string[]
+): string[] {
+  const existingSet = new Set(existingWords.map((w) => w.toLowerCase()));
+  const candidates = new Set<string>();
+
+  // 1. Domain names / tech hosts (e.g., apivault.tech, github.com)
+  const domains = text.match(/\b[a-zA-Z0-9-]+\.(tech|io|ai|dev|app|com|org|net)\b/g) ?? [];
+  for (const d of domains) candidates.add(d);
+
+  // 2. CamelCase or mixed-case identifiers (e.g., RecyclePen, TypeScript, OpenAI)
+  const camelTokens = text.match(/\b[A-Za-z]+[a-z][A-Z][A-Za-z0-9]*\b/g) ?? [];
+  for (const c of camelTokens) candidates.add(c);
+
+  return Array.from(candidates).filter(
+    (w) => w.length >= 3 && !existingSet.has(w.toLowerCase())
+  );
 }
 
 export function filterByRetention(
@@ -89,14 +184,19 @@ export function computeInsights(
 ): InsightsStats {
   const totalWords = items.reduce((sum, item) => sum + item.wordCount, 0);
   const totalDurationMs = items.reduce((sum, item) => sum + item.durationMs, 0);
+  const totalDictationSeconds = Math.round(totalDurationMs / 1000);
   const totalDictationMinutes = totalDurationMs / 60_000;
 
-  // Baseline average typing speed = 40 WPM
+  // Baseline average typing speed = 40 WPM (1.5 seconds per word)
   const typingEquivalentMinutes = totalWords / 40;
   const timeSavedMinutes = Math.max(0, typingEquivalentMinutes - totalDictationMinutes);
+  const timeSavedSeconds = Math.max(
+    0,
+    Math.round(typingEquivalentMinutes * 60 - totalDictationSeconds)
+  );
 
   const averageWpm =
-    totalDurationMs > 0
+    totalDurationMs > 0 && totalWords > 0
       ? Math.round(totalWords / (totalDurationMs / 60_000))
       : 0;
 
@@ -158,13 +258,16 @@ export function computeInsights(
   };
 
   for (const item of items) {
-    const cat = item.category ?? (item.mode === 'ask' ? 'AI assistants' : 'Messaging');
+    const cat = item.category ?? classifyTranscriptCategory(item.text, item.mode);
     categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
   }
 
+  const hasAnyActivity = items.length > 0 || dictionaryCount > 0;
   const categoryBreakdown = categories.map((cat) => {
     const count = categoryCounts[cat];
-    const rawPct = Math.min(100, count * 1.4 + dictionaryCount * 0.45);
+    const rawPct = hasAnyActivity
+      ? Math.min(100, count * 2.5 + (count > 0 ? dictionaryCount * 0.8 : dictionaryCount * 0.25))
+      : 0;
     return {
       category: cat,
       percent: Number(rawPct.toFixed(1)),
@@ -172,12 +275,14 @@ export function computeInsights(
     };
   });
 
-  const personalizationPercent = Number(
-    (
-      categoryBreakdown.reduce((sum, c) => sum + c.percent, 0) /
-      categories.length
-    ).toFixed(1)
-  );
+  const personalizationPercent = hasAnyActivity
+    ? Number(
+        (
+          categoryBreakdown.reduce((sum, c) => sum + c.percent, 0) /
+          categories.length
+        ).toFixed(1)
+      )
+    : 0;
 
   const formatted = formatWordCount(totalWords);
 
@@ -185,8 +290,10 @@ export function computeInsights(
     totalWords,
     formattedWords: `${formatted.value} ${formatted.unit}`,
     timeSavedMinutes,
+    timeSavedSeconds,
     averageWpm,
     totalDictationMinutes,
+    totalDictationSeconds,
     activeDays,
     currentStreak,
     longestStreak,
@@ -222,7 +329,6 @@ export function buildHeatmapWeeks(
   const dayOfWeek = endDay.getDay(); // 0=Sun..6=Sat
   const saturday = addCalendarDays(endDay, 6 - dayOfWeek);
   const startSunday = addCalendarDays(saturday, -(weeksCount * 7 - 1));
-  const defaultHatchCutoff = addCalendarDays(endDay, -100).getTime();
 
   const monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -261,7 +367,7 @@ export function buildHeatmapWeeks(
       const hatched =
         earliestTime !== null
           ? cellDate.getTime() < earliestTime
-          : cellDate.getTime() < defaultHatchCutoff;
+          : false;
 
       let usageLabel = 'No activity';
       if (level === 4) usageLabel = `Power usage · ${words} words`;

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
+  Check,
   CloudOff,
   Copy,
   Download,
@@ -7,8 +8,13 @@ import {
   Lock,
   Monitor,
   MoreHorizontal,
+  Pause,
+  Pencil,
+  Play,
   RotateCcw,
   Trash2,
+  Upload,
+  X,
 } from 'lucide-react';
 import { HistoryItem, RetentionPolicy } from '../types/app';
 import { WindowControls } from './YapLogo';
@@ -16,17 +22,16 @@ import { WindowControls } from './YapLogo';
 interface Props {
   history: HistoryItem[];
   retention: RetentionPolicy;
-  cloudSyncMock: boolean;
   onChangeRetention: (policy: RetentionPolicy) => void;
-  onToggleCloudSync: () => void;
   onCopyText: (text: string) => void;
   onToggleFlag: (id: string) => void;
+  onEditItem: (id: string, newText: string) => void;
   onRetryItem: (item: HistoryItem) => void;
   onDownloadAudio: (item: HistoryItem) => void;
   onDeleteItem: (id: string) => void;
-  onClearSamples: () => void;
   onClearAll: () => void;
   onExportJson: () => void;
+  onImportJson: (items: HistoryItem[]) => void;
 }
 
 type HistoryFilter = 'all' | 'dictations' | 'ask';
@@ -57,21 +62,26 @@ function formatTime(iso: string): string {
 export function HistoryView({
   history,
   retention,
-  cloudSyncMock,
   onChangeRetention,
-  onToggleCloudSync,
   onCopyText,
   onToggleFlag,
+  onEditItem,
   onRetryItem,
   onDownloadAudio,
   onDeleteItem,
-  onClearSamples,
   onClearAll,
   onExportJson,
+  onImportJson,
 }: Props) {
   const [filter, setFilter] = useState<HistoryFilter>('all');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [playingId, setPlayingId] = useState<string | null>(null);
+
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     if (filter === 'dictations') {
@@ -94,7 +104,47 @@ export function HistoryView({
     return Array.from(map.entries());
   }, [filtered]);
 
-  const hasSamples = history.some((h) => h.isSample);
+  const handleTogglePlay = (item: HistoryItem) => {
+    if (!item.audioDataUrl) return;
+    if (playingId === item.id && audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      setPlayingId(null);
+      return;
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+    }
+    const audio = new Audio(item.audioDataUrl);
+    audioPlayerRef.current = audio;
+    setPlayingId(item.id);
+    audio.onended = () => setPlayingId(null);
+    audio.onerror = () => setPlayingId(null);
+    void audio.play().catch(() => setPlayingId(null));
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const trimmed = editDraft.trim();
+    if (trimmed) {
+      onEditItem(id, trimmed);
+    }
+    setEditingId(null);
+    setEditDraft('');
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        onImportJson(parsed as HistoryItem[]);
+      }
+    } catch {
+      // ignore invalid json
+    }
+    e.target.value = '';
+  };
 
   return (
     <div
@@ -117,24 +167,24 @@ export function HistoryView({
           </h1>
 
           <div className="flex items-center gap-3 relative">
-            <button
-              type="button"
-              onClick={onToggleCloudSync}
-              className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-              title="Local-first mode keeps everything on this device"
+            <div
+              className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)] select-none"
+              title="100% local storage — your transcripts and audio never leave your device"
             >
               <CloudOff className="w-3.5 h-3.5" />
               <span>Cloud Sync</span>
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
-                  cloudSyncMock
-                    ? 'bg-[var(--accent-blue)] text-white border-transparent'
-                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
-                }`}
-              >
-                {cloudSyncMock ? 'On' : 'Off'}
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)]">
+                Off
               </span>
-            </button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
 
             <button
               type="button"
@@ -151,7 +201,7 @@ export function HistoryView({
             {headerMenuOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 top-9 z-40 w-48 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-xl py-1.5 text-[13px]"
+                className="absolute right-0 top-9 z-40 w-52 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-xl py-1.5 text-[13px]"
               >
                 <button
                   type="button"
@@ -162,32 +212,35 @@ export function HistoryView({
                   className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export history JSON</span>
+                  <span>Export local history</span>
                 </button>
-                {hasSamples && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClearSamples();
-                      setHeaderMenuOpen(false);
-                    }}
-                    className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear sample data</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => {
-                    onClearAll();
+                    fileInputRef.current?.click();
                     setHeaderMenuOpen(false);
                   }}
-                  className="w-full px-3.5 py-2 text-left text-red-500 hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                  className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear all history</span>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import history JSON</span>
                 </button>
+                {history.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-[var(--border-subtle)]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClearAll();
+                        setHeaderMenuOpen(false);
+                      }}
+                      className="w-full px-3.5 py-2 text-left text-red-500 hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear all history</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -223,7 +276,7 @@ export function HistoryView({
               <span>Your data stays private</span>
             </div>
             <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-              Your voice dictations are private with zero data retention. They are stored only on your device and send directly using your own API keys.
+              Your voice dictations are private with zero data retention. They are stored only on your device and cannot be accessed from anywhere else.
             </p>
           </div>
         </div>
@@ -270,6 +323,9 @@ export function HistoryView({
                 <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] divide-y divide-[var(--border-subtle)]">
                   {items.map((item) => {
                     const isMenuOpen = openMenuId === item.id;
+                    const isEditing = editingId === item.id;
+                    const isPlaying = playingId === item.id;
+
                     return (
                       <div
                         key={item.id}
@@ -280,19 +336,54 @@ export function HistoryView({
                             {formatTime(item.createdAt)}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p
-                              dir="auto"
-                              className="text-[13.5px] text-[var(--text-primary)] leading-relaxed selectable break-words"
-                            >
-                              {item.text}
-                            </p>
-                            {item.mode === 'ask' && item.rawText !== item.text && (
-                              <p
-                                dir="auto"
-                                className="text-[11.5px] text-[var(--text-muted)] mt-1 truncate"
-                              >
-                                Prompt: {item.rawText}
-                              </p>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  dir="auto"
+                                  autoFocus
+                                  value={editDraft}
+                                  onChange={(e) => setEditDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveEdit(item.id);
+                                    if (e.key === 'Escape') setEditingId(null);
+                                  }}
+                                  className="flex-1 px-3 py-1 rounded-lg bg-[var(--bg-input)] border border-[var(--accent-blue)] text-[13.5px] text-[var(--text-primary)] focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEdit(item.id)}
+                                  className="p-1.5 rounded-lg bg-[var(--accent-blue)] text-white"
+                                  title="Save transcript"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingId(null)}
+                                  className="p-1.5 rounded-lg bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <p
+                                  dir="auto"
+                                  className="text-[13.5px] text-[var(--text-primary)] leading-relaxed selectable break-words"
+                                >
+                                  {item.text}
+                                </p>
+                                {item.mode === 'ask' && item.rawText !== item.text && (
+                                  <p
+                                    dir="auto"
+                                    className="text-[11.5px] text-[var(--text-muted)] mt-1 truncate"
+                                  >
+                                    Prompt: {item.rawText}
+                                  </p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -300,11 +391,25 @@ export function HistoryView({
                         {/* Hover Actions matching Image 4 */}
                         <div
                           className={`flex items-center gap-1 shrink-0 transition-opacity ${
-                            isMenuOpen || item.flagged
+                            isMenuOpen || item.flagged || isPlaying
                               ? 'opacity-100'
                               : 'opacity-0 group-hover:opacity-100'
                           }`}
                         >
+                          {item.audioDataUrl && (
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePlay(item)}
+                              title={isPlaying ? 'Pause audio' : 'Play audio'}
+                              className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-active-nav)] hover:text-[var(--text-primary)] transition-colors"
+                            >
+                              {isPlaying ? (
+                                <Pause className="w-3.5 h-3.5 text-[var(--accent-blue)]" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onCopyText(item.text)}
@@ -357,6 +462,18 @@ export function HistoryView({
                                 >
                                   <RotateCcw className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
                                   <span>Retry</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingId(item.id);
+                                    setEditDraft(item.text);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2.5"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                                  <span>Edit transcript</span>
                                 </button>
                                 <button
                                   type="button"

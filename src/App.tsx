@@ -11,7 +11,13 @@ import {
   processTranscriptWithLlm,
   transcribeAudio,
 } from './services/providers/engine';
-import { computeInsights, countWords, filterByRetention } from './services/stats';
+import {
+  classifyTranscriptCategory,
+  computeInsights,
+  countWords,
+  extractAutoDictionaryWords,
+  filterByRetention,
+} from './services/stats';
 import {
   PersistedAppState,
   getInitialState,
@@ -22,7 +28,6 @@ import {
   ActiveNav,
   DictationMode,
   HistoryItem,
-  PersonalizationCategory,
   ProviderConfig,
   ProviderId,
   SettingsModalTab,
@@ -171,13 +176,41 @@ export function App() {
 
   const updateProvider = useCallback(
     (id: ProviderId, patch: Partial<ProviderConfig>) => {
-      setAppState((prev) => ({
-        ...prev,
-        providers: {
+      setAppState((prev) => {
+        const updatedProvider = { ...prev.providers[id], ...patch };
+        const nextProviders = {
           ...prev.providers,
-          [id]: { ...prev.providers[id], ...patch },
-        },
-      }));
+          [id]: updatedProvider,
+        };
+
+        let nextSettings = prev.settings;
+        if (patch.apiKey && patch.apiKey.trim().length > 0) {
+          const meta = PROVIDER_CATALOG[id];
+          const currStt = prev.settings.activeSttProvider;
+          const currSttNeedsKey =
+            PROVIDER_CATALOG[currStt].requiresKey &&
+            !prev.providers[currStt].apiKey.trim();
+          const currLlm = prev.settings.activeLlmProvider;
+          const currLlmNeedsKey =
+            currLlm !== 'none' &&
+            PROVIDER_CATALOG[currLlm].requiresKey &&
+            !prev.providers[currLlm].apiKey.trim();
+
+          nextSettings = {
+            ...prev.settings,
+            activeSttProvider:
+              meta.supportsStt && currSttNeedsKey ? id : prev.settings.activeSttProvider,
+            activeLlmProvider:
+              meta.supportsLlm && currLlmNeedsKey ? id : prev.settings.activeLlmProvider,
+          };
+        }
+
+        return {
+          ...prev,
+          providers: nextProviders,
+          settings: nextSettings,
+        };
+      });
     },
     []
   );
@@ -209,8 +242,23 @@ export function App() {
       audioMimeType?: string,
       existingItemId?: string
     ) => {
-      const sttProviderId = appState.settings.activeSttProvider;
-      const sttProvider = appState.providers[sttProviderId];
+      let sttProviderId = appState.settings.activeSttProvider;
+      let sttProvider = appState.providers[sttProviderId];
+      if (
+        PROVIDER_CATALOG[sttProviderId].requiresKey &&
+        !sttProvider.apiKey.trim()
+      ) {
+        const fallbackStt = (Object.values(appState.providers) as ProviderConfig[]).find(
+          (p) =>
+            PROVIDER_CATALOG[p.id].supportsStt &&
+            (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+        );
+        if (fallbackStt) {
+          sttProviderId = fallbackStt.id;
+          sttProvider = fallbackStt;
+        }
+      }
+
       const llmSelection = appState.settings.activeLlmProvider;
 
       setHud({
@@ -225,6 +273,7 @@ export function App() {
         const dictWords = appState.dictionary.map((d) => d.word);
         const rawText = await transcribeAudio(audioBlob, sttProvider, {
           dictionaryWords: dictWords,
+          languageVariants: appState.settings.languageVariants,
         });
 
         if (!rawText) {
@@ -235,8 +284,7 @@ export function App() {
         let answer: string | undefined;
         let usedProviderId: ProviderId = sttProviderId;
         let usedModel = sttProvider.sttModel;
-        const category: PersonalizationCategory =
-          mode === 'ask' ? 'AI assistants' : 'Messaging';
+        const initialCategory = classifyTranscriptCategory(rawText, mode);
 
         const needsLlm =
           mode === 'translate' ||
@@ -244,10 +292,25 @@ export function App() {
           (mode === 'dictate' && appState.settings.smartCleanup);
 
         if (needsLlm && llmSelection !== 'none') {
-          const llmProvider = appState.providers[llmSelection];
-          const llmMeta = PROVIDER_CATALOG[llmSelection];
-          const hasLlmKey =
+          let llmProvider = appState.providers[llmSelection];
+          let llmMeta = PROVIDER_CATALOG[llmSelection];
+          let hasLlmKey =
             llmProvider.apiKey.trim().length > 0 || !llmMeta.requiresKey;
+
+          if (!hasLlmKey) {
+            const fallbackLlm = (
+              Object.values(appState.providers) as ProviderConfig[]
+            ).find(
+              (p) =>
+                PROVIDER_CATALOG[p.id].supportsLlm &&
+                (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+            );
+            if (fallbackLlm) {
+              llmProvider = fallbackLlm;
+              llmMeta = PROVIDER_CATALOG[fallbackLlm.id];
+              hasLlmKey = true;
+            }
+          }
 
           if (hasLlmKey) {
             const processed = await processTranscriptWithLlm(
@@ -258,14 +321,15 @@ export function App() {
                 targetLanguages: appState.settings.translationTargets,
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
-                category,
-                categoryInstruction: appState.settings.categoryInstructions[category],
+                category: initialCategory,
+                categoryInstruction:
+                  appState.settings.categoryInstructions[initialCategory],
               }
             );
             finalText = processed.finalText || rawText;
             answer = processed.answer;
             if (mode !== 'dictate') {
-              usedProviderId = llmSelection;
+              usedProviderId = llmProvider.id;
               usedModel = llmProvider.llmModel;
             }
           } else if (mode === 'translate' || mode === 'ask') {
@@ -279,11 +343,13 @@ export function App() {
           throw new Error('Select an AI provider in API Keys to use Translate or Ask anything.');
         }
 
+        const category = classifyTranscriptCategory(finalText, mode);
         const words = countWords(finalText);
         const wpm = Math.max(
           1,
           Math.round((countWords(rawText) / Math.max(1000, durationMs)) * 60_000)
         );
+        const autoWords = extractAutoDictionaryWords(finalText, dictWords);
 
         if (existingItemId) {
           setAppState((prev) => ({
@@ -299,6 +365,7 @@ export function App() {
                     wpm,
                     providerId: usedProviderId,
                     model: usedModel,
+                    category,
                   }
                 : h
             ),
@@ -323,10 +390,28 @@ export function App() {
             category,
           };
 
-          setAppState((prev) => ({
-            ...prev,
-            history: [newItem, ...prev.history],
-          }));
+          setAppState((prev) => {
+            const existingSet = new Set(
+              prev.dictionary.map((d) => d.word.toLowerCase())
+            );
+            const newAutoEntries = autoWords
+              .filter((w) => !existingSet.has(w.toLowerCase()))
+              .map((w, idx) => ({
+                id: `d-auto-${Date.now()}-${idx}`,
+                word: w,
+                source: 'auto' as const,
+                createdAt: new Date().toISOString(),
+              }));
+
+            return {
+              ...prev,
+              history: [newItem, ...prev.history],
+              dictionary:
+                newAutoEntries.length > 0
+                  ? [...newAutoEntries, ...prev.dictionary]
+                  : prev.dictionary,
+            };
+          });
         }
 
         // Copy & optionally auto-paste
@@ -420,14 +505,29 @@ export function App() {
       }
       if (hudRef.current.status === 'processing') return;
 
-      const sttId = appState.settings.activeSttProvider;
-      const sttCfg = appState.providers[sttId];
-      const sttMeta = PROVIDER_CATALOG[sttId];
+      let sttId = appState.settings.activeSttProvider;
+      let sttCfg = appState.providers[sttId];
+      let sttMeta = PROVIDER_CATALOG[sttId];
+
       if (sttMeta.requiresKey && !sttCfg.apiKey.trim()) {
-        setModalTab('providers');
-        setModalOpen(true);
-        showToast(`Add your ${sttMeta.name} API key first to start dictating.`);
-        return;
+        const configuredStt = (
+          Object.values(appState.providers) as ProviderConfig[]
+        ).find(
+          (p) =>
+            PROVIDER_CATALOG[p.id].supportsStt &&
+            (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+        );
+        if (configuredStt) {
+          sttId = configuredStt.id;
+          sttCfg = configuredStt;
+          sttMeta = PROVIDER_CATALOG[sttId];
+          updateSettings({ activeSttProvider: sttId });
+        } else {
+          setModalTab('providers');
+          setModalOpen(true);
+          showToast(`Add an API key in API Keys to start dictating.`);
+          return;
+        }
       }
 
       try {
@@ -485,6 +585,7 @@ export function App() {
       restoreAudioMute,
       showToast,
       stopAndProcess,
+      updateSettings,
     ]
   );
 
@@ -656,7 +757,104 @@ export function App() {
     a.download = 'yapyap-history.json';
     a.click();
     URL.revokeObjectURL(url);
-    showToast('History exported as JSON');
+    showToast('History exported locally as JSON');
+  };
+
+  const handleImportHistory = (imported: HistoryItem[]) => {
+    setAppState((prev) => {
+      const existingIds = new Set(prev.history.map((h) => h.id));
+      const normalized: HistoryItem[] = imported
+        .filter((h) => !h.isSample && typeof h.text === 'string' && h.text.trim().length > 0)
+        .map((h, idx) => {
+          const cleanText = h.text.trim();
+          const words = countWords(cleanText);
+          const dur = Math.max(1000, Number(h.durationMs) || 3000);
+          return {
+            ...h,
+            id: existingIds.has(h.id) ? `h-imp-${Date.now()}-${idx}` : h.id,
+            createdAt: h.createdAt || new Date().toISOString(),
+            mode: h.mode || 'dictate',
+            rawText: h.rawText || cleanText,
+            text: cleanText,
+            durationMs: dur,
+            wordCount: words,
+            wpm:
+              typeof h.wpm === 'number' && h.wpm > 0
+                ? h.wpm
+                : Math.max(1, Math.round((words / dur) * 60_000)),
+            providerId: h.providerId || prev.settings.activeSttProvider,
+            model: h.model || 'imported',
+            category: h.category || classifyTranscriptCategory(cleanText, h.mode || 'dictate'),
+          };
+        });
+
+      const merged = [...normalized, ...prev.history].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      return {
+        ...prev,
+        history: filterByRetention(merged, prev.settings.historyRetention),
+      };
+    });
+    showToast(`Imported ${imported.length} history entries`);
+  };
+
+  const handleEditHistoryItem = (id: string, newText: string) => {
+    const trimmed = newText.trim();
+    if (!trimmed) return;
+    setAppState((prev) => {
+      const target = prev.history.find((h) => h.id === id);
+      if (!target) return prev;
+
+      const oldTokens = new Set(
+        target.text
+          .split(/\s+/)
+          .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase())
+          .filter(Boolean)
+      );
+      const newTokens = trimmed
+        .split(/\s+/)
+        .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+        .filter((t) => t.length >= 3 && !oldTokens.has(t.toLowerCase()));
+
+      const existingDict = new Set(prev.dictionary.map((d) => d.word.toLowerCase()));
+      const autoLearned = newTokens
+        .filter((t) => !existingDict.has(t.toLowerCase()))
+        .slice(0, 3)
+        .map((w, idx) => ({
+          id: `d-edit-${Date.now()}-${idx}`,
+          word: w,
+          source: 'auto' as const,
+          createdAt: new Date().toISOString(),
+        }));
+
+      const nextWords = countWords(trimmed);
+      const nextWpm = Math.max(
+        1,
+        Math.round((nextWords / Math.max(1000, target.durationMs)) * 60_000)
+      );
+      const nextCategory = classifyTranscriptCategory(trimmed, target.mode);
+
+      return {
+        ...prev,
+        history: prev.history.map((h) =>
+          h.id === id
+            ? {
+                ...h,
+                text: trimmed,
+                wordCount: nextWords,
+                wpm: nextWpm,
+                category: nextCategory,
+              }
+            : h
+        ),
+        dictionary:
+          autoLearned.length > 0
+            ? [...autoLearned, ...prev.dictionary]
+            : prev.dictionary,
+      };
+    });
+    showToast('Transcript updated');
   };
 
   const handleAddDictionaryWord = (word: string, source: 'auto' | 'manual' = 'manual') => {
@@ -728,6 +926,7 @@ export function App() {
         dismissedQuickCard={appState.settings.dismissedQuickCard}
         onDismissQuickCard={() => updateSettings({ dismissedQuickCard: true })}
         isRecording={hud.status === 'recording'}
+        totalWords={stats.totalWords}
       />
 
       <main className="flex-1 min-w-0 h-full flex flex-col relative">
@@ -752,11 +951,7 @@ export function App() {
           <HistoryView
             history={appState.history}
             retention={appState.settings.historyRetention}
-            cloudSyncMock={appState.settings.cloudSyncMock}
             onChangeRetention={(policy) => updateSettings({ historyRetention: policy })}
-            onToggleCloudSync={() =>
-              updateSettings({ cloudSyncMock: !appState.settings.cloudSyncMock })
-            }
             onCopyText={(t) => void handleCopyText(t)}
             onToggleFlag={(id) =>
               setAppState((prev) => ({
@@ -774,18 +969,13 @@ export function App() {
                 history: prev.history.filter((h) => h.id !== id),
               }))
             }
-            onClearSamples={() => {
-              setAppState((prev) => ({
-                ...prev,
-                history: prev.history.filter((h) => !h.isSample),
-              }));
-              showToast('Sample data cleared');
-            }}
+            onEditItem={handleEditHistoryItem}
             onClearAll={() => {
               setAppState((prev) => ({ ...prev, history: [] }));
-              showToast('All history cleared');
+              showToast('All local history cleared');
             }}
             onExportJson={handleExportHistory}
+            onImportJson={handleImportHistory}
           />
         )}
 

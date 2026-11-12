@@ -1,11 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildHeatmapWeeks,
+  classifyTranscriptCategory,
   computeInsights,
   countWords,
+  extractAutoDictionaryWords,
   filterByRetention,
+  formatDurationParts,
   formatWordCount,
 } from '../services/stats';
+import { getInitialState } from '../services/storage';
 import { createDefaultProviders, PROVIDER_CATALOG } from '../services/providers/catalog';
 import {
   processTranscriptWithLlm,
@@ -94,6 +98,62 @@ describe('Stats and Heatmap Engine', () => {
     expect(uniqueKeys.size).toBe(28 * 7);
     const activeCells = allCells.filter((d) => d.words > 0);
     expect(activeCells.length).toBe(3);
+  });
+
+  it('starts with 100% clean zero-fake state and 0% personalization when empty', () => {
+    const init = getInitialState();
+    expect(init.history).toEqual([]);
+    expect(init.dictionary).toEqual([]);
+    const emptyStats = computeInsights(init.history, init.dictionary.length, baseDate);
+    expect(emptyStats.totalWords).toBe(0);
+    expect(emptyStats.activeDays).toBe(0);
+    expect(emptyStats.averageWpm).toBe(0);
+    expect(emptyStats.personalizationPercent).toBe(0);
+    expect(emptyStats.categoryBreakdown.every((c) => c.percent === 0)).toBe(true);
+  });
+
+  it('formats sub-minute durations in seconds and multi-minute durations in hr/min', () => {
+    expect(formatDurationParts(0)).toMatchObject({
+      firstVal: 0,
+      firstUnit: 'hr',
+      secondVal: 0,
+      secondUnit: 'min',
+    });
+    expect(formatDurationParts(18 / 60)).toMatchObject({
+      firstVal: 0,
+      firstUnit: 'min',
+      secondVal: 18,
+      secondUnit: 'sec',
+    });
+    expect(formatDurationParts(179)).toMatchObject({
+      firstVal: 2,
+      firstUnit: 'hr',
+      secondVal: 59,
+      secondUnit: 'min',
+    });
+  });
+
+  it('classifies transcripts across all 4 Personalization categories and extracts technical terms', () => {
+    expect(classifyTranscriptCategory('Fix the TypeScript git commit bug in api', 'dictate')).toBe(
+      'Development tools'
+    );
+    expect(classifyTranscriptCategory('Post this thread on Twitter and Reddit', 'dictate')).toBe(
+      'Social platforms'
+    );
+    expect(classifyTranscriptCategory('Explain how neural networks work', 'ask')).toBe(
+      'AI assistants'
+    );
+    expect(classifyTranscriptCategory('Hey let us meet tomorrow at 5', 'dictate')).toBe(
+      'Messaging'
+    );
+
+    const extracted = extractAutoDictionaryWords(
+      'Deploy to apivault.tech using useCallback and safeStorage',
+      ['useCallback']
+    );
+    expect(extracted).toContain('apivault.tech');
+    expect(extracted).toContain('safeStorage');
+    expect(extracted).not.toContain('useCallback');
   });
 });
 

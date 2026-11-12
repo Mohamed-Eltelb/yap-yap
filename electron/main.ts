@@ -283,17 +283,71 @@ app.whenReady().then(() => {
     try {
       const p = getStorePath();
       if (!fs.existsSync(p)) return null;
-      return JSON.parse(fs.readFileSync(p, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as {
+        history?: Array<{ id: string; audioDataUrl?: string }>;
+        [k: string]: unknown;
+      };
+      const audioDir = path.join(app.getPath('userData'), 'audio');
+      if (Array.isArray(parsed.history) && fs.existsSync(audioDir)) {
+        for (const item of parsed.history) {
+          if (!item.audioDataUrl && item.id) {
+            const audioFile = path.join(audioDir, `${item.id}.txt`);
+            if (fs.existsSync(audioFile)) {
+              try {
+                item.audioDataUrl = fs.readFileSync(audioFile, 'utf8');
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      }
+      return parsed;
     } catch {
       return null;
     }
   });
 
-  ipcMain.handle('store:save', (_e, data) => {
+  ipcMain.handle('store:save', (_e, data: Record<string, unknown>) => {
     try {
       const p = getStorePath();
-      fs.mkdirSync(path.dirname(p), { recursive: true });
-      fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
+      const userDataDir = path.dirname(p);
+      const audioDir = path.join(userDataDir, 'audio');
+      fs.mkdirSync(audioDir, { recursive: true });
+
+      const clone = JSON.parse(JSON.stringify(data)) as {
+        history?: Array<{ id: string; audioDataUrl?: string }>;
+        [k: string]: unknown;
+      };
+
+      const activeAudioIds = new Set<string>();
+      if (Array.isArray(clone.history)) {
+        for (const item of clone.history) {
+          if (item.id && item.audioDataUrl) {
+            activeAudioIds.add(`${item.id}.txt`);
+            const audioFile = path.join(audioDir, `${item.id}.txt`);
+            if (!fs.existsSync(audioFile)) {
+              fs.writeFileSync(audioFile, item.audioDataUrl, 'utf8');
+            }
+            delete item.audioDataUrl;
+          }
+        }
+      }
+
+      // Clean up deleted audio files
+      for (const file of fs.readdirSync(audioDir)) {
+        if (file.endsWith('.txt') && !activeAudioIds.has(file)) {
+          try {
+            fs.unlinkSync(path.join(audioDir, file));
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      const tmpPath = `${p}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(clone, null, 2), 'utf8');
+      fs.renameSync(tmpPath, p);
     } catch {
       // Ignore write error
     }

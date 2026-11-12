@@ -217,7 +217,9 @@ export async function testProviderConnection(
         method: 'GET',
         headers: { 'xi-api-key': key },
       });
-      if (res.ok) return { ok: true, message: 'ElevenLabs key verified' };
+      if (res.ok || res.text.includes('missing_permissions') || res.text.includes('user_read')) {
+        return { ok: true, message: 'ElevenLabs key verified' };
+      }
       return { ok: false, message: extractErrorMessage(res.text, res.status) };
     }
 
@@ -233,7 +235,11 @@ export async function testProviderConnection(
 export async function transcribeAudio(
   audioBlob: Blob,
   provider: ProviderConfig,
-  options: { dictionaryWords?: string[]; language?: string } = {}
+  options: {
+    dictionaryWords?: string[];
+    language?: string;
+    languageVariants?: string[];
+  } = {}
 ): Promise<string> {
   const meta = PROVIDER_CATALOG[provider.id];
   const key = provider.apiKey.trim();
@@ -246,6 +252,7 @@ export async function transcribeAudio(
   }
 
   const dictHint = (options.dictionaryWords ?? []).slice(0, 60).join(', ');
+  const variantsHint = (options.languageVariants ?? []).join(', ');
   const ext = extensionFromMime(audioBlob.type || 'audio/webm');
 
   if (provider.id === 'openai' || provider.id === 'groq' || provider.id === 'custom') {
@@ -253,8 +260,11 @@ export async function transcribeAudio(
     const fields: Record<string, string> = {
       model: provider.sttModel || meta.sttModels[0]?.id || 'whisper-1',
     };
-    if (dictHint) {
-      fields.prompt = `Custom vocabulary and names: ${dictHint}`;
+    const promptParts: string[] = [];
+    if (variantsHint) promptParts.push(`Preferred languages: ${variantsHint}.`);
+    if (dictHint) promptParts.push(`Custom vocabulary and names: ${dictHint}.`);
+    if (promptParts.length > 0) {
+      fields.prompt = promptParts.join(' ');
     }
     if (options.language && options.language !== 'auto') {
       fields.language = options.language;
@@ -279,15 +289,23 @@ export async function transcribeAudio(
 
   if (provider.id === 'deepgram') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-    const params = new URLSearchParams({
-      model: provider.sttModel || 'nova-3',
-      smart_format: 'true',
-      punctuate: 'true',
-    });
-    for (const kw of (options.dictionaryWords ?? []).slice(0, 25)) {
-      params.append('keywords', kw);
-    }
-    const res = await performRequest(`${base}/listen?${params.toString()}`, {
+    const model = provider.sttModel || 'nova-3';
+    const buildParams = (includeTerms: boolean) => {
+      const p = new URLSearchParams({
+        model,
+        smart_format: 'true',
+        punctuate: 'true',
+      });
+      if (includeTerms) {
+        const paramName = model.startsWith('nova-3') ? 'keyterm' : 'keywords';
+        for (const kw of (options.dictionaryWords ?? []).slice(0, 20)) {
+          p.append(paramName, kw);
+        }
+      }
+      return p;
+    };
+
+    let res = await performRequest(`${base}/listen?${buildParams(true).toString()}`, {
       method: 'POST',
       headers: {
         Authorization: `Token ${key}`,
@@ -295,6 +313,16 @@ export async function transcribeAudio(
       },
       body: audioBlob,
     });
+    if (!res.ok && res.status === 400 && (options.dictionaryWords?.length ?? 0) > 0) {
+      res = await performRequest(`${base}/listen?${buildParams(false).toString()}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${key}`,
+          'Content-Type': audioBlob.type || 'audio/webm',
+        },
+        body: audioBlob,
+      });
+    }
     if (!res.ok) {
       throw new Error(extractErrorMessage(res.text, res.status));
     }
@@ -326,9 +354,13 @@ export async function transcribeAudio(
     const base64Audio = await blobToBase64(audioBlob);
     const mimeType = (audioBlob.type || 'audio/webm').split(';')[0];
 
-    const promptText = dictHint
-      ? `Transcribe the spoken audio accurately in its original language(s). Return ONLY the exact transcription with proper punctuation, no commentary. Custom terms/names that may appear: ${dictHint}`
-      : 'Transcribe the spoken audio accurately in its original language(s). Return ONLY the exact transcription with proper punctuation, no commentary.';
+    const hints: string[] = [];
+    if (variantsHint) hints.push(`Preferred languages/dialects: ${variantsHint}.`);
+    if (dictHint) hints.push(`Custom terms/names that may appear: ${dictHint}.`);
+
+    const promptText =
+      'Transcribe the spoken audio accurately in its original language(s). Return ONLY the exact transcription with proper punctuation, no commentary.' +
+      (hints.length ? ` ${hints.join(' ')}` : '');
 
     const res = await performRequest(
       `${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,

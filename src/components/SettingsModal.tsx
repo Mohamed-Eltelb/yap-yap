@@ -202,6 +202,24 @@ export function SettingsModal({
       statusMessage: res.message,
       lastTestedAt: new Date().toISOString(),
     });
+    if (res.ok) {
+      const meta = PROVIDER_CATALOG[id];
+      const patch: Partial<SettingsState> = {};
+      const currStt = providers[settings.activeSttProvider];
+      if (meta.supportsStt && !currStt.apiKey.trim()) {
+        patch.activeSttProvider = id;
+      }
+      if (
+        meta.supportsLlm &&
+        settings.activeLlmProvider !== 'none' &&
+        !providers[settings.activeLlmProvider].apiKey.trim()
+      ) {
+        patch.activeLlmProvider = id;
+      }
+      if (Object.keys(patch).length > 0) {
+        onUpdateSettings(patch);
+      }
+    }
   };
 
   const sttProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsStt);
@@ -394,15 +412,39 @@ export function SettingsModal({
                               <span className="text-[14px] font-semibold text-[var(--text-primary)]">
                                 {meta.name}
                               </span>
-                              {isSttActive && (
+                              {isSttActive ? (
                                 <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]">
                                   Active STT
                                 </span>
+                              ) : (
+                                meta.supportsStt && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateSettings({ activeSttProvider: id })
+                                    }
+                                    className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                                  >
+                                    Use for STT
+                                  </button>
+                                )
                               )}
-                              {isLlmActive && (
+                              {isLlmActive ? (
                                 <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                                   Active AI
                                 </span>
+                              ) : (
+                                meta.supportsLlm && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateSettings({ activeLlmProvider: id })
+                                    }
+                                    className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                                  >
+                                    Use for AI
+                                  </button>
+                                )
                               )}
                               {cfg.status === 'connected' && (
                                 <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">

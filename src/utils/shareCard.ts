@@ -68,9 +68,17 @@ export function renderShareCardToCanvas(
   if (template === 'insights' || template === 'highlights') {
     const cards = [
       { value: wordsFmt.value, unit: wordsFmt.unit, label: 'Words dictated' },
-      { value: `${saved.hours}`, unit: `hr ${saved.minutes} min`, label: 'Time saved' },
+      {
+        value: `${saved.firstVal}`,
+        unit: `${saved.firstUnit} ${saved.secondVal} ${saved.secondUnit}`,
+        label: 'Time saved',
+      },
       { value: `${stats.averageWpm}`, unit: 'WPM', label: 'Average dictation speed' },
-      { value: `${totalTime.hours}`, unit: `hr ${totalTime.minutes} min`, label: 'Total dictation time' },
+      {
+        value: `${totalTime.firstVal}`,
+        unit: `${totalTime.firstUnit} ${totalTime.secondVal} ${totalTime.secondUnit}`,
+        label: 'Total dictation time',
+      },
     ];
 
     const padX = 64;

@@ -145,8 +145,10 @@ export function ShareModal({ open, onClose, stats, history, onShowToast }: Props
                 </div>
                 <div className="rounded-xl bg-white/90 p-3.5 shadow-xs">
                   <div className="text-[20px] font-bold leading-none">
-                    {saved.hours} <span className="text-[11px] font-semibold">hr</span>{' '}
-                    {saved.minutes} <span className="text-[11px] font-semibold">min</span>
+                    {saved.firstVal}{' '}
+                    <span className="text-[11px] font-semibold">{saved.firstUnit}</span>{' '}
+                    {saved.secondVal}{' '}
+                    <span className="text-[11px] font-semibold">{saved.secondUnit}</span>
                   </div>
                   <div className="text-[11px] text-zinc-500 mt-1.5">Time saved</div>
                 </div>
@@ -160,8 +162,10 @@ export function ShareModal({ open, onClose, stats, history, onShowToast }: Props
                 </div>
                 <div className="rounded-xl bg-white/90 p-3.5 shadow-xs">
                   <div className="text-[20px] font-bold leading-none">
-                    {totalTime.hours} <span className="text-[11px] font-semibold">hr</span>{' '}
-                    {totalTime.minutes} <span className="text-[11px] font-semibold">min</span>
+                    {totalTime.firstVal}{' '}
+                    <span className="text-[11px] font-semibold">{totalTime.firstUnit}</span>{' '}
+                    {totalTime.secondVal}{' '}
+                    <span className="text-[11px] font-semibold">{totalTime.secondUnit}</span>
                   </div>
                   <div className="text-[11px] text-zinc-500 mt-1.5">
                     Total dictation time

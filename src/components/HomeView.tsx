@@ -116,16 +116,16 @@ export function HomeView({
               <div className="yy-card px-5 py-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-[24px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {saved.hours}
+                    {saved.firstVal}
                   </span>
                   <span className="text-[13px] font-medium text-[var(--text-primary)] mr-1">
-                    hr
+                    {saved.firstUnit}
                   </span>
                   <span className="text-[24px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {saved.minutes}
+                    {saved.secondVal}
                   </span>
                   <span className="text-[13px] font-medium text-[var(--text-primary)]">
-                    min
+                    {saved.secondUnit}
                   </span>
                 </div>
                 <p className="text-[12px] text-[var(--text-secondary)] mt-1">
@@ -150,16 +150,16 @@ export function HomeView({
               <div className="yy-card px-5 py-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-[24px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {totalTime.hours}
+                    {totalTime.firstVal}
                   </span>
                   <span className="text-[13px] font-medium text-[var(--text-primary)] mr-1">
-                    hr
+                    {totalTime.firstUnit}
                   </span>
                   <span className="text-[24px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {totalTime.minutes}
+                    {totalTime.secondVal}
                   </span>
                   <span className="text-[13px] font-medium text-[var(--text-primary)]">
-                    min
+                    {totalTime.secondUnit}
                   </span>
                 </div>
                 <p className="text-[12px] text-[var(--text-secondary)] mt-1">

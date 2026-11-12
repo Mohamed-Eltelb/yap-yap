@@ -22,6 +22,7 @@ interface Props {
   onStartDictation: (mode: DictationMode) => void;
   providers: Record<ProviderId, ProviderConfig>;
   activeSttProvider: ProviderId;
+  totalWords: number;
   dismissedQuickCard: boolean;
   onDismissQuickCard: () => void;
   isRecording: boolean;
@@ -34,6 +35,7 @@ export function Sidebar({
   onStartDictation,
   providers,
   activeSttProvider,
+  totalWords,
   dismissedQuickCard,
   onDismissQuickCard,
   isRecording,
@@ -44,16 +46,14 @@ export function Sidebar({
     { id: 'dictionary', label: 'Dictionary', icon: <BookText className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
   ];
 
-  const configuredCount = Object.values(providers).filter(
-    (p) => p.apiKey.trim().length > 0 || !PROVIDER_CATALOG[p.id].requiresKey
-  ).length;
-
   const activeProvider = providers[activeSttProvider];
   const hasActiveKey =
     activeProvider.apiKey.trim().length > 0 ||
     !PROVIDER_CATALOG[activeSttProvider].requiresKey;
 
-  const progressPct = Math.max(8, Math.round((configuredCount / 7) * 100));
+  const progressPct = hasActiveKey
+    ? Math.min(100, Math.max(12, Math.round((totalWords / 2000) * 100)))
+    : 6;
 
   return (
     <aside className="w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col justify-between select-none">
@@ -119,14 +119,14 @@ export function Sidebar({
           </div>
         )}
 
-        {/* API Key / Provider Status Card matching "Get unlimited words" */}
+        {/* Word Count & API Key Status Card */}
         <div className="p-3 rounded-[14px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] shadow-xs">
           <div className="text-[12.5px] font-medium text-[var(--text-secondary)]">
-            Unlimited BYOK
+            {hasActiveKey ? `Unlimited · ${activeProvider.name}` : 'Get unlimited words'}
           </div>
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[11.5px] font-semibold text-[var(--text-primary)] truncate">
-              {hasActiveKey ? `${activeProvider.name} · Ready` : `${activeProvider.name} · No key`}
+            <span className="text-[11.5px] font-semibold text-[var(--text-primary)] truncate tabular-nums">
+              {totalWords.toLocaleString()} {totalWords === 1 ? 'word' : 'words'} dictated
             </span>
             <button
               type="button"
