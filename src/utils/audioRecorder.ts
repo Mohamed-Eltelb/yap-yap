@@ -1,0 +1,128 @@
+export interface RecorderSession {
+  stop: () => Promise<{
+    blob: Blob;
+    durationMs: number;
+    dataUrl: string;
+    mimeType: string;
+  }>;
+  cancel: () => void;
+}
+
+export async function startAudioRecording(
+  deviceId: string | undefined,
+  onLevels: (levels: number[]) => void
+): Promise<RecorderSession> {
+  const constraints: MediaStreamConstraints = {
+    audio:
+      deviceId && deviceId !== 'default'
+        ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true }
+        : { echoCancellation: true, noiseSuppression: true },
+  };
+
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+  const preferredMimes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  const mimeType = preferredMimes.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+
+  const recorder = mimeType
+    ? new MediaRecorder(stream, { mimeType })
+    : new MediaRecorder(stream);
+
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  // Analyser for live waveform bars
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  const source = audioCtx.createMediaStreamSource(stream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 64;
+  source.connect(analyser);
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  let rafId = 0;
+  let stopped = false;
+
+  const tick = () => {
+    if (stopped) return;
+    analyser.getByteFrequencyData(dataArray);
+    const barCount = 20;
+    const levels: number[] = [];
+    const step = Math.max(1, Math.floor(dataArray.length / barCount));
+    for (let i = 0; i < barCount; i++) {
+      const val = dataArray[i * step] ?? 0;
+      levels.push(Math.min(1, Math.max(0.08, val / 200)));
+    }
+    onLevels(levels);
+    rafId = requestAnimationFrame(tick);
+  };
+
+  const startTime = Date.now();
+  recorder.start(100);
+  rafId = requestAnimationFrame(tick);
+
+  const cleanup = () => {
+    stopped = true;
+    cancelAnimationFrame(rafId);
+    stream.getTracks().forEach((t) => t.stop());
+    void audioCtx.close().catch(() => {});
+  };
+
+  return {
+    stop: () =>
+      new Promise((resolve, reject) => {
+        recorder.onstop = async () => {
+          cleanup();
+          const durationMs = Math.max(400, Date.now() - startTime);
+          const actualMime = recorder.mimeType || mimeType || 'audio/webm';
+          const blob = new Blob(chunks, { type: actualMime });
+          try {
+            const dataUrl = await blobToDataUrl(blob);
+            resolve({ blob, durationMs, dataUrl, mimeType: actualMime });
+          } catch (err) {
+            reject(err);
+          }
+        };
+        recorder.onerror = () => {
+          cleanup();
+          reject(new Error('Audio recording failed'));
+        };
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+        } else {
+          cleanup();
+        }
+      }),
+    cancel: () => {
+      try {
+        if (recorder.state !== 'inactive') recorder.stop();
+      } catch {
+        // ignore
+      }
+      cleanup();
+    },
+  };
+}
+
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
+}

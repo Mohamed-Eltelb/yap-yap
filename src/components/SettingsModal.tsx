@@ -1,0 +1,1123 @@
+import React, { useEffect, useState } from 'react';
+import {
+  AlertCircle,
+  Check,
+  CheckCircle2,
+  Code2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Globe,
+  HelpCircle,
+  Info,
+  KeyRound,
+  Keyboard,
+  Loader2,
+  MessageSquare,
+  Mic,
+  Monitor,
+  Pencil,
+  Plus,
+  Share2,
+  SlidersHorizontal,
+  Sparkles,
+  UserCheck,
+  X,
+} from 'lucide-react';
+import {
+  PROVIDER_CATALOG,
+  PROVIDER_ORDER,
+} from '../services/providers/catalog';
+import { testProviderConnection } from '../services/providers/engine';
+import { InsightsStats } from '../services/stats';
+import {
+  AppearanceMode,
+  PersonalizationCategory,
+  ProviderConfig,
+  ProviderId,
+  SettingsModalTab,
+  SettingsState,
+} from '../types/app';
+import { PersonalizationChart } from './PersonalizationChart';
+
+interface Props {
+  open: boolean;
+  activeTab: SettingsModalTab;
+  onChangeTab: (tab: SettingsModalTab) => void;
+  onClose: () => void;
+  settings: SettingsState;
+  onUpdateSettings: (patch: Partial<SettingsState>) => void;
+  providers: Record<ProviderId, ProviderConfig>;
+  onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
+  stats: InsightsStats;
+  onShowToast: (msg: string) => void;
+}
+
+const ALL_LANGUAGES = [
+  'English (US)',
+  'English (UK)',
+  'Arabic (Egypt)',
+  'Arabic (MSA)',
+  'Spanish',
+  'French',
+  'German',
+  'Italian',
+  'Portuguese',
+  'Japanese',
+  'Korean',
+  'Chinese (Simplified)',
+  'Turkish',
+  'Hindi',
+];
+
+function Toggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full transition-colors ${
+        checked ? 'bg-[var(--accent-blue)]' : 'bg-zinc-300 dark:bg-zinc-600'
+      }`}
+    >
+      <span
+        className={`inline-block h-[16px] w-[16px] transform rounded-full bg-white shadow transition-transform ${
+          checked ? 'translate-x-[21px]' : 'translate-x-[3px]'
+        }`}
+      />
+    </button>
+  );
+}
+
+function formatKeyName(e: KeyboardEvent): string {
+  if (e.code === 'AltRight') return 'Right Alt';
+  if (e.code === 'AltLeft') return 'Left Alt';
+  if (e.code === 'ShiftRight') return 'Right Shift';
+  if (e.code === 'ShiftLeft') return 'Left Shift';
+  if (e.code === 'ControlRight') return 'Right Ctrl';
+  if (e.code === 'ControlLeft') return 'Left Ctrl';
+  if (e.code === 'Space') return 'Space';
+  if (e.code.startsWith('Key')) return e.code.slice(3);
+  if (e.code.startsWith('Digit')) return e.code.slice(5);
+  return e.key.length === 1 ? e.key.toUpperCase() : e.key;
+}
+
+export function SettingsModal({
+  open,
+  activeTab,
+  onChangeTab,
+  onClose,
+  settings,
+  onUpdateSettings,
+  providers,
+  onUpdateProvider,
+  stats,
+  onShowToast,
+}: Props) {
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  const [capturingTarget, setCapturingTarget] = useState<{
+    mode: 'dictate' | 'translate' | 'ask';
+    index: number;
+  } | null>(null);
+  const [editingTargets, setEditingTargets] = useState(false);
+  const [editingVariants, setEditingVariants] = useState(false);
+  const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
+  const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      .then((devices) => {
+        const mics = devices
+          .filter((d) => d.kind === 'audioinput')
+          .map((d, i) => ({
+            id: d.deviceId || `mic-${i}`,
+            label: d.label || `Microphone ${i + 1}`,
+          }));
+        setMicrophones(mics);
+      })
+      .catch(() => {});
+  }, [open]);
+
+  useEffect(() => {
+    if (!capturingTarget) return;
+    const pressed = new Set<string>();
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        setCapturingTarget(null);
+        return;
+      }
+      pressed.add(formatKeyName(e));
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (pressed.size > 0) {
+        const combo = Array.from(pressed);
+        const list = [...settings.shortcuts[capturingTarget.mode]];
+        list[capturingTarget.index] = combo;
+        onUpdateSettings({
+          shortcuts: {
+            ...settings.shortcuts,
+            [capturingTarget.mode]: list,
+          },
+        });
+      }
+      setCapturingTarget(null);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
+  }, [capturingTarget, settings.shortcuts, onUpdateSettings]);
+
+  if (!open) return null;
+
+  const navItems: { id: SettingsModalTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'providers', label: 'API Keys', icon: <KeyRound className="w-4 h-4" /> },
+    { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> },
+    { id: 'personalization', label: 'Personalization', icon: <UserCheck className="w-4 h-4" /> },
+    { id: 'about', label: 'About', icon: <Info className="w-4 h-4" /> },
+    { id: 'help', label: 'Help', icon: <HelpCircle className="w-4 h-4" /> },
+  ];
+
+  const handleTestProvider = async (id: ProviderId) => {
+    const provider = providers[id];
+    onUpdateProvider(id, { status: 'testing', statusMessage: 'Testing connection...' });
+    const res = await testProviderConnection(provider);
+    onUpdateProvider(id, {
+      status: res.ok ? 'connected' : 'error',
+      statusMessage: res.message,
+      lastTestedAt: new Date().toISOString(),
+    });
+  };
+
+  const sttProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsStt);
+  const llmProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsLlm);
+
+  const chartColors = ['#5B9BF8', '#5B9BF8', '#4DC9E6', '#8BA7F9'];
+  const sectors = stats.categoryBreakdown.map((c, i) => ({
+    label: c.category,
+    percent: c.percent,
+    color: chartColors[i % chartColors.length],
+  }));
+
+  const categoryIcons: Record<PersonalizationCategory, React.ReactNode> = {
+    'AI assistants': <Sparkles className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
+    Messaging: <MessageSquare className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
+    'Social platforms': <Share2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
+    'Development tools': <Code2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
+  };
+
+  const addShortcutSlot = (mode: 'dictate' | 'translate' | 'ask') => {
+    const nextIdx = settings.shortcuts[mode].length;
+    onUpdateSettings({
+      shortcuts: {
+        ...settings.shortcuts,
+        [mode]: [...settings.shortcuts[mode], ['Alt', 'Space']],
+      },
+    });
+    setCapturingTarget({ mode, index: nextIdx });
+  };
+
+  const removeShortcutSlot = (mode: 'dictate' | 'translate' | 'ask', index: number) => {
+    if (settings.shortcuts[mode].length <= 1) return;
+    onUpdateSettings({
+      shortcuts: {
+        ...settings.shortcuts,
+        [mode]: settings.shortcuts[mode].filter((_, i) => i !== index),
+      },
+    });
+  };
+
+  const toggleTargetLanguage = (lang: string) => {
+    const exists = settings.translationTargets.includes(lang);
+    if (exists) {
+      if (settings.translationTargets.length === 1) return;
+      onUpdateSettings({
+        translationTargets: settings.translationTargets.filter((l) => l !== lang),
+      });
+    } else if (settings.translationTargets.length < 3) {
+      onUpdateSettings({
+        translationTargets: [...settings.translationTargets, lang],
+      });
+    } else {
+      onShowToast('You can select up to 3 target languages.');
+    }
+  };
+
+  const toggleVariantLanguage = (lang: string) => {
+    const exists = settings.languageVariants.includes(lang);
+    onUpdateSettings({
+      languageVariants: exists
+        ? settings.languageVariants.filter((l) => l !== lang)
+        : [...settings.languageVariants, lang],
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1.5px] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[860px] h-[610px] max-h-[90vh] rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-[var(--shadow-modal)] flex overflow-hidden"
+      >
+        {/* Modal Left Nav matching Images 7, 8, 10, 11, 14 */}
+        <div className="w-[194px] shrink-0 bg-[var(--bg-modal-sidebar)] border-r border-[var(--border-subtle)] p-3 space-y-1">
+          {navItems.map((item) => {
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onChangeTab(item.id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] text-[13px] font-medium transition-colors ${
+                  active
+                    ? 'bg-[var(--bg-active-nav)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Modal Right Content */}
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="flex-1 overflow-y-auto px-8 py-7">
+            {/* TAB 1: PROVIDERS & API KEYS */}
+            {activeTab === 'providers' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-[21px] font-semibold text-[var(--text-primary)]">
+                    Providers &amp; API Keys
+                  </h2>
+                  <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
+                    Provide your own API keys. Keys stay stored locally on this device and are sent directly to your chosen provider.
+                  </p>
+                </div>
+
+                {/* Active Defaults Selector */}
+                <div className="rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
+                      Default Dictation (Speech-to-Text)
+                    </label>
+                    <select
+                      value={settings.activeSttProvider}
+                      onChange={(e) =>
+                        onUpdateSettings({ activeSttProvider: e.target.value as ProviderId })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[13px] font-medium text-[var(--text-primary)] focus:outline-none"
+                    >
+                      {sttProviderOptions.map((id) => {
+                        const p = providers[id];
+                        const hasKey = p.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
+                        return (
+                          <option key={id} value={id}>
+                            {p.name} ({p.sttModel}) {hasKey ? '✓' : '— No key'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
+                      Default AI (Cleanup, Translate &amp; Ask)
+                    </label>
+                    <select
+                      value={settings.activeLlmProvider}
+                      onChange={(e) =>
+                        onUpdateSettings({
+                          activeLlmProvider: e.target.value as ProviderId | 'none',
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[13px] font-medium text-[var(--text-primary)] focus:outline-none"
+                    >
+                      {llmProviderOptions.map((id) => {
+                        const p = providers[id];
+                        const hasKey = p.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
+                        return (
+                          <option key={id} value={id}>
+                            {p.name} ({p.llmModel}) {hasKey ? '✓' : '— No key'}
+                          </option>
+                        );
+                      })}
+                      <option value="none">None (Raw Speech-to-Text only)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Provider List */}
+                <div className="space-y-3">
+                  {PROVIDER_ORDER.map((id) => {
+                    const meta = PROVIDER_CATALOG[id];
+                    const cfg = providers[id];
+                    const isSttActive = settings.activeSttProvider === id;
+                    const isLlmActive = settings.activeLlmProvider === id;
+                    const revealed = Boolean(revealedKeys[id]);
+
+                    return (
+                      <div
+                        key={id}
+                        className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-4 space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+                                {meta.name}
+                              </span>
+                              {isSttActive && (
+                                <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]">
+                                  Active STT
+                                </span>
+                              )}
+                              {isLlmActive && (
+                                <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                  Active AI
+                                </span>
+                              )}
+                              {cfg.status === 'connected' && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Verified</span>
+                                </span>
+                              )}
+                              {cfg.status === 'error' && (
+                                <span
+                                  title={cfg.statusMessage}
+                                  className="inline-flex items-center gap-1 text-[11px] text-red-500"
+                                >
+                                  <AlertCircle className="w-3.5 h-3.5" />
+                                  <span className="truncate max-w-[200px]">
+                                    {cfg.statusMessage || 'Error'}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                              {meta.tagline}
+                            </p>
+                          </div>
+
+                          <a
+                            href={meta.docsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11.5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
+                          >
+                            <span>Get key</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+
+                        {/* API Key + Test Button */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type={revealed ? 'text' : 'password'}
+                              value={cfg.apiKey}
+                              onChange={(e) =>
+                                onUpdateProvider(id, {
+                                  apiKey: e.target.value,
+                                  status: 'idle',
+                                  statusMessage: undefined,
+                                })
+                              }
+                              placeholder={meta.keyPlaceholder}
+                              className="w-full pl-3 pr-9 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-blue)]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRevealedKeys((prev) => ({ ...prev, [id]: !prev[id] }))
+                              }
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                              aria-label={revealed ? 'Hide API key' : 'Show API key'}
+                            >
+                              {revealed ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={cfg.status === 'testing'}
+                            onClick={() => handleTestProvider(id)}
+                            className="px-3.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] inline-flex items-center gap-1.5 disabled:opacity-60 transition-colors"
+                          >
+                            {cfg.status === 'testing' && (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            )}
+                            <span>Test</span>
+                          </button>
+                        </div>
+
+                        {/* Custom Base URL (shown for Custom or editable if needed) */}
+                        {id === 'custom' && (
+                          <div>
+                            <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
+                              OpenAI-Compatible Base URL
+                            </label>
+                            <input
+                              type="text"
+                              value={cfg.baseUrl ?? ''}
+                              onChange={(e) =>
+                                onUpdateProvider(id, { baseUrl: e.target.value, status: 'idle' })
+                              }
+                              placeholder="http://localhost:11434/v1"
+                              className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                            />
+                          </div>
+                        )}
+
+                        {/* Model Selectors */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {meta.supportsStt && (
+                            <div>
+                              <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
+                                Speech model
+                              </label>
+                              {id === 'custom' ? (
+                                <input
+                                  type="text"
+                                  value={cfg.sttModel}
+                                  onChange={(e) =>
+                                    onUpdateProvider(id, { sttModel: e.target.value })
+                                  }
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                />
+                              ) : (
+                                <select
+                                  value={cfg.sttModel}
+                                  onChange={(e) =>
+                                    onUpdateProvider(id, { sttModel: e.target.value })
+                                  }
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                >
+                                  {meta.sttModels.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          )}
+
+                          {meta.supportsLlm && (
+                            <div>
+                              <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
+                                AI / Translation model
+                              </label>
+                              {id === 'custom' ? (
+                                <input
+                                  type="text"
+                                  value={cfg.llmModel}
+                                  onChange={(e) =>
+                                    onUpdateProvider(id, { llmModel: e.target.value })
+                                  }
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                />
+                              ) : (
+                                <select
+                                  value={cfg.llmModel}
+                                  onChange={(e) =>
+                                    onUpdateProvider(id, { llmModel: e.target.value })
+                                  }
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                >
+                                  {meta.llmModels.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: SETTINGS (Exact match to Images 8, 9, 14) */}
+            {activeTab === 'settings' && (
+              <div className="space-y-8">
+                <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
+                  Settings
+                </h2>
+
+                {/* Shortcuts Section */}
+                <div>
+                  <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--text-secondary)] pb-2.5 border-b border-[var(--border-subtle)]">
+                    <Keyboard className="w-4 h-4" />
+                    <span>Shortcuts</span>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]">
+                    {(
+                      [
+                        {
+                          mode: 'dictate',
+                          title: 'Dictate',
+                          desc: 'Press to start and stop dictation.',
+                        },
+                        {
+                          mode: 'translate',
+                          title: 'Translate',
+                          desc: 'Press to start and stop translation.',
+                        },
+                        {
+                          mode: 'ask',
+                          title: 'Ask anything',
+                          desc: 'Press to start and stop asking anything.',
+                        },
+                      ] as const
+                    ).map((item) => (
+                      <div
+                        key={item.mode}
+                        className="py-4 flex items-start justify-between gap-4"
+                      >
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            {item.title}
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            {item.desc}
+                          </p>
+                        </div>
+
+                        <div className="space-y-2 flex flex-col items-start">
+                          {settings.shortcuts[item.mode].map((combo, idx) => {
+                            const isCapturing =
+                              capturingTarget?.mode === item.mode &&
+                              capturingTarget?.index === idx;
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() =>
+                                  setCapturingTarget({ mode: item.mode, index: idx })
+                                }
+                                className={`min-w-[185px] px-2.5 py-1.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                                  isCapturing
+                                    ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/5'
+                                    : 'border-[var(--border-strong)] bg-[var(--bg-input)] hover:border-[var(--text-secondary)]'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {isCapturing ? (
+                                    <span className="text-[12px] text-[var(--accent-blue)] font-medium px-1">
+                                      Press keys…
+                                    </span>
+                                  ) : (
+                                    combo.map((key, ki) => (
+                                      <span key={ki} className="yy-keycap">
+                                        {key}
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
+                                {settings.shortcuts[item.mode].length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeShortcutSlot(item.mode, idx);
+                                    }}
+                                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => addShortcutSlot(item.mode)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add another</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Language Section */}
+                <div>
+                  <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--text-secondary)] pb-2.5 border-b border-[var(--border-subtle)]">
+                    <Globe className="w-4 h-4" />
+                    <span>Language</span>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]">
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Interface language
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Choose the language used in the user interface.
+                        </p>
+                      </div>
+                      <select
+                        value={settings.interfaceLanguage}
+                        onChange={(e) =>
+                          onUpdateSettings({ interfaceLanguage: e.target.value })
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
+                      >
+                        <option value="English (US)">English (US)</option>
+                        <option value="English (UK)">English (UK)</option>
+                        <option value="Arabic">Arabic</option>
+                      </select>
+                    </div>
+
+                    <div className="py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Translation targets
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            Choose up to 3 target languages for your dictation in translation mode.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTargets((v) => !v)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
+                        >
+                          <span className="truncate">
+                            {settings.translationTargets.join(', ')}
+                          </span>
+                          <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                        </button>
+                      </div>
+
+                      {editingTargets && (
+                        <div className="mt-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex flex-wrap gap-1.5">
+                          {ALL_LANGUAGES.map((lang) => {
+                            const selected = settings.translationTargets.includes(lang);
+                            return (
+                              <button
+                                key={lang}
+                                type="button"
+                                onClick={() => toggleTargetLanguage(lang)}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
+                                  selected
+                                    ? 'bg-[var(--accent-blue)] text-white border-transparent'
+                                    : 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
+                                }`}
+                              >
+                                {selected && <Check className="w-3 h-3" />}
+                                <span>{lang}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Language variants
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            Choose your preferred language variants for the best experience.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingVariants((v) => !v)}
+                          className="px-3.5 py-1.5 rounded-full bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                        >
+                          Select language variants
+                        </button>
+                      </div>
+
+                      {editingVariants && (
+                        <div className="mt-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex flex-wrap gap-1.5">
+                          {ALL_LANGUAGES.map((lang) => {
+                            const selected = settings.languageVariants.includes(lang);
+                            return (
+                              <button
+                                key={lang}
+                                type="button"
+                                onClick={() => toggleVariantLanguage(lang)}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
+                                  selected
+                                    ? 'bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] border-transparent'
+                                    : 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
+                                }`}
+                              >
+                                {selected && <Check className="w-3 h-3" />}
+                                <span>{lang}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audio Section */}
+                <div>
+                  <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--text-secondary)] pb-2.5 border-b border-[var(--border-subtle)]">
+                    <Mic className="w-4 h-4" />
+                    <span>Audio</span>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]">
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Microphone
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Choose your preferred microphone for Yap Yap to capture your voice.
+                        </p>
+                      </div>
+                      <select
+                        value={settings.microphoneId}
+                        onChange={(e) =>
+                          onUpdateSettings({ microphoneId: e.target.value })
+                        }
+                        className="max-w-[210px] px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
+                      >
+                        <option value="default">Auto-detect (System Default)</option>
+                        {microphones.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Interaction sounds
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Play sounds for key actions like start/stop.
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.interactionSounds}
+                        onChange={(val) => onUpdateSettings({ interactionSounds: val })}
+                      />
+                    </div>
+
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Mute when dictating
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Automatically silence other active audio during dictation.
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.muteWhenDictating}
+                        onChange={(val) => onUpdateSettings({ muteWhenDictating: val })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* General Section */}
+                <div>
+                  <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--text-secondary)] pb-2.5 border-b border-[var(--border-subtle)]">
+                    <Monitor className="w-4 h-4" />
+                    <span>General</span>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]">
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Appearance
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Choose between light and dark modes.
+                        </p>
+                      </div>
+                      <select
+                        value={settings.appearance}
+                        onChange={(e) =>
+                          onUpdateSettings({ appearance: e.target.value as AppearanceMode })
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
+                      >
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="system">System</option>
+                      </select>
+                    </div>
+
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Launch app at login
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Open Yap Yap automatically when your computer starts.
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.launchAtLogin}
+                        onChange={(val) => onUpdateSettings({ launchAtLogin: val })}
+                      />
+                    </div>
+
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Smart AI cleanup
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Remove filler words and auto-format punctuation using your AI provider.
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.smartCleanup}
+                        onChange={(val) => onUpdateSettings({ smartCleanup: val })}
+                      />
+                    </div>
+
+                    <div className="py-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Auto-paste into focused app
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Automatically copy and paste dictation output to your active cursor.
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.autoPaste}
+                        onChange={(val) => onUpdateSettings({ autoPaste: val })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: PERSONALIZATION (Exact match to Image 7) */}
+            {activeTab === 'personalization' && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
+                    Personalization
+                  </h2>
+                  <span
+                    title="Personalization adapts formatting & dictionary hints per app context."
+                    className="text-[var(--text-muted)]"
+                  >
+                    <Info className="w-4 h-4" />
+                  </span>
+                </div>
+
+                <div className="rounded-2xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="text-[14px] text-[var(--text-secondary)]">
+                      Overall personalization:{' '}
+                      <strong className="text-[var(--text-primary)] font-bold">
+                        {stats.personalizationPercent}%
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row items-center gap-8">
+                    <div className="shrink-0">
+                      <PersonalizationChart sectors={sectors} size={240} />
+                    </div>
+
+                    <div className="flex-1 w-full">
+                      <div className="grid grid-cols-[1fr_auto] text-[12px] text-[var(--text-muted)] pb-2 border-b border-[var(--border-subtle)]">
+                        <span>Category</span>
+                        <span>Personalization</span>
+                      </div>
+
+                      <div className="divide-y divide-[var(--border-subtle)]">
+                        {stats.categoryBreakdown.map((item) => (
+                          <div key={item.category} className="py-2.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingCat(
+                                  editingCat === item.category ? null : item.category
+                                )
+                              }
+                              className="w-full grid grid-cols-[1fr_auto] items-center text-left hover:opacity-80"
+                            >
+                              <span className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--text-primary)]">
+                                {categoryIcons[item.category]}
+                                <span>{item.category}</span>
+                              </span>
+                              <span className="text-[13px] text-[var(--text-secondary)] tabular-nums">
+                                {item.percent}%
+                              </span>
+                            </button>
+
+                            {editingCat === item.category && (
+                              <div className="mt-2">
+                                <textarea
+                                  rows={2}
+                                  value={settings.categoryInstructions[item.category]}
+                                  onChange={(e) =>
+                                    onUpdateSettings({
+                                      categoryInstructions: {
+                                        ...settings.categoryInstructions,
+                                        [item.category]: e.target.value,
+                                      },
+                                    })
+                                  }
+                                  className="w-full p-2.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[12.5px] text-[var(--text-secondary)]">
+                  Click any category above to customize AI formatting instructions for that workflow.
+                </p>
+              </div>
+            )}
+
+            {/* TAB 4: ABOUT (Exact match to Image 11) */}
+            {activeTab === 'about' && (
+              <div className="space-y-6">
+                <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
+                  About
+                </h2>
+
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <div className="text-[14px] font-medium text-[var(--text-primary)]">
+                        Version
+                      </div>
+                      <div className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+                        v1.0.0 · Yap Yap Desktop (BYOK)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onShowToast('Yap Yap v1.0.0 is up to date.')}
+                      className="px-4 py-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[13px] font-medium text-[var(--text-primary)] transition-colors"
+                    >
+                      Check for updates
+                    </button>
+                  </div>
+
+                  <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
+                    <div>
+                      <div className="text-[14px] font-medium text-[var(--text-primary)]">
+                        Local-first privacy
+                      </div>
+                      <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
+                        API keys, history, and audio recordings stay solely on your device.
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-[var(--text-muted)]" />
+                  </div>
+
+                  <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
+                    <div>
+                      <div className="text-[14px] font-medium text-[var(--text-primary)]">
+                        Supported Providers
+                      </div>
+                      <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
+                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: HELP */}
+            {activeTab === 'help' && (
+              <div className="space-y-5">
+                <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
+                  Help &amp; Quick Start
+                </h2>
+
+                <div className="space-y-3 text-[13px] text-[var(--text-secondary)] leading-relaxed">
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
+                    <div className="font-semibold text-[var(--text-primary)] mb-1">
+                      1. Add an API Key
+                    </div>
+                    Open <strong className="text-[var(--text-primary)]">API Keys</strong> and paste a key from Groq (fast &amp; free tier), OpenAI, Google Gemini, Deepgram, ElevenLabs, or point Custom to a local Ollama/Whisper server. Click <strong className="text-[var(--text-primary)]">Test</strong> to verify.
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
+                    <div className="font-semibold text-[var(--text-primary)] mb-1">
+                      2. Dictate, Translate, or Ask Anything
+                    </div>
+                    Use the floating dictation bar, click <strong className="text-[var(--text-primary)]">Quick dictate</strong>, or trigger your configured shortcut. Speak naturally — your custom Dictionary words are automatically passed as hints!
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
+                    <div className="font-semibold text-[var(--text-primary)] mb-1">
+                      3. Retry or Download Anytime
+                    </div>
+                    In <strong className="text-[var(--text-primary)]">History</strong>, hover any transcript and open the <strong className="text-[var(--text-primary)]">•••</strong> menu to re-process saved audio with a different provider or download the audio clip.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
