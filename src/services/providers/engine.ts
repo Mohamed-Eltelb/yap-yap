@@ -16,16 +16,27 @@ declare global {
       maximizeWindow: () => void;
       closeWindow: () => void;
       setLaunchAtLogin: (enabled: boolean) => Promise<void>;
+      setSystemMute: (muted: boolean) => Promise<void>;
       updateShortcuts: (shortcuts: {
         dictate: string[][];
         translate: string[][];
         ask: string[][];
       }) => Promise<void>;
       pasteText: (text: string) => Promise<boolean>;
-      toggleHud: (show: boolean, state?: { mode: DictationMode; recording: boolean }) => void;
+      toggleHud: (show: boolean, state?: unknown) => void;
       sendHudState: (state: unknown) => void;
+      sendHudAction: (action: {
+        type: 'stop' | 'cancel' | 'dismiss' | 'copy';
+        text?: string;
+      }) => void;
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
-      onHudAction: (cb: (action: { type: string; mode?: DictationMode }) => void) => () => void;
+      onHudState: (cb: (state: unknown) => void) => () => void;
+      onHudAction: (
+        cb: (action: {
+          type: 'stop' | 'cancel' | 'dismiss' | 'copy';
+          text?: string;
+        }) => void
+      ) => () => void;
       loadStore: () => Promise<Record<string, unknown> | null>;
       saveStore: (data: Record<string, unknown>) => Promise<void>;
       apiRequest: (req: {
@@ -34,6 +45,14 @@ declare global {
         headers: Record<string, string>;
         bodyBase64?: string;
         bodyText?: string;
+      }) => Promise<HttpResponsePayload>;
+      apiMultipart: (req: {
+        url: string;
+        headers: Record<string, string>;
+        fileBase64: string;
+        fileName: string;
+        mimeType: string;
+        fields: Record<string, string>;
       }) => Promise<HttpResponsePayload>;
     };
   }
@@ -71,6 +90,41 @@ async function performRequest(
     method,
     headers,
     body: options.body,
+  });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
+async function performMultipartRequest(
+  url: string,
+  headers: Record<string, string>,
+  audioBlob: Blob,
+  fileName: string,
+  fields: Record<string, string>
+): Promise<HttpResponsePayload> {
+  const mimeType = audioBlob.type || 'audio/webm';
+
+  if (typeof window !== 'undefined' && window.yapyap?.apiMultipart) {
+    const fileBase64 = await blobToBase64(audioBlob);
+    return window.yapyap.apiMultipart({
+      url,
+      headers,
+      fileBase64,
+      fileName,
+      mimeType,
+      fields,
+    });
+  }
+
+  const form = new FormData();
+  form.append('file', new File([audioBlob], fileName, { type: mimeType }));
+  for (const [k, v] of Object.entries(fields)) {
+    form.append(k, v);
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: form,
   });
   const text = await res.text();
   return { ok: res.ok, status: res.status, text };
@@ -196,29 +250,30 @@ export async function transcribeAudio(
 
   if (provider.id === 'openai' || provider.id === 'groq' || provider.id === 'custom') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? 'https://api.openai.com/v1');
-    const form = new FormData();
-    form.append('file', new File([audioBlob], `audio.${ext}`, { type: audioBlob.type || 'audio/webm' }));
-    form.append('model', provider.sttModel || meta.sttModels[0]?.id || 'whisper-1');
+    const fields: Record<string, string> = {
+      model: provider.sttModel || meta.sttModels[0]?.id || 'whisper-1',
+    };
     if (dictHint) {
-      form.append('prompt', `Custom vocabulary and names: ${dictHint}`);
+      fields.prompt = `Custom vocabulary and names: ${dictHint}`;
     }
     if (options.language && options.language !== 'auto') {
-      form.append('language', options.language);
+      fields.language = options.language;
     }
 
     const headers: Record<string, string> = {};
     if (key) headers.Authorization = `Bearer ${key}`;
 
-    const res = await fetch(`${base}/audio/transcriptions`, {
-      method: 'POST',
+    const res = await performMultipartRequest(
+      `${base}/audio/transcriptions`,
       headers,
-      body: form,
-    });
-    const text = await res.text();
+      audioBlob,
+      `audio.${ext}`,
+      fields
+    );
     if (!res.ok) {
-      throw new Error(extractErrorMessage(text, res.status));
+      throw new Error(extractErrorMessage(res.text, res.status));
     }
-    const json = JSON.parse(text) as { text?: string };
+    const json = JSON.parse(res.text) as { text?: string };
     return (json.text ?? '').trim();
   }
 
@@ -251,20 +306,17 @@ export async function transcribeAudio(
 
   if (provider.id === 'elevenlabs') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-    const form = new FormData();
-    form.append('file', new File([audioBlob], `audio.${ext}`, { type: audioBlob.type || 'audio/webm' }));
-    form.append('model_id', provider.sttModel || 'scribe_v1');
-
-    const res = await fetch(`${base}/speech-to-text`, {
-      method: 'POST',
-      headers: { 'xi-api-key': key },
-      body: form,
-    });
-    const text = await res.text();
+    const res = await performMultipartRequest(
+      `${base}/speech-to-text`,
+      { 'xi-api-key': key },
+      audioBlob,
+      `audio.${ext}`,
+      { model_id: provider.sttModel || 'scribe_v1' }
+    );
     if (!res.ok) {
-      throw new Error(extractErrorMessage(text, res.status));
+      throw new Error(extractErrorMessage(res.text, res.status));
     }
-    const json = JSON.parse(text) as { text?: string };
+    const json = JSON.parse(res.text) as { text?: string };
     return (json.text ?? '').trim();
   }
 
@@ -341,7 +393,7 @@ export async function processTranscriptWithLlm(
     : '';
 
   let systemPrompt = '';
-  let userPrompt = transcript;
+  const userPrompt = transcript;
 
   if (mode === 'dictate') {
     if (!options.smartCleanup) {

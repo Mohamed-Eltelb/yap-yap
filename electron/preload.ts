@@ -7,25 +7,35 @@ contextBridge.exposeInMainWorld('yapyap', {
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
   setLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:set-login-item', enabled),
+  setSystemMute: (muted: boolean) => ipcRenderer.invoke('audio:set-mute', muted),
   updateShortcuts: (shortcuts: {
     dictate: string[][];
     translate: string[][];
     ask: string[][];
   }) => ipcRenderer.invoke('shortcuts:update', shortcuts),
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
-  toggleHud: (show: boolean, state?: { mode: string; recording: boolean }) =>
+  toggleHud: (show: boolean, state?: unknown) =>
     ipcRenderer.send('hud:toggle', { show, state }),
   sendHudState: (state: unknown) => ipcRenderer.send('hud:state', state),
+  sendHudAction: (action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }) =>
+    ipcRenderer.send('hud:action', action),
   onTriggerMode: (cb: (mode: 'dictate' | 'translate' | 'ask') => void) => {
     const handler = (_e: Electron.IpcRendererEvent, mode: 'dictate' | 'translate' | 'ask') =>
       cb(mode);
     ipcRenderer.on('trigger-mode', handler);
     return () => ipcRenderer.removeListener('trigger-mode', handler);
   },
-  onHudAction: (cb: (action: { type: string; mode?: 'dictate' | 'translate' | 'ask' }) => void) => {
+  onHudState: (cb: (state: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state);
+    ipcRenderer.on('hud:state', handler);
+    return () => ipcRenderer.removeListener('hud:state', handler);
+  },
+  onHudAction: (
+    cb: (action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }) => void
+  ) => {
     const handler = (
       _e: Electron.IpcRendererEvent,
-      action: { type: string; mode?: 'dictate' | 'translate' | 'ask' }
+      action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }
     ) => cb(action);
     ipcRenderer.on('hud:action', handler);
     return () => ipcRenderer.removeListener('hud:action', handler);
@@ -39,4 +49,12 @@ contextBridge.exposeInMainWorld('yapyap', {
     bodyBase64?: string;
     bodyText?: string;
   }) => ipcRenderer.invoke('api:request', req),
+  apiMultipart: (req: {
+    url: string;
+    headers: Record<string, string>;
+    fileBase64: string;
+    fileName: string;
+    mimeType: string;
+    fields: Record<string, string>;
+  }) => ipcRenderer.invoke('api:multipart', req),
 });

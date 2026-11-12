@@ -85,11 +85,14 @@ describe('Stats and Heatmap Engine', () => {
     expect(filterByRetention(items, '7d', baseDate)).toHaveLength(2);
   });
 
-  it('builds 28-week heatmap matrix with proper levels', () => {
+  it('builds 28-week heatmap matrix with 196 unique DST-safe calendar days', () => {
     const weeks = buildHeatmapWeeks(items, baseDate, 28);
     expect(weeks).toHaveLength(28);
     expect(weeks[0].days).toHaveLength(7);
-    const activeCells = weeks.flatMap((w) => w.days).filter((d) => d.words > 0);
+    const allCells = weeks.flatMap((w) => w.days);
+    const uniqueKeys = new Set(allCells.map((c) => c.dateKey));
+    expect(uniqueKeys.size).toBe(28 * 7);
+    const activeCells = allCells.filter((d) => d.words > 0);
     expect(activeCells.length).toBe(3);
   });
 });
@@ -151,7 +154,34 @@ describe('Multi-Provider Engine', () => {
     expect(init.headers.Authorization).toBe('Bearer gsk_test_123');
   });
 
-  it('processes Ask anything through Anthropic Claude messages API', async () => {
+  it('routes multipart STT uploads through Electron IPC when window.yapyap.apiMultipart is present', async () => {
+    const providers = createDefaultProviders();
+    providers.elevenlabs.apiKey = 'el_test_key';
+
+    const apiMultipartMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: JSON.stringify({ text: 'Transcribed via Electron IPC' }),
+    });
+    vi.stubGlobal('window', {
+      yapyap: {
+        apiMultipart: apiMultipartMock,
+      },
+    });
+
+    const audio = new Blob([new Uint8Array([10, 20, 30])], { type: 'audio/webm' });
+    const text = await transcribeAudio(audio, providers.elevenlabs);
+
+    expect(text).toBe('Transcribed via Electron IPC');
+    expect(apiMultipartMock).toHaveBeenCalledTimes(1);
+    expect(apiMultipartMock.mock.calls[0][0].url).toBe(
+      'https://api.elevenlabs.io/v1/speech-to-text'
+    );
+    expect(apiMultipartMock.mock.calls[0][0].headers['xi-api-key']).toBe('el_test_key');
+  });
+
+  it('processes Ask anything through Anthropic Claude messages API with category instructions', async () => {
+    vi.stubGlobal('window', undefined);
     const providers = createDefaultProviders();
     providers.anthropic.apiKey = 'sk-ant-test';
 
@@ -171,8 +201,10 @@ describe('Multi-Provider Engine', () => {
       providers.anthropic,
       {
         targetLanguages: ['English (US)'],
-        dictionaryWords: [],
+        dictionaryWords: ['safeStorage'],
         smartCleanup: true,
+        category: 'Development tools',
+        categoryInstruction: 'Preserve camelCase identifiers.',
       }
     );
 
@@ -181,5 +213,8 @@ describe('Multi-Provider Engine', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(init.headers['x-api-key']).toBe('sk-ant-test');
+    const body = JSON.parse(init.body as string);
+    expect(body.system).toContain('Preserve camelCase identifiers.');
+    expect(body.system).toContain('safeStorage');
   });
 });

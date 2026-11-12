@@ -40,6 +40,10 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function addCalendarDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
 export function formatWordCount(words: number): { value: string; unit: string } {
   if (words >= 1_000_000) {
     return { value: `${(words / 1_000_000).toFixed(1)}M`, unit: 'words' };
@@ -105,27 +109,27 @@ export function computeInsights(
   const activeDateKeys = Array.from(dayMap.keys()).sort();
   const activeDays = activeDateKeys.length;
 
-  // Streaks
+  // Streaks (DST-safe calendar day comparison)
   let longestStreak = 0;
   let running = 0;
-  let prevTime: number | null = null;
+  let prevDate: Date | null = null;
   for (const key of activeDateKeys) {
     const [y, m, d] = key.split('-').map(Number);
-    const t = new Date(y, m - 1, d).getTime();
-    if (prevTime !== null && Math.round((t - prevTime) / 86_400_000) === 1) {
+    const currDate = new Date(y, m - 1, d);
+    if (prevDate !== null && toDateKey(addCalendarDays(prevDate, 1)) === key) {
       running += 1;
     } else {
       running = 1;
     }
     if (running > longestStreak) longestStreak = running;
-    prevTime = t;
+    prevDate = currDate;
   }
 
   // Current streak (includes today or yesterday)
   let currentStreak = 0;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayKey = toDateKey(today);
-  const yesterday = new Date(today.getTime() - 86_400_000);
+  const yesterday = addCalendarDays(today, -1);
   const yesterdayKey = toDateKey(yesterday);
 
   let cursor: Date | null = null;
@@ -136,7 +140,7 @@ export function computeInsights(
   }
   while (cursor && dayMap.has(toDateKey(cursor))) {
     currentStreak += 1;
-    cursor = new Date(cursor.getTime() - 86_400_000);
+    cursor = addCalendarDays(cursor, -1);
   }
 
   const categories: PersonalizationCategory[] = [
@@ -160,8 +164,7 @@ export function computeInsights(
 
   const categoryBreakdown = categories.map((cat) => {
     const count = categoryCounts[cat];
-    // Personalization maturity scales up with samples + dictionary richness
-    const rawPct = Math.min(100, (count * 1.4 + dictionaryCount * 0.45));
+    const rawPct = Math.min(100, count * 1.4 + dictionaryCount * 0.45);
     return {
       category: cat,
       percent: Number(rawPct.toFixed(1)),
@@ -214,11 +217,12 @@ export function buildHeatmapWeeks(
     }
   }
 
-  // Align end to Saturday of endDate's week
+  // Align end to Saturday of endDate's week using DST-safe calendar arithmetic
   const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
   const dayOfWeek = endDay.getDay(); // 0=Sun..6=Sat
-  const saturday = new Date(endDay.getTime() + (6 - dayOfWeek) * 86_400_000);
-  const startSunday = new Date(saturday.getTime() - (weeksCount * 7 - 1) * 86_400_000);
+  const saturday = addCalendarDays(endDay, 6 - dayOfWeek);
+  const startSunday = addCalendarDays(saturday, -(weeksCount * 7 - 1));
+  const defaultHatchCutoff = addCalendarDays(endDay, -100).getTime();
 
   const monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -237,7 +241,7 @@ export function buildHeatmapWeeks(
     let monthLabel: string | undefined;
 
     for (let d = 0; d < 7; d++) {
-      const cellDate = new Date(startSunday.getTime() + (w * 7 + d) * 86_400_000);
+      const cellDate = addCalendarDays(startSunday, w * 7 + d);
       if (d === 0 && cellDate.getMonth() !== lastMonth) {
         monthLabel = monthNames[cellDate.getMonth()];
         lastMonth = cellDate.getMonth();
@@ -255,7 +259,9 @@ export function buildHeatmapWeeks(
       else if (words > 0) level = 1;
 
       const hatched =
-        earliestTime !== null ? cellDate.getTime() < earliestTime : cellDate.getTime() < endDay.getTime() - 100 * 86_400_000;
+        earliestTime !== null
+          ? cellDate.getTime() < earliestTime
+          : cellDate.getTime() < defaultHatchCutoff;
 
       let usageLabel = 'No activity';
       if (level === 4) usageLabel = `Power usage · ${words} words`;

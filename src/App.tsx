@@ -22,6 +22,7 @@ import {
   ActiveNav,
   DictationMode,
   HistoryItem,
+  PersonalizationCategory,
   ProviderConfig,
   ProviderId,
   SettingsModalTab,
@@ -72,6 +73,7 @@ export function App() {
 
   const recorderRef = useRef<RecorderSession | null>(null);
   const timerRef = useRef<number | null>(null);
+  const lastTriggerTimeRef = useRef<number>(0);
   const hudRef = useRef<HudState>(hud);
   hudRef.current = hud;
 
@@ -98,36 +100,59 @@ export function App() {
 
   // Persist on changes
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isHudRoute) return;
     void savePersistedState(appState);
-  }, [appState, hydrated]);
+  }, [appState, hydrated, isHudRoute]);
 
-  // Apply light/dark theme class
+  // Apply light/dark theme class and listen for live OS system theme changes
   useEffect(() => {
     const mode = appState.settings.appearance;
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
-    document.documentElement.classList.toggle('dark', isDark);
+    const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+    const applyTheme = () => {
+      const isDark = mode === 'dark' || (mode === 'system' && Boolean(mql?.matches));
+      document.documentElement.classList.toggle('dark', isDark);
+    };
+
+    applyTheme();
+    if (mode === 'system' && mql?.addEventListener) {
+      mql.addEventListener('change', applyTheme);
+      return () => mql.removeEventListener('change', applyTheme);
+    }
   }, [appState.settings.appearance]);
 
   // Sync Electron global shortcuts + login item
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isHudRoute) return;
     void window.yapyap?.updateShortcuts?.(appState.settings.shortcuts);
-  }, [appState.settings.shortcuts, hydrated]);
+  }, [appState.settings.shortcuts, hydrated, isHudRoute]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isHudRoute) return;
     void window.yapyap?.setLaunchAtLogin?.(appState.settings.launchAtLogin);
-  }, [appState.settings.launchAtLogin, hydrated]);
+  }, [appState.settings.launchAtLogin, hydrated, isHudRoute]);
 
-  // HUD-only route body styling
+  // HUD-only route body styling + IPC subscription
   useEffect(() => {
-    if (isHudRoute) {
-      document.body.classList.add('hud-mode');
-    }
-    return () => document.body.classList.remove('hud-mode');
+    if (!isHudRoute) return;
+    document.body.classList.add('hud-mode');
+    const unsub = window.yapyap?.onHudState?.((nextState) => {
+      if (nextState && typeof nextState === 'object') {
+        setHud(nextState as HudState);
+      }
+    });
+    return () => {
+      document.body.classList.remove('hud-mode');
+      unsub?.();
+    };
   }, [isHudRoute]);
+
+  // Forward HUD state from main window to external Electron HUD overlay
+  useEffect(() => {
+    if (isHudRoute) return;
+    const visible = hud.status !== 'idle' && appState.settings.floatingHud;
+    window.yapyap?.toggleHud?.(visible, hud);
+  }, [hud, isHudRoute, appState.settings.floatingHud]);
 
   const updateSettings = useCallback((patch: Partial<SettingsState>) => {
     setAppState((prev) => {
@@ -169,13 +194,20 @@ export function App() {
     }
   };
 
+  const restoreAudioMute = useCallback(() => {
+    if (appState.settings.muteWhenDictating) {
+      void window.yapyap?.setSystemMute?.(false);
+    }
+  }, [appState.settings.muteWhenDictating]);
+
   const processAudioPipeline = useCallback(
     async (
       audioBlob: Blob,
       durationMs: number,
       mode: DictationMode,
       audioDataUrl?: string,
-      audioMimeType?: string
+      audioMimeType?: string,
+      existingItemId?: string
     ) => {
       const sttProviderId = appState.settings.activeSttProvider;
       const sttProvider = appState.providers[sttProviderId];
@@ -203,6 +235,8 @@ export function App() {
         let answer: string | undefined;
         let usedProviderId: ProviderId = sttProviderId;
         let usedModel = sttProvider.sttModel;
+        const category: PersonalizationCategory =
+          mode === 'ask' ? 'AI assistants' : 'Messaging';
 
         const needsLlm =
           mode === 'translate' ||
@@ -224,6 +258,8 @@ export function App() {
                 targetLanguages: appState.settings.translationTargets,
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
+                category,
+                categoryInstruction: appState.settings.categoryInstructions[category],
               }
             );
             finalText = processed.finalText || rawText;
@@ -249,29 +285,49 @@ export function App() {
           Math.round((countWords(rawText) / Math.max(1000, durationMs)) * 60_000)
         );
 
-        const newItem: HistoryItem = {
-          id: `h-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          mode,
-          rawText,
-          text: finalText,
-          answer,
-          targetLanguage:
-            mode === 'translate' ? appState.settings.translationTargets[0] : undefined,
-          durationMs,
-          wordCount: words,
-          wpm,
-          providerId: usedProviderId,
-          model: usedModel,
-          audioDataUrl,
-          audioMimeType,
-          category: mode === 'ask' ? 'AI assistants' : 'Messaging',
-        };
+        if (existingItemId) {
+          setAppState((prev) => ({
+            ...prev,
+            history: prev.history.map((h) =>
+              h.id === existingItemId
+                ? {
+                    ...h,
+                    rawText,
+                    text: finalText,
+                    answer,
+                    wordCount: words,
+                    wpm,
+                    providerId: usedProviderId,
+                    model: usedModel,
+                  }
+                : h
+            ),
+          }));
+        } else {
+          const newItem: HistoryItem = {
+            id: `h-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            mode,
+            rawText,
+            text: finalText,
+            answer,
+            targetLanguage:
+              mode === 'translate' ? appState.settings.translationTargets[0] : undefined,
+            durationMs,
+            wordCount: words,
+            wpm,
+            providerId: usedProviderId,
+            model: usedModel,
+            audioDataUrl,
+            audioMimeType,
+            category,
+          };
 
-        setAppState((prev) => ({
-          ...prev,
-          history: [newItem, ...prev.history],
-        }));
+          setAppState((prev) => ({
+            ...prev,
+            history: [newItem, ...prev.history],
+          }));
+        }
 
         // Copy & optionally auto-paste
         if (appState.settings.autoPaste && window.yapyap?.pasteText) {
@@ -318,6 +374,7 @@ export function App() {
     if (!session) return;
     recorderRef.current = null;
     stopRecordingTimer();
+    restoreAudioMute();
     const currentMode = hudRef.current.mode;
     try {
       const { blob, durationMs, dataUrl, mimeType } = await session.stop();
@@ -332,22 +389,30 @@ export function App() {
         errorText: err instanceof Error ? err.message : 'Recording stopped unexpectedly',
       });
     }
-  }, [appState.settings.interactionSounds, processAudioPipeline]);
+  }, [appState.settings.interactionSounds, processAudioPipeline, restoreAudioMute]);
 
   const cancelRecording = useCallback(() => {
     recorderRef.current?.cancel();
     recorderRef.current = null;
     stopRecordingTimer();
+    restoreAudioMute();
     setHud({
       status: 'idle',
       mode: 'dictate',
       levels: Array(20).fill(0.1),
       elapsedMs: 0,
     });
-  }, []);
+  }, [restoreAudioMute]);
 
   const triggerDictationMode = useCallback(
     async (mode: DictationMode) => {
+      const now = Date.now();
+      // Guard against duplicate globalShortcut + DOM keydown firing within 350ms
+      if (now - lastTriggerTimeRef.current < 350) {
+        return;
+      }
+      lastTriggerTimeRef.current = now;
+
       // If already recording, pressing trigger stops and transcribes
       if (hudRef.current.status === 'recording') {
         await stopAndProcess();
@@ -366,6 +431,9 @@ export function App() {
       }
 
       try {
+        if (appState.settings.muteWhenDictating) {
+          void window.yapyap?.setSystemMute?.(true);
+        }
         playInteractionSound('start', appState.settings.interactionSounds);
         const startTime = Date.now();
         setHud({
@@ -394,6 +462,7 @@ export function App() {
           );
         }, 200);
       } catch (err) {
+        restoreAudioMute();
         playInteractionSound('error', appState.settings.interactionSounds);
         setHud({
           status: 'error',
@@ -412,24 +481,39 @@ export function App() {
       appState.settings.activeSttProvider,
       appState.settings.interactionSounds,
       appState.settings.microphoneId,
+      appState.settings.muteWhenDictating,
+      restoreAudioMute,
       showToast,
       stopAndProcess,
     ]
   );
 
-  // Listen for Electron global shortcut triggers
+  // Listen for Electron global shortcut triggers and HUD actions
   useEffect(() => {
-    if (!window.yapyap?.onTriggerMode) return;
-    return window.yapyap.onTriggerMode((mode) => {
+    if (isHudRoute) return;
+    const unsubTrigger = window.yapyap?.onTriggerMode?.((mode) => {
       void triggerDictationMode(mode);
     });
-  }, [triggerDictationMode]);
+    const unsubAction = window.yapyap?.onHudAction?.((action) => {
+      if (action.type === 'stop') void stopAndProcess();
+      else if (action.type === 'cancel') cancelRecording();
+      else if (action.type === 'dismiss') setHud((h) => ({ ...h, status: 'idle' }));
+      else if (action.type === 'copy' && action.text) {
+        void navigator.clipboard?.writeText(action.text).catch(() => {});
+      }
+    });
+    return () => {
+      unsubTrigger?.();
+      unsubAction?.();
+    };
+  }, [cancelRecording, isHudRoute, stopAndProcess, triggerDictationMode]);
 
-  // In-window keyboard shortcut listener (also supports Right Alt alone!)
+  // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
     if (isHudRoute) return;
     const pressed = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (
         modalOpen ||
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(
@@ -481,7 +565,8 @@ export function App() {
           item.durationMs,
           item.mode,
           item.audioDataUrl,
-          item.audioMimeType
+          item.audioMimeType,
+          item.id
         );
         return;
       } catch {
@@ -503,6 +588,7 @@ export function App() {
     }
 
     try {
+      const cat = item.category ?? (item.mode === 'ask' ? 'AI assistants' : 'Messaging');
       const processed = await processTranscriptWithLlm(
         item.rawText,
         item.mode,
@@ -511,7 +597,15 @@ export function App() {
           targetLanguages: appState.settings.translationTargets,
           dictionaryWords: appState.dictionary.map((d) => d.word),
           smartCleanup: appState.settings.smartCleanup,
+          category: cat,
+          categoryInstruction: appState.settings.categoryInstructions[cat],
         }
+      );
+      const nextText = processed.finalText || item.text;
+      const nextWords = countWords(nextText);
+      const nextWpm = Math.max(
+        1,
+        Math.round((nextWords / Math.max(1000, item.durationMs)) * 60_000)
       );
       setAppState((prev) => ({
         ...prev,
@@ -519,8 +613,10 @@ export function App() {
           h.id === item.id
             ? {
                 ...h,
-                text: processed.finalText || h.text,
+                text: nextText,
                 answer: processed.answer ?? h.answer,
+                wordCount: nextWords,
+                wpm: nextWpm,
                 providerId: llmId,
                 model: llm.llmModel,
               }
@@ -609,10 +705,10 @@ export function App() {
     return (
       <DictationHud
         hud={hud}
-        onStop={() => void stopAndProcess()}
-        onCancel={cancelRecording}
-        onCopyResult={(t) => void handleCopyText(t)}
-        onDismissResult={() => setHud((h) => ({ ...h, status: 'idle' }))}
+        onStop={() => window.yapyap?.sendHudAction?.({ type: 'stop' })}
+        onCancel={() => window.yapyap?.sendHudAction?.({ type: 'cancel' })}
+        onCopyResult={(t) => window.yapyap?.sendHudAction?.({ type: 'copy', text: t })}
+        onDismissResult={() => window.yapyap?.sendHudAction?.({ type: 'dismiss' })}
       />
     );
   }

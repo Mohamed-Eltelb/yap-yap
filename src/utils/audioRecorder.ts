@@ -12,14 +12,28 @@ export async function startAudioRecording(
   deviceId: string | undefined,
   onLevels: (levels: number[]) => void
 ): Promise<RecorderSession> {
-  const constraints: MediaStreamConstraints = {
-    audio:
-      deviceId && deviceId !== 'default'
-        ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true }
-        : { echoCancellation: true, noiseSuppression: true },
+  const defaultAudioConstraints: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
   };
 
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  let stream: MediaStream;
+  if (deviceId && deviceId !== 'default') {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { ...defaultAudioConstraints, deviceId: { exact: deviceId } },
+      });
+    } catch {
+      // Fallback to default device if stored device was unplugged
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: defaultAudioConstraints,
+      });
+    }
+  } else {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: defaultAudioConstraints,
+    });
+  }
 
   const preferredMimes = [
     'audio/webm;codecs=opus',

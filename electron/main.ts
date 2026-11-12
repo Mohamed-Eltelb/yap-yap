@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   screen,
+  shell,
   Tray,
 } from 'electron';
 import { exec } from 'child_process';
@@ -40,6 +41,14 @@ function createMainWindow(): void {
     },
   });
 
+  // Open external links (API key portals, Share on X, etc.) in the user's default OS browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
   if (isDev) {
     void mainWindow.loadURL('http://localhost:5173');
   } else {
@@ -62,7 +71,7 @@ function createHudWindow(): void {
   const display = screen.getPrimaryDisplay();
   const { width, height } = display.workAreaSize;
   const hudWidth = 420;
-  const hudHeight = 160;
+  const hudHeight = 220;
 
   hudWindow = new BrowserWindow({
     width: hudWidth,
@@ -98,7 +107,6 @@ function createHudWindow(): void {
 
 function createTray(): void {
   try {
-    // Minimal 16x16 monochrome PNG icon as fallback if no asset is bundled
     const emptyPng =
       'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAWElEQVQ4T2NkoBAwUqifAW8AmqH4DcBpwH88BrAgGwDmwMUBiO0F4iYgdqRmAFwQ6wYgNkI2AK4JbAAzEPsCMQeRGYAWwL+Q4wAYG5nGgGYA3K+4xQEA1i4OE1h3/xAAAAAASUVORK5CYII=';
     const icon = nativeImage.createFromDataURL(`data:image/png;base64,${emptyPng}`);
@@ -161,7 +169,6 @@ function toElectronAccelerator(keys: string[]): string | null {
   const modifiers = new Set(['Alt', 'Shift', 'CommandOrControl', 'Super']);
   const hasNonModifier = mapped.some((m) => !modifiers.has(m));
   if (!hasNonModifier) {
-    // Electron globalShortcut requires at least one non-modifier key
     return null;
   }
   return Array.from(new Set(mapped)).join('+');
@@ -234,6 +241,14 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('audio:set-mute', (_e, muted: boolean) => {
+    try {
+      mainWindow?.webContents.setAudioMuted(muted);
+    } catch {
+      // Ignore
+    }
+  });
+
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
     registerAppShortcuts(shortcuts);
   });
@@ -247,7 +262,9 @@ app.whenReady().then(() => {
     if (!hudWindow) createHudWindow();
     if (!hudWindow) return;
     if (payload.show) {
-      hudWindow.showInactive();
+      if (!mainWindow?.isFocused() || !mainWindow?.isVisible()) {
+        hudWindow.showInactive();
+      }
       if (payload.state) hudWindow.webContents.send('hud:state', payload.state);
     } else {
       hudWindow.hide();
@@ -256,6 +273,10 @@ app.whenReady().then(() => {
 
   ipcMain.on('hud:state', (_e, state) => {
     hudWindow?.webContents.send('hud:state', state);
+  });
+
+  ipcMain.on('hud:action', (_e, action) => {
+    mainWindow?.webContents.send('hud:action', action);
   });
 
   ipcMain.handle('store:load', () => {
@@ -301,6 +322,37 @@ app.whenReady().then(() => {
         method: req.method,
         headers: req.headers,
         body,
+      });
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, text };
+    }
+  );
+
+  ipcMain.handle(
+    'api:multipart',
+    async (
+      _e,
+      req: {
+        url: string;
+        headers: Record<string, string>;
+        fileBase64: string;
+        fileName: string;
+        mimeType: string;
+        fields: Record<string, string>;
+      }
+    ) => {
+      const form = new FormData();
+      const buffer = Buffer.from(req.fileBase64, 'base64');
+      const blob = new Blob([buffer], { type: req.mimeType });
+      form.append('file', blob, req.fileName);
+      for (const [k, v] of Object.entries(req.fields)) {
+        form.append(k, v);
+      }
+
+      const res = await fetch(req.url, {
+        method: 'POST',
+        headers: req.headers,
+        body: form,
       });
       const text = await res.text();
       return { ok: res.ok, status: res.status, text };
