@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   screen,
   shell,
   Tray,
@@ -38,6 +39,29 @@ function getStorePath(): string {
   return path.join(app.getPath('userData'), 'yapyap-store.json');
 }
 
+type Appearance = 'light' | 'dark' | 'system';
+const DARK_BG = '#242121';
+const LIGHT_BG = '#ffffff';
+
+/** Reads only the saved appearance so the window opens in the right theme. */
+function readSavedAppearance(): Appearance {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(getStorePath(), 'utf8')) as {
+      settings?: { appearance?: unknown };
+    };
+    const value = parsed.settings?.appearance;
+    if (value === 'light' || value === 'dark' || value === 'system') return value;
+  } catch {
+    // no saved state yet
+  }
+  return 'light';
+}
+
+function applyAppearance(appearance: Appearance) {
+  nativeTheme.themeSource = appearance;
+  mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG);
+}
+
 function syncShortcutSuspension() {
   const suspended = shortcutEditorOpen && mainWindow?.isFocused() === true;
   globalShortcut.setSuspended(suspended);
@@ -68,6 +92,7 @@ function resetHud() {
 }
 
 function createMainWindow(): void {
+  nativeTheme.themeSource = readSavedAppearance();
   mainWindow = new BrowserWindow({
     width: 1140,
     height: 820,
@@ -75,7 +100,8 @@ function createMainWindow(): void {
     minHeight: 620,
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    backgroundColor: '#ffffff',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -91,6 +117,9 @@ function createMainWindow(): void {
     }
     return { action: 'deny' };
   });
+
+  // The page paints its themed splash first, so the window never shows blank.
+  mainWindow.once('ready-to-show', () => mainWindow?.show());
 
   if (isDev) {
     void mainWindow.loadURL('http://localhost:5173');
@@ -338,6 +367,11 @@ app.whenReady().then(() => {
     else mainWindow?.close();
   });
 
+  ipcMain.on('app:set-appearance', (_e, appearance: Appearance) => {
+    if (appearance === 'light' || appearance === 'dark' || appearance === 'system') {
+      applyAppearance(appearance);
+    }
+  });
   ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
     try {
       app.setLoginItemSettings({ openAtLogin: enabled });

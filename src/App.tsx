@@ -68,6 +68,15 @@ function comboMatches(pressed: Set<string>, combo: string[]): boolean {
 
 const modifierOnlyKey = /^(?:(?:Left |Right )?(?:Alt|Shift|Ctrl)|Control|Cmd|Meta|Command)$/;
 
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash || splash.classList.contains('hide')) return;
+  requestAnimationFrame(() => {
+    splash.classList.add('hide');
+    window.setTimeout(() => splash.remove(), 250);
+  });
+}
+
 export function App() {
   const [appState, setAppState] = useState<PersistedAppState>(() => getInitialState());
   const [hydrated, setHydrated] = useState(false);
@@ -126,7 +135,17 @@ export function App() {
 
   // Apply light/dark theme class and listen for live OS system theme changes
   useEffect(() => {
+    // Until saved settings load, keep the theme the splash already picked.
+    if (!isHudRoute && !hydrated) return;
     const mode = isHudRoute ? hud.appearance ?? 'system' : appState.settings.appearance;
+    if (!isHudRoute) {
+      window.yapyap?.setAppearance?.(mode);
+      try {
+        localStorage.setItem('yapyap_appearance', mode);
+      } catch {
+        // ignore
+      }
+    }
     const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
 
     const applyTheme = () => {
@@ -135,11 +154,12 @@ export function App() {
     };
 
     applyTheme();
+    if (!isHudRoute) hideSplash();
     if (mode === 'system' && mql?.addEventListener) {
       mql.addEventListener('change', applyTheme);
       return () => mql.removeEventListener('change', applyTheme);
     }
-  }, [appState.settings.appearance, hud.appearance, isHudRoute]);
+  }, [appState.settings.appearance, hud.appearance, hydrated, isHudRoute]);
 
   // The HUD window is larger than what it draws, so it only takes the mouse
   // while the pointer is over the HUD itself.

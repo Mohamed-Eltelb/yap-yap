@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('yapyap', {
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
+  setAppearance: (appearance: 'light' | 'dark' | 'system') =>
+    ipcRenderer.send('app:set-appearance', appearance),
   setLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:set-login-item', enabled),
   setSystemMute: (muted: boolean) => ipcRenderer.invoke('audio:set-mute', muted),
   updateShortcuts: (shortcuts: {

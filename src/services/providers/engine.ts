@@ -19,6 +19,7 @@ declare global {
       minimizeWindow: () => void;
       maximizeWindow: () => void;
       closeWindow: () => void;
+      setAppearance?: (appearance: 'light' | 'dark' | 'system') => void;
       setLaunchAtLogin: (enabled: boolean) => Promise<void>;
       setSystemMute: (muted: boolean) => Promise<void>;
       updateShortcuts: (shortcuts: {
