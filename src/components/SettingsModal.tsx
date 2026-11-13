@@ -700,8 +700,8 @@ export function SettingsModal({
                     <span>Language</span>
                   </div>
 
-                  <div className="divide-y divide-[var(--border-subtle)]">
-                    <div className="py-4 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Interface language
@@ -712,7 +712,7 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="py-4">
+                    <div className="py-2.5">
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
@@ -737,7 +737,7 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="py-4">
+                    <div className="py-2.5">
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
@@ -767,8 +767,8 @@ export function SettingsModal({
                     <span>Audio</span>
                   </div>
 
-                  <div className="divide-y divide-[var(--border-subtle)]">
-                    <div className="py-4 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Microphone
@@ -790,7 +790,7 @@ export function SettingsModal({
                       />
                     </div>
 
-                    <div className="py-4 flex items-center justify-between gap-4">
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Interaction sounds
@@ -806,7 +806,7 @@ export function SettingsModal({
                       />
                     </div>
 
-                    {window.yapyap && <div className="py-4 flex items-center justify-between gap-4">
+                    {window.yapyap && <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Mute when dictating
@@ -831,8 +831,8 @@ export function SettingsModal({
                     <span>General</span>
                   </div>
 
-                  <div className="divide-y divide-[var(--border-subtle)]">
-                    <div className="py-4 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Appearance
@@ -854,7 +854,7 @@ export function SettingsModal({
                       />
                     </div>
 
-                    <div className="py-4 flex items-center justify-between gap-4">
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Launch app at login
@@ -870,7 +870,7 @@ export function SettingsModal({
                       />
                     </div>
 
-                    <div className="py-4 flex items-center justify-between gap-4">
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Smart AI cleanup
@@ -886,7 +886,7 @@ export function SettingsModal({
                       />
                     </div>
 
-                    <div className="py-4 flex items-center justify-between gap-4">
+                    <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Auto-paste into focused app

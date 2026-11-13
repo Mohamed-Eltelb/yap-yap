@@ -374,7 +374,7 @@ export function HistoryView({
                               <>
                                 <p
                                   dir="auto"
-                                  className="text-[13.5px] text-[var(--text-primary)] leading-relaxed selectable break-words"
+                                  className="text-[13.5px] text-[var(--text-primary)] leading-relaxed break-words"
                                 >
                                   {item.text}
                                 </p>

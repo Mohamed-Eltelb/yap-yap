@@ -81,7 +81,7 @@ export function DictationHud({
             <>
               <p
                 dir="auto"
-                className="text-[13px] text-zinc-100 leading-relaxed max-h-44 overflow-y-auto selectable"
+                className="text-[13px] text-zinc-100 leading-relaxed max-h-44 overflow-y-auto"
               >
                 {hud.resultText}
               </p>
