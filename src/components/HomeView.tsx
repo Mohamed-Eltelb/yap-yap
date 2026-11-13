@@ -75,7 +75,7 @@ export function HomeView({
         <div className="flex flex-col min-[1080px]:flex-row gap-5 items-start">
           {/* Center Insights Column */}
           <div className="flex-1 min-w-0 w-full space-y-3.5">
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between mb-3">
               <h2 className="text-[19px] font-semibold text-[var(--text-primary)]">
                 Insights
               </h2>
