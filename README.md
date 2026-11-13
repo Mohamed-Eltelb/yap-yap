@@ -18,6 +18,8 @@ A multi-provider BYOK (Bring Your Own Key) voice dictation, translation, and AI 
 
 ## Development
 
+Use Node.js 22.12+ or 24+.
+
 ```bash
 npm install
 npm run dev        # Launches Vite + Electron desktop app

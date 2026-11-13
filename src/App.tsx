@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ShareModal } from './components/ShareModal';
 import { Sidebar } from './components/Sidebar';
 import { PROVIDER_CATALOG } from './services/providers/catalog';
+import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
 import {
   processTranscriptWithLlm,
   transcribeAudio,
@@ -81,6 +82,7 @@ export function App() {
 
   const recorderRef = useRef<RecorderSession | null>(null);
   const recorderStartRef = useRef<symbol | null>(null);
+  const mutedForRecording = useRef(false);
   const timerRef = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
   const hudRef = useRef<HudState>(hud);
@@ -232,10 +234,10 @@ export function App() {
   };
 
   const restoreAudioMute = useCallback(() => {
-    if (appState.settings.muteWhenDictating) {
-      void window.yapyap?.setSystemMute?.(false);
-    }
-  }, [appState.settings.muteWhenDictating]);
+    if (!mutedForRecording.current) return;
+    mutedForRecording.current = false;
+    void window.yapyap?.setSystemMute(false).catch(console.warn);
+  }, []);
 
   const processAudioPipeline = useCallback(
     async (
@@ -421,8 +423,10 @@ export function App() {
         // Copy & optionally auto-paste
         if (appState.settings.autoPaste && window.yapyap?.pasteText) {
           await window.yapyap.pasteText(finalText);
+        } else if (window.yapyap) {
+          await window.yapyap.copyText(finalText);
         } else {
-          await navigator.clipboard?.writeText(finalText).catch(() => {});
+          await navigator.clipboard?.writeText(finalText);
         }
 
         playInteractionSound('stop', appState.settings.interactionSounds);
@@ -550,8 +554,9 @@ export function App() {
       const start = Symbol();
       recorderStartRef.current = start;
       try {
-        if (appState.settings.muteWhenDictating) {
-          void window.yapyap?.setSystemMute?.(true);
+        if (appState.settings.muteWhenDictating && window.yapyap) {
+          mutedForRecording.current = true;
+          void window.yapyap.setSystemMute(true).catch(() => showToast('Could not mute system audio.'));
         }
         playInteractionSound('start', appState.settings.interactionSounds);
         const startTime = Date.now();
@@ -653,7 +658,7 @@ export function App() {
 
       const { dictate, translate, ask } = appState.settings.shortcuts;
       const matches = (combo: string[]) =>
-        !(globalModifiers && combo.every((key) => modifierOnlyKey.test(key.trim()))) &&
+        !(globalModifiers && (combo.includes('Right Alt') || combo.every((key) => modifierOnlyKey.test(key.trim())))) &&
         comboMatches(pressed, combo);
       if (ask.some(matches)) {
         e.preventDefault();
@@ -682,8 +687,13 @@ export function App() {
   }, [appState.settings.shortcuts, globalModifiers, isHudRoute, modalOpen, triggerDictationMode]);
 
   const handleCopyText = async (text: string) => {
-    await navigator.clipboard?.writeText(text).catch(() => {});
-    showToast('Copied to clipboard');
+    try {
+      if (window.yapyap) await window.yapyap.copyText(text);
+      else await navigator.clipboard.writeText(text);
+      showToast('Copied to clipboard');
+    } catch {
+      showToast('Could not copy to clipboard.');
+    }
   };
 
   const handleRetryHistoryItem = async (item: HistoryItem) => {
@@ -789,33 +799,20 @@ export function App() {
     showToast('History exported locally as JSON');
   };
 
-  const handleImportHistory = (imported: HistoryItem[]) => {
+  const handleImportHistory = async (file: File) => {
+    let imported: HistoryItem[];
+    try {
+      imported = parseHistoryImport(await file.text(), appState.settings.activeSttProvider);
+    } catch {
+      showToast('Could not read this file. Choose a valid Yap Yap history JSON file.');
+      return;
+    }
+    if (imported.length === 0) {
+      showToast('No valid history entries found in this file.');
+      return;
+    }
     setAppState((prev) => {
-      const existingIds = new Set(prev.history.map((h) => h.id));
-      const normalized: HistoryItem[] = imported
-        .filter((h) => !h.isSample && typeof h.text === 'string' && h.text.trim().length > 0)
-        .map((h, idx) => {
-          const cleanText = h.text.trim();
-          const words = countWords(cleanText);
-          const dur = Math.max(1000, Number(h.durationMs) || 3000);
-          return {
-            ...h,
-            id: existingIds.has(h.id) ? `h-imp-${Date.now()}-${idx}` : h.id,
-            createdAt: h.createdAt || new Date().toISOString(),
-            mode: h.mode || 'dictate',
-            rawText: h.rawText || cleanText,
-            text: cleanText,
-            durationMs: dur,
-            wordCount: words,
-            wpm:
-              typeof h.wpm === 'number' && h.wpm > 0
-                ? h.wpm
-                : Math.max(1, Math.round((words / dur) * 60_000)),
-            providerId: h.providerId || prev.settings.activeSttProvider,
-            model: h.model || 'imported',
-            category: h.category || classifyTranscriptCategory(cleanText, h.mode || 'dictate'),
-          };
-        });
+      const normalized = assignHistoryIds(imported, prev.history.map((item) => item.id));
 
       const merged = [...normalized, ...prev.history].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -972,7 +969,6 @@ export function App() {
             }}
             onStartDictation={(mode) => void triggerDictationMode(mode)}
             onDismissPromoCard={() => updateSettings({ dismissedPromoCard: true })}
-            onShowToast={showToast}
           />
         )}
 
@@ -1034,6 +1030,7 @@ export function App() {
         onUpdateProvider={updateProvider}
         stats={stats}
         onShowToast={showToast}
+        toast={toast}
       />
 
       <ShareModal
@@ -1054,8 +1051,8 @@ export function App() {
         />
       )}
 
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#141416] text-white text-[12.5px] font-medium shadow-xl border border-white/10">
+      {toast && !modalOpen && (
+        <div role="status" className="fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#141416] text-white text-[12.5px] font-medium shadow-xl border border-white/10">
           {toast}
         </div>
       )}

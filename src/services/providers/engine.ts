@@ -12,6 +12,7 @@ declare global {
     yapyap?: {
       isElectron: boolean;
       platform: string;
+      checkForUpdate: () => Promise<{ message: string; url?: string }>;
       minimizeWindow: () => void;
       maximizeWindow: () => void;
       closeWindow: () => void;
@@ -23,6 +24,7 @@ declare global {
         ask: string[][];
       }) => Promise<boolean>;
       pasteText: (text: string) => Promise<boolean>;
+      copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;
       sendHudAction: (action: {

@@ -1,3 +1,4 @@
+import { version } from '../../package.json';
 import {
   CheckCircle2,
   Cpu,
@@ -34,7 +35,6 @@ interface Props {
   onOpenModal: (tab: SettingsModalTab) => void;
   onStartDictation: (mode: DictationMode) => void;
   onDismissPromoCard: () => void;
-  onShowToast: (msg: string) => void;
 }
 
 export function HomeView({
@@ -46,7 +46,6 @@ export function HomeView({
   onOpenModal,
   onStartDictation,
   onDismissPromoCard,
-  onShowToast,
 }: Props) {
   const wordsFmt = formatWordCount(stats.totalWords);
   const saved = formatDurationParts(stats.timeSavedMinutes);
@@ -80,7 +79,7 @@ export function HomeView({
           Speak, don&apos;t type
         </h1>
 
-        <div className="flex flex-col lg:flex-row gap-5 items-start">
+        <div className="flex flex-col min-[1080px]:flex-row gap-5 items-start">
           {/* Center Insights Column */}
           <div className="flex-1 min-w-0 w-full space-y-3.5">
             <div className="flex items-center justify-between mb-1">
@@ -203,7 +202,7 @@ export function HomeView({
           </div>
 
           {/* Right Rail matching Images 1 & 13 */}
-          <div className="w-full lg:w-[188px] shrink-0 space-y-3 pt-1">
+          <div className="w-full min-[1080px]:w-[188px] shrink-0 space-y-3 pt-1">
             {/* Shortcuts Cheatsheet Card */}
             <div className="yy-card p-3.5 space-y-3">
               <div>
@@ -368,13 +367,12 @@ export function HomeView({
       {/* Bottom right version footer */}
       <div className="px-6 pb-3 flex justify-end">
         <div className="text-right text-[11px] text-[var(--text-muted)] leading-relaxed">
-          <div>Version v1.0.0</div>
           <button
             type="button"
-            onClick={() => onShowToast('Yap Yap v1.0.0 is up to date.')}
+            onClick={() => onOpenModal('about')}
             className="underline hover:text-[var(--text-secondary)] transition-colors"
           >
-            Check for updates
+            Version v{version}
           </button>
         </div>
       </div>

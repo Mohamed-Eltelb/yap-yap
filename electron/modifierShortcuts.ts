@@ -1,4 +1,5 @@
 import { UiohookKey, uIOhook } from 'uiohook-napi';
+import { matchShortcut } from './shortcutMatch';
 
 const modifierKeys: Record<string, number[]> = {
   'Right Alt': [UiohookKey.AltRight],
@@ -16,14 +17,32 @@ modifierKeys.Control = modifierKeys.Ctrl;
 modifierKeys.Cmd = modifierKeys.Command = modifierKeys.Meta;
 
 type Binding = { keys: number[][]; trigger: () => void };
+const keyCodes: Record<string, number> = UiohookKey;
+const punctuation: Record<string, string> = {
+  ';': 'Semicolon', '=': 'Equal', ',': 'Comma', '-': 'Minus', '.': 'Period',
+  '/': 'Slash', '`': 'Backquote', '[': 'BracketLeft', ']': 'BracketRight',
+  '\\': 'Backslash', "'": 'Quote',
+};
+
+export function canHookShortcut(combo: string[]): boolean {
+  return combo.length > 0 && combo.every((key) => resolveKey(key) !== undefined);
+}
+
+function resolveKey(key: string): number[] | undefined {
+  const name = key === ' ' ? 'Space' : key.trim();
+  if (Object.hasOwn(modifierKeys, name)) return modifierKeys[name];
+  const code = keyCodes[punctuation[name] ?? name];
+  return typeof code === 'number' ? [code] : undefined;
+}
+
 let bindings: Binding[] = [];
 let running = false;
-const pressed = new Set<number>();
+const pressed = new Map<number, number>();
 let pending: Binding | undefined;
 
 export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger: () => void }[]) {
   bindings = shortcuts.map(({ combo, trigger }) => ({
-    keys: combo.map((key) => modifierKeys[key.trim()]),
+    keys: combo.map((key) => resolveKey(key)!),
     trigger,
   }));
   if (bindings.length === 0) {
@@ -31,23 +50,23 @@ export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger:
     return;
   }
   pending = undefined;
+  pressed.clear();
   if (!running) {
     uIOhook.start();
     running = true;
   }
 }
 
-uIOhook.on('keydown', ({ keycode }) => {
+uIOhook.on('keydown', ({ keycode, time }) => {
   if (pressed.has(keycode)) return;
-  pressed.add(keycode);
-  pending = bindings.find(({ keys }) =>
-    keys.length === pressed.size && keys.every((options) => options.some((key) => pressed.has(key)))
-  );
+  pressed.set(keycode, time);
+  pending = matchShortcut(bindings, pressed, process.platform === 'win32');
 });
 
 uIOhook.on('keyup', ({ keycode }) => {
   if (!pressed.delete(keycode)) return;
-  // Wait for release so a tap of Right Alt can be distinguished from a chord.
+  // Wait until the chord is fully released so held modifiers do not affect auto-paste.
+  if (pressed.size > 0) return;
   const binding = pending;
   pending = undefined;
   binding?.trigger();
@@ -58,4 +77,8 @@ export function stopModifierShortcuts() {
   running = false;
   pending = undefined;
   pressed.clear();
+}
+
+export function pasteWithKeyboard(): void {
+  uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
 }

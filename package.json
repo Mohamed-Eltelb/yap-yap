@@ -5,6 +5,9 @@
   "main": "dist-electron/main.js",
   "author": "Mohamed Eltelb",
   "license": "MIT",
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
   "scripts": {
     "dev": "tsc -p tsconfig.electron.json && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:web": "vite",
@@ -15,29 +18,40 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lucide-react": "^0.511.0",
+    "loudness": "^0.4.2",
+    "lucide-react": "^1.72.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.7",
-    "@types/node": "^22.15.18",
+    "@types/node": "^24.9.0",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
-    "@vitejs/plugin-react": "^4.4.1",
-    "concurrently": "^9.1.2",
-    "electron": "^36.2.1",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "electron": "^45.3.1",
     "electron-builder": "^26.0.12",
     "tailwindcss": "^4.1.7",
-    "typescript": "^5.8.3",
-    "vitest": "^3.1.3",
-    "wait-on": "^8.0.3"
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
+    "wait-on": "^9.5.1"
+  },
+  "overrides": {
+    "app-builder-lib": {
+      "minimatch": "^11.0.8"
+    },
+    "@electron/universal": {
+      "minimatch": "^11.0.8"
+    }
   },
   "build": {
     "appId": "com.yapyap.desktop",
     "productName": "Yap Yap",
     "npmRebuild": false,
+    "asarUnpack": ["node_modules/loudness/impl/windows/*.exe"],
     "directories": {
       "output": "release"
     },

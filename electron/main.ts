@@ -13,7 +13,9 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { registerModifierShortcuts, stopModifierShortcuts } from './modifierShortcuts';
+import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, stopModifierShortcuts } from './modifierShortcuts';
+import { setRecordingMute } from './systemAudio';
+import { checkForUpdate } from './updates';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
@@ -21,6 +23,7 @@ let hudReady = false;
 let hudPayload: { show: boolean; state?: unknown } = { show: false };
 let tray: Tray | null = null;
 let isQuitting = false;
+let quitAfterAudioRestore = false;
 
 const isDev = !app.isPackaged;
 
@@ -68,6 +71,14 @@ function createMainWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+  mainWindow.webContents.on('render-process-gone', () => {
+    void setRecordingMute(false).catch(console.warn);
+  });
+  mainWindow.webContents.on('did-start-navigation', (event) => {
+    if (event.isMainFrame && !event.isSameDocument) {
+      void setRecordingMute(false).catch(console.warn);
+    }
   });
 }
 
@@ -215,10 +226,11 @@ function registerAppShortcuts(shortcuts: {
     for (const combo of combos) {
       const accel = toElectronAccelerator(combo);
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
-      if (!accel) {
-        if (combo.length > 0) modifierShortcuts.push({ combo, trigger });
+      if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
+        modifierShortcuts.push({ combo, trigger });
         continue;
       }
+      if (!accel) continue;
       try {
         globalShortcut.register(accel, trigger);
       } catch {
@@ -247,10 +259,12 @@ function simulatePaste(): Promise<boolean> {
         (err) => resolve(!err)
       );
     } else if (process.platform === 'win32') {
-      exec(
-        'powershell -NoProfile -Command "$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys(\'^v\')"',
-        (err) => resolve(!err)
-      );
+      try {
+        pasteWithKeyboard();
+        resolve(true);
+      } catch {
+        resolve(false);
+      }
     } else {
       exec('xdotool key --clearmodifiers ctrl+v', (err) => resolve(!err));
     }
@@ -280,21 +294,21 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('audio:set-mute', (_e, muted: boolean) => {
-    try {
-      mainWindow?.webContents.setAudioMuted(muted);
-    } catch {
-      // Ignore
-    }
-  });
+  ipcMain.handle('audio:set-mute', (event, muted: boolean) =>
+    event.sender === mainWindow?.webContents ? setRecordingMute(muted) : undefined);
+  ipcMain.handle('app:check-for-update', (event) =>
+    event.sender === mainWindow?.webContents ? checkForUpdate(app.getVersion()) : undefined);
 
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
     return registerAppShortcuts(shortcuts);
   });
 
   ipcMain.handle('clipboard:paste', async (_e, text: string) => {
-    clipboard.writeText(text);
+    await clipboard.writeText(text);
     return simulatePaste();
+  });
+  ipcMain.handle('clipboard:copy', async (event, text: string) => {
+    if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
   });
 
   ipcMain.on('hud:toggle', (event, payload: typeof hudPayload) => {
@@ -310,10 +324,10 @@ app.whenReady().then(() => {
     updateHudWindow();
   });
 
-  ipcMain.on('hud:action', (event, action: { type: string; text?: string }) => {
+  ipcMain.on('hud:action', async (event, action: { type: string; text?: string }) => {
     if (event.sender !== hudWindow?.webContents) return;
     if (action.type === 'copy' && typeof action.text === 'string') {
-      clipboard.writeText(action.text);
+      await clipboard.writeText(action.text).catch(console.warn);
       return;
     }
     mainWindow?.webContents.send('hud:action', action);
@@ -374,7 +388,11 @@ app.whenReady().then(() => {
         }
       }
 
-      // Clean up deleted audio files
+      const tmpPath = `${p}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(clone, null, 2), 'utf8');
+      fs.renameSync(tmpPath, p);
+
+      // Clean up deleted audio only after the updated history is on disk.
       for (const file of fs.readdirSync(audioDir)) {
         if (file.endsWith('.txt') && !activeAudioIds.has(file)) {
           try {
@@ -385,9 +403,6 @@ app.whenReady().then(() => {
         }
       }
 
-      const tmpPath = `${p}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(clone, null, 2), 'utf8');
-      fs.renameSync(tmpPath, p);
     } catch {
       // Ignore write error
     }
@@ -457,6 +472,16 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopModifierShortcuts();
+});
+
+app.on('before-quit', (event) => {
+  isQuitting = true;
+  if (quitAfterAudioRestore) return;
+  event.preventDefault();
+  void setRecordingMute(false).catch(console.warn).finally(() => {
+    quitAfterAudioRestore = true;
+    app.quit();
+  });
 });
 
 app.on('activate', () => {

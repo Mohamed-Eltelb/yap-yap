@@ -18,6 +18,49 @@ import {
 } from '../services/providers/engine';
 import { parseDictionaryImportText } from '../components/DictionaryView';
 import { HistoryItem } from '../types/app';
+import { assignHistoryIds, parseHistoryImport } from '../services/historyImport';
+import { matchShortcut } from '../../electron/shortcutMatch';
+import { UiohookKey as Key } from 'uiohook-napi';
+
+describe('Windows AltGr shortcuts', () => {
+  const dictate = { keys: [[Key.AltRight]] };
+  const translate = { keys: [[Key.AltRight], [Key.ShiftRight]] };
+  const ask = { keys: [[Key.AltRight], [Key.Space]] };
+  const bindings = [dictate, translate, ask];
+
+  it('matches each default binding when Windows supplies a synthetic Ctrl', () => {
+    const pressed = new Map<number, number>([[Key.Ctrl, 100], [Key.AltRight, 100]]);
+    expect(matchShortcut(bindings, pressed, true)).toBe(dictate);
+    expect(matchShortcut(bindings, new Map([...pressed, [Key.ShiftRight, 130]]), true)).toBe(translate);
+    expect(matchShortcut(bindings, new Map([...pressed, [Key.Space, 130]]), true)).toBe(ask);
+    expect(matchShortcut(bindings, new Map([...pressed, [Key.E, 130]]), true)).toBeUndefined();
+  });
+
+  it('preserves a deliberate Ctrl hold and prefers explicitly configured Ctrl chords', () => {
+    const intentional = new Map<number, number>([[Key.Ctrl, 100], [Key.AltRight, 300]]);
+    const exact = { keys: [[Key.Ctrl], [Key.AltRight]] };
+    expect(matchShortcut(bindings, intentional, true)).toBeUndefined();
+    expect(matchShortcut([...bindings, exact], new Map([[Key.Ctrl, 100], [Key.AltRight, 100]]), true)).toBe(exact);
+  });
+});
+
+describe('History import', () => {
+  it('preserves entries with colliding, missing, and unusable IDs as independently editable records', () => {
+    const imported = parseHistoryImport(JSON.stringify([
+      { id: 'existing', text: 'Imported collision' },
+      { id: 'duplicate', text: 'First' },
+      { id: 'duplicate', text: 'Second' },
+      { id: '../recording', text: 'Third' },
+      { text: 'Fourth' },
+      null,
+    ]), 'groq');
+    const items = assignHistoryIds(imported, ['existing']);
+    expect(items.map((item) => item.text)).toEqual(['Imported collision', 'First', 'Second', 'Third', 'Fourth']);
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+    expect(items[1].id).toBe('duplicate');
+    expect(items.every((item) => /^[a-z0-9_-]+$/i.test(item.id) && item.id !== 'existing')).toBe(true);
+  });
+});
 
 describe('Stats and Heatmap Engine', () => {
   const baseDate = new Date('2026-11-12T12:00:00Z');

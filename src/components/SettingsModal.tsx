@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { version } from '../../package.json';
 import {
   AlertCircle,
   Check,
@@ -51,6 +52,7 @@ interface Props {
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   stats: InsightsStats;
   onShowToast: (msg: string) => void;
+  toast: string | null;
 }
 
 const ALL_LANGUAGES = [
@@ -71,9 +73,11 @@ const ALL_LANGUAGES = [
 ];
 
 function Toggle({
+  label,
   checked,
   onChange,
 }: {
+  label: string;
   checked: boolean;
   onChange: (val: boolean) => void;
 }) {
@@ -81,6 +85,7 @@ function Toggle({
     <button
       type="button"
       role="switch"
+      aria-label={label}
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full transition-colors ${
@@ -120,7 +125,12 @@ export function SettingsModal({
   onUpdateProvider,
   stats,
   onShowToast,
+  toast,
 }: Props) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [capturingTarget, setCapturingTarget] = useState<{
     mode: 'dictate' | 'translate' | 'ask';
@@ -130,6 +140,31 @@ export function SettingsModal({
   const [editingVariants, setEditingVariants] = useState(false);
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const opener = document.activeElement;
+    dialog.showModal();
+    closeButtonRef.current?.focus();
+    return () => {
+      dialog.close();
+      if (opener instanceof HTMLElement) opener.focus();
+    };
+  }, [open]);
+
+  const checkForUpdates = async () => {
+    if (!window.yapyap) return;
+    setCheckingUpdate(true);
+    setUpdateResult(undefined);
+    try {
+      setUpdateResult(await window.yapyap.checkForUpdate());
+    } catch {
+      setUpdateResult({ message: 'Could not check for updates. Try again later.' });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -286,9 +321,17 @@ export function SettingsModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1.5px] flex items-center justify-center p-4"
-      onClick={onClose}
+    <dialog
+      ref={dialogRef}
+      aria-label="Yap Yap settings"
+      className="m-auto w-[calc(100%-2rem)] max-w-[860px] overflow-visible bg-transparent backdrop:bg-black/45 backdrop:backdrop-blur-[1.5px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -320,6 +363,7 @@ export function SettingsModal({
         <div className="flex-1 flex flex-col min-w-0 relative">
           <button
             type="button"
+            ref={closeButtonRef}
             onClick={onClose}
             aria-label="Close modal"
             className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
@@ -736,20 +780,9 @@ export function SettingsModal({
                           Interface language
                         </div>
                         <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                          Choose the language used in the user interface.
+                            The app interface is available in English.
                         </p>
                       </div>
-                      <select
-                        value={settings.interfaceLanguage}
-                        onChange={(e) =>
-                          onUpdateSettings({ interfaceLanguage: e.target.value })
-                        }
-                        className="px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
-                      >
-                        <option value="English (US)">English (US)</option>
-                        <option value="English (UK)">English (UK)</option>
-                        <option value="Arabic">Arabic</option>
-                      </select>
                     </div>
 
                     <div className="py-4">
@@ -886,12 +919,13 @@ export function SettingsModal({
                         </p>
                       </div>
                       <Toggle
+                        label="Interaction sounds"
                         checked={settings.interactionSounds}
                         onChange={(val) => onUpdateSettings({ interactionSounds: val })}
                       />
                     </div>
 
-                    <div className="py-4 flex items-center justify-between gap-4">
+                    {window.yapyap && <div className="py-4 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Mute when dictating
@@ -901,10 +935,11 @@ export function SettingsModal({
                         </p>
                       </div>
                       <Toggle
+                        label="Mute when dictating"
                         checked={settings.muteWhenDictating}
                         onChange={(val) => onUpdateSettings({ muteWhenDictating: val })}
                       />
-                    </div>
+                    </div>}
                   </div>
                 </div>
 
@@ -948,6 +983,7 @@ export function SettingsModal({
                         </p>
                       </div>
                       <Toggle
+                        label="Launch app at login"
                         checked={settings.launchAtLogin}
                         onChange={(val) => onUpdateSettings({ launchAtLogin: val })}
                       />
@@ -963,6 +999,7 @@ export function SettingsModal({
                         </p>
                       </div>
                       <Toggle
+                        label="Smart AI cleanup"
                         checked={settings.smartCleanup}
                         onChange={(val) => onUpdateSettings({ smartCleanup: val })}
                       />
@@ -978,6 +1015,7 @@ export function SettingsModal({
                         </p>
                       </div>
                       <Toggle
+                        label="Auto-paste into focused app"
                         checked={settings.autoPaste}
                         onChange={(val) => onUpdateSettings({ autoPaste: val })}
                       />
@@ -1088,17 +1126,30 @@ export function SettingsModal({
                         Version
                       </div>
                       <div className="text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        v1.0.0 · Yap Yap Desktop (BYOK)
+                        v{version} · Yap Yap Desktop (BYOK)
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onShowToast('Yap Yap v1.0.0 is up to date.')}
-                      className="px-4 py-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[13px] font-medium text-[var(--text-primary)] transition-colors"
-                    >
-                      Check for updates
-                    </button>
+                    {window.yapyap && (
+                      <button
+                        type="button"
+                        onClick={() => void checkForUpdates()}
+                        disabled={checkingUpdate}
+                        className="px-4 py-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[13px] font-medium text-[var(--text-primary)] transition-colors disabled:opacity-60"
+                      >
+                        {checkingUpdate ? 'Checking…' : 'Check for updates'}
+                      </button>
+                    )}
                   </div>
+                  {updateResult && (
+                    <div role="status" className="text-[13px] text-[var(--text-secondary)]">
+                      {updateResult.message}
+                      {updateResult.url && (
+                        <a href={updateResult.url} target="_blank" rel="noreferrer" className="ms-2 underline">
+                          View releases
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
                     <div>
@@ -1106,10 +1157,9 @@ export function SettingsModal({
                         Local-first privacy
                       </div>
                       <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
-                        API keys, history, and audio recordings stay solely on your device.
+                        Yap Yap stores your history locally. Cloud providers receive the audio or text needed for each request.
                       </div>
                     </div>
-                    <ExternalLink className="w-4 h-4 text-[var(--text-muted)]" />
                   </div>
 
                   <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
@@ -1160,6 +1210,11 @@ export function SettingsModal({
           </div>
         </div>
       </div>
-    </div>
+      {toast && (
+        <div role="status" className="fixed bottom-5 right-5 rounded-xl border border-white/10 bg-[#141416] px-4 py-2.5 text-[12.5px] font-medium text-white shadow-xl">
+          {toast}
+        </div>
+      )}
+    </dialog>
   );
 }

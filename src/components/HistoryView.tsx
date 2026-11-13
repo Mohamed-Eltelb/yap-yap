@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CloudOff,
@@ -31,7 +31,7 @@ interface Props {
   onDeleteItem: (id: string) => void;
   onClearAll: () => void;
   onExportJson: () => void;
-  onImportJson: (items: HistoryItem[]) => void;
+  onImportJson: (file: File) => void;
 }
 
 type HistoryFilter = 'all' | 'dictations' | 'ask';
@@ -82,6 +82,15 @@ export function HistoryView({
 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const clearDialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => () => audioPlayerRef.current?.pause(), []);
+  useEffect(() => {
+    if (playingId && !history.some((item) => item.id === playingId)) {
+      audioPlayerRef.current?.pause();
+      setPlayingId(null);
+    }
+  }, [history, playingId]);
 
   const filtered = useMemo(() => {
     if (filter === 'dictations') {
@@ -131,18 +140,9 @@ export function HistoryView({
     setEditDraft('');
   };
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        onImportJson(parsed as HistoryItem[]);
-      }
-    } catch {
-      // ignore invalid json
-    }
+    if (file) onImportJson(file);
     e.target.value = '';
   };
 
@@ -169,7 +169,7 @@ export function HistoryView({
           <div className="flex items-center gap-3 relative">
             <div
               className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)] select-none"
-              title="100% local storage — your transcripts and audio never leave your device"
+              title="Yap Yap keeps history on this device."
             >
               <CloudOff className="w-3.5 h-3.5" />
               <span>Cloud Sync</span>
@@ -231,7 +231,7 @@ export function HistoryView({
                     <button
                       type="button"
                       onClick={() => {
-                        onClearAll();
+                        clearDialog.current?.showModal();
                         setHeaderMenuOpen(false);
                       }}
                       className="w-full px-3.5 py-2 text-left text-red-500 hover:bg-[var(--bg-hover)] flex items-center gap-2"
@@ -276,7 +276,7 @@ export function HistoryView({
               <span>Your data stays private</span>
             </div>
             <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-              Your voice dictations are private with zero data retention. They are stored only on your device and cannot be accessed from anywhere else.
+              Yap Yap stores history and recordings on this device. If you use a cloud provider, it receives the audio or text needed to process your request. The provider’s retention policy applies.
             </p>
           </div>
         </div>
@@ -393,7 +393,7 @@ export function HistoryView({
                           className={`flex items-center gap-1 shrink-0 transition-opacity ${
                             isMenuOpen || item.flagged || isPlaying
                               ? 'opacity-100'
-                              : 'opacity-0 group-hover:opacity-100'
+                              : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                           }`}
                         >
                           {item.audioDataUrl && (
@@ -511,6 +511,22 @@ export function HistoryView({
           </div>
         )}
       </div>
+      <dialog
+        ref={clearDialog}
+        aria-labelledby="clear-history-title"
+        className="m-auto w-[420px] max-w-[calc(100%-2rem)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-modal)] p-6 text-[var(--text-primary)] shadow-2xl backdrop:bg-black/45"
+      >
+        <h2 id="clear-history-title" className="text-lg font-semibold">Clear all history?</h2>
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
+          This permanently deletes all transcripts and recordings saved in Yap Yap.
+        </p>
+        <form method="dialog" className="mt-5 flex justify-end gap-2">
+          <button autoFocus className="rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm">Cancel</button>
+          <button onClick={onClearAll} className="rounded-full bg-red-700 px-4 py-2 text-sm font-medium text-white">
+            Clear history
+          </button>
+        </form>
+      </dialog>
     </div>
   );
 }

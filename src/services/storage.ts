@@ -4,6 +4,7 @@ import {
   createInitialHistory,
 } from '../data/seedData';
 import { createDefaultProviders } from './providers/catalog';
+import { assignHistoryIds } from './historyImport';
 import {
   DictionaryEntry,
   HistoryItem,
@@ -246,7 +247,7 @@ export function sanitizeLoadedState(
       },
     },
     providers: mergedProviders,
-    history: realHistory,
+    history: assignHistoryIds(realHistory),
     dictionary: realDictionary,
   };
 }

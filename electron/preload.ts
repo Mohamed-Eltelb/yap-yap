@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('yapyap', {
   isElectron: true,
   platform: process.platform,
+  checkForUpdate: () => ipcRenderer.invoke('app:check-for-update'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
@@ -14,6 +15,7 @@ contextBridge.exposeInMainWorld('yapyap', {
     ask: string[][];
   }) => ipcRenderer.invoke('shortcuts:update', shortcuts),
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
+  copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>
     ipcRenderer.send('hud:toggle', { show, state }),
   hudReady: () => ipcRenderer.send('hud:ready'),
