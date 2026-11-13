@@ -19,7 +19,8 @@ import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 import type { HudAction } from './hudActions';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { captureDictationContext, stopDictationContext, warmDictationContext } from './dictationContext';
+import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
+import { watchPasteCorrections } from './pasteCorrections';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
@@ -370,6 +371,10 @@ app.whenReady().then(() => {
   ipcMain.handle('dictation:capture-context', (event) => {
     if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
   });
+  ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
+    event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()
+      ? watchPasteCorrections(text, readFocusedField)
+      : []);
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
   });

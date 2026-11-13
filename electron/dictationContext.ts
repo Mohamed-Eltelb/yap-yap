@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { FocusedField } from './pasteCorrections';
 
 export interface DictationContext {
   application: string;
@@ -82,11 +83,30 @@ if ($element.Current.Name -notmatch 'address.*bar|search or enter address' -and
 }
 $context | ConvertTo-Json -Compress
 }
-# One request per input line. Each answer repeats the request id so a late answer is never
-# mistaken for the current one.
-while ($null -ne ($id = [Console]::In.ReadLine())) {
+# Text of the focused field around the caret, used to notice corrections after a paste.
+function Get-FocusedField {
+  $element = [Windows.Automation.AutomationElement]::FocusedElement
+  if (!$element -or $element.Current.IsPassword) { return }
+  $pattern = $null
+  if (!$element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) { return }
+  $range = $pattern.DocumentRange
+  $selection = $pattern.GetSelection() | Select-Object -First 1
+  if ($selection) {
+    $range = $selection.Clone()
+    $character = [Windows.Automation.Text.TextUnit]::Character
+    [void]$range.MoveEndpointByUnit([Windows.Automation.Text.TextPatternRangeEndpoint]::Start, $character, -3000)
+    [void]$range.MoveEndpointByUnit([Windows.Automation.Text.TextPatternRangeEndpoint]::End, $character, 3000)
+  }
+  @{ field = ($element.GetRuntimeId() -join '.'); text = $range.GetText(6000) } | ConvertTo-Json -Compress
+}
+# One request per input line: an id, then an optional command. Each answer repeats the id so
+# answers are matched to their requests.
+while ($null -ne ($line = [Console]::In.ReadLine())) {
+  $id, $command = $line.Split(' ', 2)
   $json = $null
-  try { $json = @(Get-DictationContext)[-1] } catch { }
+  try {
+    if ($command -eq 'field') { $json = @(Get-FocusedField)[-1] } else { $json = @(Get-DictationContext)[-1] }
+  } catch { }
   if (!$json) { $json = '{}' }
   [Console]::Out.WriteLine($id + ' ' + $json)
 }
@@ -95,7 +115,7 @@ while ($null -ne ($id = [Console]::In.ReadLine())) {
 // Starting PowerShell and loading UI Automation takes about a second, so one helper stays
 // warm for the life of the app and answers each request in a few milliseconds.
 let helper: ChildProcessWithoutNullStreams | undefined;
-let waiting: { id: number; done: (line: string) => void } | undefined;
+const waiting = new Map<number, (line: string) => void>();
 let requestId = 0;
 
 function windowsHelper(): ChildProcessWithoutNullStreams {
@@ -111,13 +131,13 @@ function windowsHelper(): ChildProcessWithoutNullStreams {
     for (let end = buffered.indexOf('\n'); end >= 0; end = buffered.indexOf('\n')) {
       const [, id, json] = buffered.slice(0, end).match(/^(\d+) (.*)$/s) ?? [];
       buffered = buffered.slice(end + 1);
-      if (waiting && Number(id) === waiting.id) waiting.done(json.trim());
+      waiting.get(Number(id))?.(json.trim());
     }
   });
   child.stderr.resume();
   const reset = () => {
     if (helper === child) helper = undefined;
-    waiting?.done('');
+    for (const done of [...waiting.values()]) done('');
   };
   child.on('exit', reset);
   child.on('error', reset);
@@ -125,24 +145,33 @@ function windowsHelper(): ChildProcessWithoutNullStreams {
   return child;
 }
 
-function askWindowsHelper(): Promise<string> {
+function askWindowsHelper(command = ''): Promise<string> {
   return new Promise((resolve) => {
-    waiting?.done('');
     const id = ++requestId;
     const done = (line: string) => {
       clearTimeout(timer);
-      if (waiting?.id === id) waiting = undefined;
+      waiting.delete(id);
       resolve(line);
     };
     // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
     const timer = setTimeout(() => done(''), 1500);
-    waiting = { id, done };
+    waiting.set(id, done);
     try {
-      windowsHelper().stdin.write(`${id}\n`);
+      windowsHelper().stdin.write(`${id} ${command}\n`);
     } catch {
       done('');
     }
   });
+}
+
+export async function readFocusedField(): Promise<FocusedField | undefined> {
+  if (process.platform !== 'win32') return;
+  try {
+    const data = JSON.parse(await askWindowsHelper('field'));
+    if (typeof data.field === 'string' && typeof data.text === 'string') return { field: data.field, text: data.text };
+  } catch {
+    // An unreadable field simply teaches nothing.
+  }
 }
 
 export function warmDictationContext(): void {

@@ -1,5 +1,6 @@
 import { buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingSample, personalizationScore } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
+import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildHeatmapWeeks,
@@ -562,4 +563,36 @@ it('remembers the category the model chose for an unrecognized destination', () 
     { writingSample: sample('Email') },
   ]);
   expect([...learned]).toEqual([['example.com', 'Project management']]);
+});
+describe('Corrections made in the destination after a paste', () => {
+  const pasted = 'We moved auth to super base and the edge functions run on versel now.';
+  const field = (text: string) => `Hi team,\n${text}\nThanks`;
+
+  it('learns respelled words and ignores everything around the pasted text', () => {
+    expect(extractCorrections(pasted, field(pasted), field(pasted))).toEqual([]);
+    expect(extractCorrections(pasted, field(pasted),
+      'Hello team,\nWe moved auth to Supabase and the edge functions run on Vercel now.\nThanks a lot'.replace('Hello', 'Hi'),
+    )).toEqual(['Supabase', 'Vercel']);
+    expect(extractCorrections('push it to github today', 'push it to github today', 'push it to GitHub today')).toEqual(['GitHub']);
+    expect(extractCorrections('the build passed', 'the build passed', 'The build passed')).toEqual([]);
+    expect(extractCorrections(pasted, pasted, `${pasted} One more thing about billing.`)).toEqual([]);
+  });
+
+  it('learns nothing from rewrites, deletions, or text it cannot locate', () => {
+    expect(extractCorrections(pasted, field(pasted), field('Auth lives in a hosted database and functions are deployed elsewhere.'))).toEqual([]);
+    expect(extractCorrections(pasted, field(pasted), field('We moved auth and the edge functions run now.'))).toEqual([]);
+    expect(extractCorrections('see you tomorrow', 'see you tomorrow', 'see you today')).toEqual([]);
+    expect(extractCorrections(pasted, field(pasted), '')).toBeUndefined();
+    expect(extractCorrections(pasted, 'unrelated', 'unrelated')).toBeUndefined();
+  });
+
+  it('keeps the last settled correction when the field is cleared or focus moves', async () => {
+    const fixed = pasted.replace('super base', 'Supabase');
+    const reads = [pasted, pasted.replace('super base', 'Supab'), fixed, fixed, ''].map((text) => ({ field: 'a', text }));
+    const read = vi.fn(async () => reads.shift() ?? { field: 'b', text: '' });
+    const options = { settleMs: 0, intervalMs: 0, windowMs: 1000 };
+    expect(await watchPasteCorrections(pasted, read, options)).toEqual(['Supabase']);
+    expect(await watchPasteCorrections(pasted, async () => ({ field: 'a', text: 'something else' }), options)).toEqual([]);
+    expect(await watchPasteCorrections(pasted, async () => undefined, options)).toEqual([]);
+  });
 });

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('yapyap', {
   setShortcutEditorOpen: (open: boolean) => ipcRenderer.send('shortcuts:editor', open),
   preparePaste: () => ipcRenderer.send('clipboard:prepare-paste'),
   captureDictationContext: () => ipcRenderer.invoke('dictation:capture-context'),
+  watchPasteCorrections: (text: string) => ipcRenderer.invoke('dictation:watch-corrections', text),
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>

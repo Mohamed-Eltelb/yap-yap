@@ -498,15 +498,38 @@ export function App() {
         });
 
         const desktop = window.yapyap;
+        const delivered = mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
         const pasted = await deliverDictationResult(
           mode,
-          mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText,
+          delivered,
           autoPaste ? desktop?.pasteText : undefined,
           async (text) => {
             if (desktop) await desktop.copyText(text);
             else await navigator.clipboard?.writeText(text);
           },
         );
+
+        // Words the user respells in the destination right after the paste join the dictionary.
+        if (pasted && mode === 'dictate' && appState.settings.personalizationEnabled) {
+          void desktop?.watchPasteCorrections?.(delivered).then((words) => {
+            if (!words?.length) return;
+            let added: string[] = [];
+            setAppState((prev) => {
+              const known = new Set(prev.dictionary.map((entry) => entry.word.toLowerCase()));
+              added = prev.settings.personalizationEnabled ? words.filter((word) => !known.has(word.toLowerCase())) : [];
+              if (!added.length) return prev;
+              const createdAt = new Date().toISOString();
+              return {
+                ...prev,
+                dictionary: [
+                  ...added.map((word, index) => ({ id: `d-fix-${Date.now()}-${index}`, word, source: 'auto' as const, createdAt })),
+                  ...prev.dictionary,
+                ],
+              };
+            });
+            if (added.length) showToast(`Added to dictionary: ${added.join(', ')}`);
+          }).catch(() => undefined);
+        }
 
         playInteractionSound('stop', appState.settings.interactionSounds);
 

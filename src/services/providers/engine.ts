@@ -29,6 +29,8 @@ declare global {
       setShortcutEditorOpen: (open: boolean) => void;
       preparePaste: () => void;
       captureDictationContext: () => Promise<DictationContext | undefined>;
+      /** Resolves with words the user respelled in the destination after a paste. */
+      watchPasteCorrections: (text: string) => Promise<string[]>;
       pasteText: (text: string) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
