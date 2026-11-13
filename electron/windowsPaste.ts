@@ -35,7 +35,13 @@ if (!$read) {
   # that are clearly not text inputs, such as buttons and lists, are skipped.
   $types = [Windows.Automation.ControlType]
   $inputLike = $types::Edit, $types::Document, $types::ComboBox, $types::Custom, $types::Group, $types::Pane, $types::Text
-  if ($inputLike -notcontains $element.Current.ControlType) { exit 1 }
+  $type = $element.Current.ControlType
+  # Apps that draw their own UI (Zed, GPU terminals, games) expose nothing but
+  # an empty window, so the text field inside it cannot be seen. Paste anyway.
+  $children = [Windows.Automation.TreeScope]::Children
+  $opaque = $type -eq $types::Window -and
+    !$element.FindFirst($children, [Windows.Automation.Condition]::TrueCondition)
+  if (!$opaque -and $inputLike -notcontains $type) { exit 1 }
 }
 
 $before = if ($read) { & $read } else { $null }
