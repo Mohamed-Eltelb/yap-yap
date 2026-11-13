@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { AudioLines, Check, GripVertical, Trash2, X } from 'lucide-react';
+import { Check, ChevronsUpDown, GripVertical, Trash2, X } from 'lucide-react';
 import {
   getLanguageVariant,
   LANGUAGE_VARIANTS,
@@ -7,6 +7,39 @@ import {
   TRANSLATION_LANGUAGES,
 } from '../data/languages';
 import { SelectMenu } from './SelectMenu';
+
+const previewWaveHeights = [3.2, 4.1, 4.7, 5.8, 6.4, 7.6, 6.2, 5.1, 4.2, 3.8, 3.1];
+
+function TranslationHudPreview({ targets }: { targets: string[] }) {
+  const languages = targets.length ? targets : ['English (US)'];
+  const selected = languages[0];
+
+  return (
+    <div className="yy-translation-preview" aria-hidden="true" inert>
+      <div className="yy-hud" data-mode="translate">
+        <div className="yy-hud-targets">
+          {targets.length < 3 && <button type="button" className="yy-hud-edit-targets">Add another language</button>}
+          {languages.map((language) => (
+            <button key={language} type="button" aria-pressed={language === selected}>{language}</button>
+          ))}
+        </div>
+        <div className="yy-hud-mode yy-hud-translate">
+          <span>Translating to</span>
+          <button type="button" className="yy-hud-target" aria-expanded="true">
+            <span>{selected}</span><ChevronsUpDown size={11} />
+          </button>
+        </div>
+        <div className="yy-hud-pill">
+          <button type="button" className="yy-hud-cancel"><X size={15} /></button>
+          <div className="yy-hud-wave">
+            {previewWaveHeights.map((height) => <span key={height} style={{ height }} />)}
+          </div>
+          <button type="button" className="yy-hud-confirm"><Check size={16} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LanguageDialog({ title, description, children, onClose }: {
   title: string;
@@ -126,16 +159,7 @@ export function TranslationTargetsDialog({ targets, onChange, onClose }: {
       description="Choose up to 3 target languages for your dictation in translation mode."
       onClose={onClose}
     >
-      <div className="yy-translation-preview" aria-hidden="true">
-        <div className="yy-preview-label">Translating to</div>
-        <div className="yy-preview-menu">
-          <div>Add another language</div>
-          {(targets.length ? targets : ['English (US)']).map((name, index) => (
-            <span key={name} data-primary={index === 0}>{name}</span>
-          ))}
-        </div>
-        <div className="yy-preview-hud"><X size={14} /><AudioLines size={22} /><Check size={16} /></div>
-      </div>
+      <TranslationHudPreview targets={targets} />
       <div className="yy-language-body">
         <div className="yy-target-list" ref={targetList} tabIndex={-1} role="group" aria-label="Selected translation targets">
           {targets.map((name, index) => (

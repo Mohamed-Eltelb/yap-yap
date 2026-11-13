@@ -52,6 +52,24 @@ export function DictationHud({
   const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
     ? hud.targetLanguage : targets[0] ?? 'English';
 
+  const targetMenu = hud.mode === 'translate' && showTargets && (
+    <div className="yy-hud-targets" role="group" aria-label="Translation target">
+      {targets.length < 3 && (
+        <button type="button" className="yy-hud-edit-targets" onClick={() => {
+          setShowTargets(false);
+          onEditTargets();
+        }}>Add another language</button>
+      )}
+      {targets.map((target) => (
+        <button key={target} type="button" aria-pressed={target === selectedTarget} onClick={(event) => {
+          event.currentTarget.closest('.yy-hud-translate')?.querySelector('button')?.focus();
+          setShowTargets(false);
+          onSelectTarget(target);
+        }}>{target}</button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="yy-hud" data-mode={hud.mode}>
       {hud.status === 'recording' && (
@@ -90,21 +108,7 @@ export function DictationHud({
               >
                 <span>{selectedTarget}</span><ChevronsUpDown size={11} aria-hidden="true" />
               </button>
-              {showTargets && (
-                <div className="yy-hud-targets" role="group" aria-label="Translation target">
-                  <button type="button" className="yy-hud-edit-targets" onClick={() => {
-                    setShowTargets(false);
-                    onEditTargets();
-                  }}>Add another language</button>
-                  {targets.map((target) => (
-                    <button key={target} type="button" aria-pressed={target === selectedTarget} onClick={(event) => {
-                      event.currentTarget.closest('.yy-hud-translate')?.querySelector('button')?.focus();
-                      setShowTargets(false);
-                      onSelectTarget(target);
-                    }}>{target}</button>
-                  ))}
-                </div>
-              )}
+              {targetMenu}
             </div>
           )}
           <div className="yy-hud-pill" role="group" aria-label="Recording controls">

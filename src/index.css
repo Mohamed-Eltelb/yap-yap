@@ -797,12 +797,11 @@ textarea,
 }
 
 .yy-translation-preview {
-  position: relative;
   display: grid;
   place-items: center;
-  height: 132px;
+  isolation: isolate;
+  padding: 10px 0;
   margin: 0 22px 14px;
-  overflow: hidden;
   border-radius: 11px;
   background:
     radial-gradient(ellipse at 55% 120%, #9eb7cc 5%, transparent 57%),
@@ -814,73 +813,21 @@ textarea,
   background: radial-gradient(ellipse at 55% 120%, #546e86, transparent 65%), linear-gradient(115deg, #233340, #44424b, #263d49);
 }
 
-.yy-preview-label,
-.yy-preview-menu,
-.yy-preview-hud {
-  position: absolute;
-  background: #232222;
-  color: #fff;
-  border: 1px solid rgb(255 255 255 / 14%);
-  box-shadow: 0 3px 6px rgb(0 0 0 / 15%);
+.yy-translation-preview .yy-hud {
+  position: static;
+  transform: none;
 }
 
-.yy-preview-label {
-  top: 62px;
-  right: 54%;
-  padding: 6px 9px;
-  border-radius: 9px;
+.yy-translation-preview .yy-hud-targets {
+  position: relative;
+  inset: 7px auto auto;
+  align-self: flex-end;
+  margin-right: 0px;
+  color: #f5f5f5;
   font-size: 12px;
-}
-
-.yy-preview-menu {
-  right: 26%;
-  bottom: 35px;
-  left: auto;
-  min-width: min(132px, 55%);
-  max-width: 48%;
-  padding: 5px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-
-.yy-preview-menu > div,
-.yy-preview-menu span {
-  display: block;
-  overflow: hidden;
-  padding: 2px 6px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.yy-preview-menu > div {
-  border-bottom: 1px solid rgb(255 255 255 / 12%);
-  margin-bottom: 2px;
-}
-
-.yy-preview-menu span[data-primary="true"] {
-  border-radius: 5px;
-  background: #3b3939;
-}
-
-.yy-preview-hud {
-  bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 3px;
-  border-radius: 20px;
-}
-
-.yy-preview-hud svg:first-child,
-.yy-preview-hud svg:last-child {
-  padding: 2px;
-  border-radius: 50%;
-  background: #4a4949;
-}
-
-.yy-preview-hud svg:last-child {
-  background: #fff;
-  color: #171717;
+  font-weight: 600;
+  max-width: min(235px, calc(100vw - 88px));
+  max-height: none;
 }
 
 .yy-language-body {
