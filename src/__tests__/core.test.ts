@@ -1,3 +1,5 @@
+import { buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingSample, personalizationScore } from '../services/personalization';
+import { browserDomain } from '../../electron/dictationContext';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildHeatmapWeeks,
@@ -12,6 +14,7 @@ import {
 import { getInitialState, sanitizeLoadedState } from '../services/storage';
 import { createDefaultProviders, PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import {
+  detectWritingStyle,
   processTranscriptWithLlm,
   testProviderConnection,
   transcribeAudio,
@@ -147,7 +150,7 @@ describe('Stats and Heatmap Engine', () => {
   ];
 
   it('computes words, WPM, active days, and consecutive streaks accurately', () => {
-    const stats = computeInsights(items, 8, baseDate);
+    const stats = computeInsights(items, baseDate);
     expect(stats.totalWords).toBe(14);
     expect(stats.activeDays).toBe(3);
     expect(stats.currentStreak).toBe(2);
@@ -198,7 +201,7 @@ describe('Stats and Heatmap Engine', () => {
     const init = getInitialState();
     expect(init.history).toEqual([]);
     expect(init.dictionary).toEqual([]);
-    const emptyStats = computeInsights(init.history, init.dictionary.length, baseDate);
+    const emptyStats = computeInsights(init.history, baseDate);
     expect(emptyStats.totalWords).toBe(0);
     expect(emptyStats.activeDays).toBe(0);
     expect(emptyStats.averageWpm).toBe(0);
@@ -436,7 +439,7 @@ describe('Multi-Provider Engine', () => {
     expect(body.messages[0].content).not.toContain('Arabic (Egypt)');
   });
 
-  it('processes Ask anything through Anthropic Claude messages API with category instructions', async () => {
+  it('processes Ask anything through Anthropic Claude messages API', async () => {
     vi.stubGlobal('window', undefined);
     const providers = createDefaultProviders();
     providers.anthropic.apiKey = 'sk-ant-test';
@@ -459,8 +462,6 @@ describe('Multi-Provider Engine', () => {
         targetLanguages: ['English (US)'],
         dictionaryWords: ['safeStorage'],
         smartCleanup: true,
-        category: 'Development tools',
-        categoryInstruction: 'Preserve camelCase identifiers.',
       }
     );
 
@@ -471,7 +472,94 @@ describe('Multi-Provider Engine', () => {
     expect(init.headers['x-api-key']).toBe('sk-ant-test');
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('claude-haiku-5-5');
-    expect(body.system).toContain('Preserve camelCase identifiers.');
     expect(body.system).toContain('safeStorage');
   });
+
+  it('detects a category and supplies its learned style to dictation cleanup', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const response = (content: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content } }] }),
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response('```json\n{"category":"email","tone":"Neutral","phrasing":"Short sentences"}\n```'))
+      .mockResolvedValueOnce(response('Inspection complete.'))
+      .mockResolvedValueOnce(response('invalid JSON'));
+    vi.stubGlobal('fetch', fetchMock);
+    const profile = { category: 'Email', tone: 'Direct', phrasing: 'Short sentences', count: 3, corrections: 1, examples: ['Thanks, Sam.'] };
+    const destination = { application: 'Chrome', domain: 'mail.google.com', nearbyText: 'Hi Sam,' };
+    const detected = await detectWritingStyle('Inspection complete', provider, {
+      destination: { application: destination.application, domain: destination.domain },
+    });
+    expect(detected?.category).toBe('Email');
+    await processTranscriptWithLlm('Inspection complete', 'dictate', provider, {
+      targetLanguages: [], dictionaryWords: [], smartCleanup: true, writingStyles: [profile], destination,
+    });
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(body.messages[0].content).toContain('"tone":"Direct"');
+    expect(body.messages[0].content).toContain('Thanks, Sam.');
+    expect(body.messages[0].content).toContain('Hi Sam,');
+    const classification = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(JSON.parse(classification.messages[1].content).destination).toEqual({ application: 'Chrome', domain: 'mail.google.com' });
+    expect(await detectWritingStyle('Inspection complete', provider)).toBeUndefined();
+  });
+});
+
+it('keeps only the browser domain and rejects addresses containing credentials', () => {
+  expect(browserDomain('https://mail.google.com/mail/u/0/?q=private#inbox')).toBe('mail.google.com');
+  expect(browserDomain('docs.google.com/document/d/123')).toBe('docs.google.com');
+  expect(browserDomain('https://user:secret@example.com')).toBeUndefined();
+  expect(browserDomain('file:///C:/private.txt')).toBeUndefined();
+});
+it('resolves the writing category from the destination without a model call', () => {
+  expect(categoryForDestination({ application: 'Google Chrome', domain: 'mail.google.com' })).toBe('Email');
+  expect(categoryForDestination({ application: 'Google Chrome', domain: 'www.linkedin.com' })).toBe('Social platforms');
+  expect(categoryForDestination({ application: 'Google Chrome', domain: 'example.com' })).toBeUndefined();
+  expect(categoryForDestination({ application: 'Visual Studio Code' })).toBe('Development tools');
+  expect(categoryForDestination({ application: 'Slack' })).toBe('Messaging');
+  expect(categoryForDestination()).toBeUndefined();
+});
+it('keeps categories to the fixed set and lets hand corrections lead the profile', () => {
+  expect(parseWritingSample({ category: 'Field reports', tone: 'Neutral', phrasing: 'Detailed' })).toBeUndefined();
+  const email = parseWritingSample({ category: 'Email', tone: 'Friendly', phrasing: 'Concise' });
+  const corrected = parseWritingSample({ category: 'email', tone: 'Formal', phrasing: 'Full sentences' });
+  const messaging = parseWritingSample({ category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase' });
+  const profiles = buildWritingProfiles([
+    { mode: 'dictate', writingSample: email },
+    { mode: 'dictate', writingSample: email },
+    { mode: 'dictate', writingSample: corrected, writingCorrection: true, text: 'Dear Sam, thank you.' },
+    { mode: 'dictate', writingSample: messaging },
+    { mode: 'ask', writingSample: messaging },
+  ]);
+  expect(profiles).toEqual([
+    { category: 'Email', tone: 'Formal', phrasing: 'Full sentences', count: 3, corrections: 1, examples: ['Dear Sam, thank you.'] },
+    { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase', count: 1, corrections: 0, examples: [] },
+  ]);
+  expect(personalizationScore(profiles[0])).toBeGreaterThan(personalizationScore(profiles[1]));
+  expect(personalizationScore({ count: 1000, corrections: 0 })).toBeLessThan(100);
+});
+it('continues the text at the caret with matching spacing and capitalization', () => {
+  expect(fitToSurroundingText('Sounds good.', undefined)).toBe('Sounds good.');
+  expect(fitToSurroundingText('Sounds good.', 'Hi Sam,\n')).toBe('Sounds good.');
+  expect(fitToSurroundingText('Sounds good.', 'Thanks for the update.')).toBe(' Sounds good.');
+  expect(fitToSurroundingText('And then we ship.', 'We test it first,')).toBe(' and then we ship.');
+  expect(fitToSurroundingText('And then we ship.', 'We test it first, ')).toBe('and then we ship.');
+  expect(fitToSurroundingText("I'll review it.", 'By friday ')).toBe("I'll review it.");
+  expect(fitToSurroundingText('API keys are set.', 'the ')).toBe('API keys are set.');
+  expect(fitToSurroundingText('Supabase handles auth.', 'because ', ['Supabase'])).toBe('Supabase handles auth.');
+  expect(fitToSurroundingText('Alex agreed.', 'I asked Alex and ')).toBe('Alex agreed.');
+});
+it('remembers the category the model chose for an unrecognized destination', () => {
+  const sample = (category: string) => ({ category, tone: 'Neutral', phrasing: 'Short' });
+  expect(destinationKey({ application: 'Google Chrome', domain: 'www.Example.com' })).toBe('example.com');
+  expect(destinationKey({ application: 'Obscure App' })).toBe('obscure app');
+  const learned = buildSourceCategories([
+    { writingSource: 'example.com', writingSample: sample('Project management') },
+    { writingSource: 'example.com', writingSample: sample('Project management') },
+    { writingSource: 'example.com', writingSample: sample('Email') },
+    { writingSample: sample('Email') },
+  ]);
+  expect([...learned]).toEqual([['example.com', 'Project management']]);
 });

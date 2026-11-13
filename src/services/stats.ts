@@ -1,3 +1,4 @@
+import { buildWritingProfiles, personalizationScore, type WritingProfile } from './personalization';
 import {
   DictationMode,
   HistoryItem,
@@ -17,11 +18,7 @@ export interface InsightsStats {
   currentStreak: number;
   longestStreak: number;
   personalizationPercent: number;
-  categoryBreakdown: {
-    category: PersonalizationCategory;
-    percent: number;
-    count: number;
-  }[];
+  categoryBreakdown: (WritingProfile & { percent: number })[];
 }
 
 export interface HeatmapCell {
@@ -180,7 +177,6 @@ export function filterByRetention(
 
 export function computeInsights(
   items: HistoryItem[],
-  dictionaryCount: number,
   now = new Date()
 ): InsightsStats {
   const totalWords = items.reduce((sum, item) => sum + item.wordCount, 0);
@@ -244,45 +240,12 @@ export function computeInsights(
     cursor = addCalendarDays(cursor, -1);
   }
 
-  const categories: PersonalizationCategory[] = [
-    'AI assistants',
-    'Messaging',
-    'Social platforms',
-    'Development tools',
-  ];
-
-  const categoryCounts: Record<PersonalizationCategory, number> = {
-    'AI assistants': 0,
-    Messaging: 0,
-    'Social platforms': 0,
-    'Development tools': 0,
-  };
-
-  for (const item of items) {
-    const cat = item.category ?? classifyTranscriptCategory(item.text, item.mode);
-    categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
-  }
-
-  const hasAnyActivity = items.length > 0 || dictionaryCount > 0;
-  const categoryBreakdown = categories.map((cat) => {
-    const count = categoryCounts[cat];
-    const rawPct = hasAnyActivity
-      ? Math.min(100, count * 2.5 + (count > 0 ? dictionaryCount * 0.8 : dictionaryCount * 0.25))
-      : 0;
-    return {
-      category: cat,
-      percent: Number(rawPct.toFixed(1)),
-      count,
-    };
-  });
-
-  const personalizationPercent = hasAnyActivity
-    ? Number(
-        (
-          categoryBreakdown.reduce((sum, c) => sum + c.percent, 0) /
-          categories.length
-        ).toFixed(1)
-      )
+  const profiles = buildWritingProfiles(items);
+  const categoryBreakdown = profiles.map((profile) => ({ ...profile, percent: personalizationScore(profile) }));
+  // Weighted by use, so the headline reflects the contexts the user actually dictates in.
+  const sampleCount = profiles.reduce((sum, profile) => sum + profile.count, 0);
+  const personalizationPercent = sampleCount
+    ? Number((categoryBreakdown.reduce((sum, item) => sum + item.percent * item.count, 0) / sampleCount).toFixed(1))
     : 0;
 
   const formatted = formatWordCount(totalWords);

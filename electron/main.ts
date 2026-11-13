@@ -19,6 +19,7 @@ import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 import type { HudAction } from './hudActions';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
+import { captureDictationContext, stopDictationContext, warmDictationContext } from './dictationContext';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
@@ -320,6 +321,7 @@ function pasteIntoFocusedField(): Promise<boolean> {
 }
 
 app.whenReady().then(() => {
+  warmDictationContext();
   createMainWindow();
   createHudWindow();
   createTray();
@@ -364,6 +366,9 @@ app.whenReady().then(() => {
   });
   ipcMain.on('clipboard:prepare-paste', (event) => {
     if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();
+  });
+  ipcMain.handle('dictation:capture-context', (event) => {
+    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
   });
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
@@ -539,6 +544,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  stopDictationContext();
   globalShortcut.unregisterAll();
   stopModifierShortcuts();
 });

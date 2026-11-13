@@ -4,7 +4,6 @@ import { findShortcutConflict, ShortcutSlot, shortcutModes } from '../../electro
 import {
   AlertCircle,
   CheckCircle2,
-  Code2,
   ExternalLink,
   Eye,
   EyeOff,
@@ -14,16 +13,44 @@ import {
   KeyRound,
   Keyboard,
   Loader2,
-  MessageSquare,
   Mic,
   Monitor,
   MoreHorizontal,
   Pencil,
   Settings,
-  Share2,
   Sparkles,
   X,
+  Briefcase,
+  ChartColumn,
+  ClipboardList,
+  Code2,
+  FileText,
+  Mail,
+  MessageSquare,
+  Presentation,
+  Share2,
+  Table2,
+  type LucideIcon,
 } from 'lucide-react';
+
+const categoryIcons: Record<string, LucideIcon> = {
+  'AI assistants': Sparkles,
+  Messaging: MessageSquare,
+  Email: Mail,
+  'Social platforms': Share2,
+  'Document editors': FileText,
+  'Development tools': Code2,
+  'Project management': Briefcase,
+  Presentations: Presentation,
+  Spreadsheets: Table2,
+  'Data analytics': ChartColumn,
+  'Form builders': ClipboardList,
+};
+
+function categoryIcon(category: string) {
+  const Icon = categoryIcons[category] ?? Sparkles;
+  return <Icon aria-hidden="true" className="size-3.5 shrink-0" />;
+}
 import {
   PROVIDER_CATALOG,
   PROVIDER_ORDER,
@@ -31,7 +58,6 @@ import {
 import { testProviderConnection } from '../services/providers/engine';
 import { InsightsStats } from '../services/stats';
 import {
-  PersonalizationCategory,
   ProviderConfig,
   ProviderId,
   SettingsModalTab,
@@ -150,8 +176,7 @@ export function SettingsModal({
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
-  const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
-  const [highlightedCat, setHighlightedCat] = useState<PersonalizationCategory | null>(null);
+  const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   const shortcutEditorOpen = open && activeTab === 'settings';
 
   useEffect(() => {
@@ -300,13 +325,6 @@ export function SettingsModal({
     const provider = providers[id];
     const hasKey = provider.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
     return `${provider.name} (${provider[model]})${hasKey ? '' : ' — No key'}`;
-  };
-
-  const categoryIcons: Record<PersonalizationCategory, React.ReactNode> = {
-    'AI assistants': <Sparkles className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
-    Messaging: <MessageSquare className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
-    'Social platforms': <Share2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
-    'Development tools': <Code2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
   };
 
   const startShortcutCapture = (target: ShortcutSlot) => {
@@ -962,9 +980,19 @@ export function SettingsModal({
                       <Info aria-hidden="true" className="size-3.5" />
                     </button>
                     <div id="personalization-tooltip" role="tooltip" className="yy-personalization-tooltip invisible absolute left-0 top-full z-20 mt-1 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-hover:visible group-focus-within:visible">
-                      Yap Yap uses category instructions and learned words to adapt how it formats your dictation.
+                      Yap Yap learns your tone and phrasing per category through your configured AI provider. Transcripts you correct in History, including short excerpts of them, guide future formatting in the same category.
                     </div>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+                  <div>
+                    <h3 className="text-sm font-medium">Context awareness</h3>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      Yap Yap always uses the focused app and website to pick the right style, and matches spacing and capitalization at your cursor on this device. With this on, a short excerpt around your cursor also goes to your AI provider so it can match names and what you have already written. The excerpt is never saved.
+                    </p>
+                  </div>
+                  <Toggle label="Context awareness" checked={settings.contextAwareness} onChange={(contextAwareness) => onUpdateSettings({ contextAwareness })} />
                 </div>
 
                 <div className="yy-personalization-panel rounded-[18px] p-4">
@@ -1009,7 +1037,7 @@ export function SettingsModal({
 
                   <div className="yy-personalization-content mt-4 grid items-start gap-5">
                     <div className="mx-auto min-w-0 w-full max-w-[375px]">
-                      <PersonalizationChart sectors={stats.categoryBreakdown} size={375} activeCategory={highlightedCat ?? editingCat} onHighlight={setHighlightedCat} />
+                      <PersonalizationChart sectors={stats.categoryBreakdown} size={375} activeCategory={highlightedCat} onHighlight={setHighlightedCat} />
                     </div>
                     <div className="min-w-0">
                       <div className="yy-personalization-columns grid gap-2 px-2 pb-1 text-xs text-[var(--text-secondary)]">
@@ -1018,46 +1046,38 @@ export function SettingsModal({
                       </div>
                       <div className="divide-y divide-[var(--border-subtle)]">
                         {stats.categoryBreakdown.map((item) => (
-                          <div key={item.category}>
-                            <button
-                              type="button"
-                              aria-expanded={editingCat === item.category}
-                              data-highlighted={(highlightedCat ?? editingCat) === item.category}
-                              onPointerEnter={() => setHighlightedCat(item.category)}
-                              onPointerLeave={() => setHighlightedCat(null)}
-                              onFocus={() => setHighlightedCat(item.category)}
-                              onBlur={() => setHighlightedCat(null)}
-                              onClick={() => setEditingCat(editingCat === item.category ? null : item.category)}
-                              className="yy-personalization-columns grid w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
-                            >
-                              <span className="flex items-center gap-1.5 whitespace-nowrap [&>svg]:shrink-0">
-                                {categoryIcons[item.category]}
-                                {item.category}
-                              </span>
-                              <span className="text-center tabular-nums">{item.percent}%</span>
-                            </button>
-                            {editingCat === item.category && (
-                              <textarea
-                                rows={2}
-                                aria-label={item.category + ' formatting instructions'}
-                                value={settings.categoryInstructions[item.category]}
-                                onChange={(event) => onUpdateSettings({
-                                  categoryInstructions: {
-                                    ...settings.categoryInstructions,
-                                    [item.category]: event.target.value,
-                                  },
-                                })}
-                                className="mb-2 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-input)] p-2.5 text-xs"
-                              />
-                            )}
+                          <div
+                            key={item.category}
+                            tabIndex={0}
+                            data-highlighted={highlightedCat === item.category}
+                            onPointerEnter={() => setHighlightedCat(item.category)}
+                            onPointerLeave={() => setHighlightedCat(null)}
+                            onFocus={() => setHighlightedCat(item.category)}
+                            onBlur={() => setHighlightedCat(null)}
+                            aria-describedby={`style-${item.category}`}
+                            className="group/row relative yy-personalization-columns grid items-center gap-2 rounded-lg px-2 py-2.5 text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
+                          >
+                            <div id={`style-${item.category}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
+                              {item.tone} · {item.phrasing}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                                {categoryIcon(item.category)}
+                                <span className="[overflow-wrap:anywhere]">{item.category}</span>
+                              </div>
+                            </div>
+                            <span className="text-center tabular-nums">{item.percent}%</span>
                           </div>
                         ))}
+                        {!stats.categoryBreakdown.length && (
+                          <p className="px-2 py-3 text-xs text-[var(--text-secondary)]">Use Dictate with Smart cleanup and an AI provider to start learning your writing style.</p>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Select a category to edit its formatting instructions.
+                  Wedge width shows how much you dictate in a category; the fill shows how well Yap Yap knows your style there. Editing a transcript in History teaches it the most.
                 </p>
               </div>
             )}

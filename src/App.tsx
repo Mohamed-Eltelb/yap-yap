@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DictationContext } from '../electron/dictationContext';
 import { DictionaryView } from './components/DictionaryView';
 import { DictationHud, HudState } from './components/DictationHud';
 import { HistoryView } from './components/HistoryView';
@@ -9,7 +10,9 @@ import { Sidebar } from './components/Sidebar';
 import { getPreferredLanguageVariants } from './data/languages';
 import { PROVIDER_CATALOG, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
+import { buildSourceCategories, categoryForDestination, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
+  detectWritingStyle,
   processTranscriptWithLlm,
   transcribeAudio,
 } from './services/providers/engine';
@@ -34,6 +37,7 @@ import {
   ProviderId,
   SettingsModalTab,
   SettingsState,
+  WritingSample,
 } from './types/app';
 import {
   RecorderSession,
@@ -250,9 +254,11 @@ export function App() {
   );
 
   const stats = useMemo(
-    () => computeInsights(appState.history, appState.dictionary.length),
-    [appState.history, appState.dictionary.length]
+    () => computeInsights(appState.history),
+    [appState.history]
   );
+
+  const learnedSources = useMemo(() => buildSourceCategories(appState.history), [appState.history]);
 
   const restoreAudioMute = useCallback(() => {
     if (muteTimer.current !== null) {
@@ -273,7 +279,8 @@ export function App() {
       audioMimeType?: string,
       existingItemId?: string,
       targetLanguage?: string,
-      allowAutoPaste = true
+      allowAutoPaste = true,
+      destinationProbe?: Promise<DictationContext | undefined>,
     ) => {
       retryAudioRef.current = null;
       const autoPaste = mode !== 'ask' && allowAutoPaste && appState.settings.autoPaste;
@@ -322,11 +329,18 @@ export function App() {
           return;
         }
 
+        // App and site always set the tone. Text near the caret stays on the device unless
+        // context awareness is on.
+        const destination = mode === 'dictate' ? await destinationProbe : undefined;
+        const location = destination && { application: destination.application, domain: destination.domain };
+        const source = appState.settings.personalizationEnabled ? destinationKey(location) : undefined;
+        const shareText = appState.settings.contextAwareness;
+
         let finalText = rawText;
         let answer: string | undefined;
+        let learnStyle: (() => Promise<WritingSample | undefined>) | undefined;
         let usedProviderId: ProviderId = sttProviderId;
         let usedModel = sttProvider.sttModel;
-        const initialCategory = classifyTranscriptCategory(rawText, mode);
 
         const needsLlm =
           mode === 'translate' ||
@@ -354,6 +368,21 @@ export function App() {
           }
 
           if (hasLlmKey) {
+            // The category comes from the app or domain when known, so cleanup needs no
+            // classification round trip. Otherwise the cleanup model picks among all profiles.
+            let writingStyles: typeof stats.categoryBreakdown | undefined;
+            if (mode === 'dictate' && appState.settings.personalizationEnabled) {
+              const knownCategory = categoryForDestination(location) ?? (source ? learnedSources.get(source) : undefined);
+              writingStyles = knownCategory
+                ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
+                : stats.categoryBreakdown;
+              const styleProvider = llmProvider;
+              learnStyle = () => detectWritingStyle(rawText, styleProvider, {
+                category: knownCategory,
+                destination: location,
+                existingWriting: shareText ? destination?.textBefore?.trim() || undefined : undefined,
+              });
+            }
             const processed = await processTranscriptWithLlm(
               rawText,
               mode,
@@ -363,10 +392,11 @@ export function App() {
                 targetLanguage,
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
-                category: initialCategory,
-                categoryInstruction: appState.settings.personalizationEnabled
-                  ? appState.settings.categoryInstructions[initialCategory]
-                  : undefined,
+                writingStyles,
+                destination: location && {
+                  ...location,
+                  nearbyText: shareText ? `${destination.textBefore ?? ''}${destination.textAfter ?? ''}`.trim() || undefined : undefined,
+                },
               }
             );
             finalText = processed.finalText || rawText;
@@ -394,6 +424,7 @@ export function App() {
         );
         const autoWords = extractAutoDictionaryWords(finalText, dictWords);
 
+        const itemId = existingItemId ?? `h-${Date.now()}`;
         if (existingItemId) {
           setAppState((prev) => ({
             ...prev,
@@ -415,7 +446,7 @@ export function App() {
           }));
         } else {
           const newItem: HistoryItem = {
-            id: `h-${Date.now()}`,
+            id: itemId,
             createdAt: new Date().toISOString(),
             mode,
             rawText,
@@ -431,6 +462,7 @@ export function App() {
             audioDataUrl,
             audioMimeType,
             category,
+            writingSource: source,
           };
 
           setAppState((prev) => {
@@ -457,10 +489,18 @@ export function App() {
           });
         }
 
+        // Style learning runs beside delivery so it never delays the paste.
+        void learnStyle?.().then((sample) => {
+          if (sample) setAppState((prev) => prev.settings.personalizationEnabled ? {
+            ...prev,
+            history: prev.history.map((h) => h.id === itemId && !h.writingCorrection ? { ...h, writingSample: sample } : h),
+          } : prev);
+        });
+
         const desktop = window.yapyap;
         const pasted = await deliverDictationResult(
           mode,
-          finalText,
+          mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText,
           autoPaste ? desktop?.pasteText : undefined,
           async (text) => {
             if (desktop) await desktop.copyText(text);
@@ -491,7 +531,7 @@ export function App() {
         });
       }
     },
-    [appState.dictionary, appState.providers, appState.settings]
+    [appState.dictionary, appState.providers, appState.settings, learnedSources, stats.categoryBreakdown]
   );
 
   const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
@@ -503,6 +543,8 @@ export function App() {
     restoreAudioMute();
     const { mode: currentMode, targetLanguage } = hudRef.current;
     const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
+    const destinationProbe = currentMode === 'dictate'
+      ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
     setHud((current) => ({ ...current, status: 'processing' }));
     try {
       const { blob, durationMs, dataUrl, mimeType } = await session.stop();
@@ -510,7 +552,7 @@ export function App() {
       const selectedTarget = currentMode === 'translate'
         ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
         : undefined;
-      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste);
+      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste, destinationProbe);
     } catch (err) {
       playInteractionSound('error', appState.settings.interactionSounds);
       setHud({
@@ -520,7 +562,7 @@ export function App() {
         errorText: err instanceof Error ? err.message : 'Recording stopped unexpectedly',
       });
     }
-  }, [appState.settings.interactionSounds, appState.settings.translationTargets, processAudioPipeline, restoreAudioMute]);
+  }, [appState.settings, processAudioPipeline, restoreAudioMute]);
 
   const cancelRecording = useCallback(() => {
     retryAudioRef.current = null;
@@ -803,7 +845,9 @@ export function App() {
     }
 
     try {
-      const cat = item.category ?? (item.mode === 'ask' ? 'AI assistants' : 'Messaging');
+      const writingStyles = item.mode === 'dictate' && appState.settings.personalizationEnabled
+        ? stats.categoryBreakdown.filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
+        : undefined;
       const processed = await processTranscriptWithLlm(
         item.rawText,
         item.mode,
@@ -815,8 +859,7 @@ export function App() {
             .filter((entry) => appState.settings.personalizationEnabled || entry.source === 'manual')
             .map((entry) => entry.word),
           smartCleanup: appState.settings.smartCleanup,
-          category: cat,
-          categoryInstruction: appState.settings.personalizationEnabled ? appState.settings.categoryInstructions[cat] : undefined,
+          writingStyles,
         }
       );
       const nextText = processed.finalText || item.text;
@@ -906,6 +949,8 @@ export function App() {
   const handleEditHistoryItem = (id: string, newText: string) => {
     const trimmed = newText.trim();
     if (!trimmed) return;
+    const original = appState.history.find((item) => item.id === id);
+    if (!original || original.text === trimmed) return;
     setAppState((prev) => {
       const target = prev.history.find((h) => h.id === id);
       if (!target) return prev;
@@ -960,6 +1005,23 @@ export function App() {
       };
     });
     showToast('Transcript updated');
+    const llmId = appState.settings.activeLlmProvider;
+    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none') {
+      const provider = appState.providers[llmId];
+      if (!isProviderConfigured(provider)) return;
+      void detectWritingStyle(trimmed, provider, { category: original.writingSample?.category, before: original.text }).then((sample) => {
+        if (!sample) return;
+        setAppState((prev) => {
+          if (!prev.settings.personalizationEnabled) return prev;
+          return {
+            ...prev,
+            history: prev.history.map((item) => item.id === id && item.text === trimmed
+              ? { ...item, writingSample: sample, writingCorrection: true }
+              : item),
+          };
+        });
+      });
+    }
   };
 
   const handleAddDictionaryWord = (word: string, source: 'auto' | 'manual' = 'manual') => {

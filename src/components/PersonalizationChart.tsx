@@ -1,23 +1,22 @@
-import type { PersonalizationCategory } from '../types/app';
-
 interface Sector {
-  category: PersonalizationCategory;
+  category: string;
   percent: number;
+  count: number;
 }
 
 interface Props {
   sectors: Sector[];
   size?: number;
-  activeCategory?: PersonalizationCategory | null;
-  onHighlight?: (category: PersonalizationCategory | null) => void;
+  activeCategory?: string | null;
+  onHighlight?: (category: string | null) => void;
 }
 
-const petals = {
-  'AI assistants': { start: -90, end: 122, color: 'var(--personalization-ai)' },
-  Messaging: { start: 123, end: 185, color: 'var(--personalization-messaging)' },
-  'Social platforms': { start: 186, end: 248, color: 'var(--personalization-social)' },
-  'Development tools': { start: 249, end: 269, color: 'var(--personalization-development)' },
-} satisfies Record<PersonalizationCategory, { start: number; end: number; color: string }>;
+const colors = [
+  'var(--personalization-ai)',
+  'var(--personalization-messaging)',
+  'var(--personalization-social)',
+  'var(--personalization-development)',
+];
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -57,6 +56,12 @@ export function PersonalizationChart({ sectors, size = 180, activeCategory, onHi
   const cy = size / 2;
   const maxR = size * 0.49;
 
+  // Wedge width follows how much the category is used; fill radius follows its personalization.
+  const total = sectors.reduce((sum, sector) => sum + sector.count, 0) || 1;
+  const minAngle = Math.min(14, 360 / Math.max(sectors.length, 1));
+  const spare = 360 - minAngle * sectors.length;
+  let cursor = -90;
+
   return (
     <svg
       width={size}
@@ -66,8 +71,13 @@ export function PersonalizationChart({ sectors, size = 180, activeCategory, onHi
       role="img"
       aria-label="Personalization radial chart"
     >
-      {sectors.map((sector) => {
-        const { start, end, color } = petals[sector.category];
+      {!sectors.length && <circle cx={cx} cy={cy} r={maxR} className="yy-personalization-track" />}
+      {sectors.map((sector, index) => {
+        const angle = minAngle + spare * sector.count / total;
+        const start = cursor;
+        const end = start + angle - Math.min(2, angle / 6);
+        cursor += angle;
+        const color = colors[index % colors.length];
         const innerR = maxR * Math.max(0, Math.min(1, sector.percent / 100));
 
         return (
@@ -78,7 +88,7 @@ export function PersonalizationChart({ sectors, size = 180, activeCategory, onHi
             onPointerEnter={() => onHighlight?.(sector.category)}
             onPointerLeave={() => onHighlight?.(null)}
           >
-            <title>{`${sector.category}: ${sector.percent}%`}</title>
+            <title>{`${sector.category}: ${sector.percent}% personalized`}</title>
             <path
               d={describeWedge(cx, cy, maxR, start, end, size * 0.03)}
               className="yy-personalization-track"

@@ -242,10 +242,6 @@ export function sanitizeLoadedState(
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),
       }, typeof window === 'undefined' ? undefined : window.yapyap?.platform),
-      categoryInstructions: {
-        ...DEFAULT_SETTINGS.categoryInstructions,
-        ...(raw.settings?.categoryInstructions ?? {}),
-      },
     },
     providers: mergedProviders,
     history: assignHistoryIds(realHistory),

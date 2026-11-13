@@ -51,6 +51,16 @@ export interface HistoryItem {
   flagged?: boolean;
   category?: PersonalizationCategory;
   isSample?: boolean;
+  writingSample?: WritingSample;
+  writingCorrection?: boolean;
+  /** Site or app the dictation was written into. */
+  writingSource?: string;
+}
+
+export interface WritingSample {
+  category: string;
+  tone: string;
+  phrasing: string;
 }
 
 export interface DictionaryEntry {
@@ -73,12 +83,12 @@ export interface SettingsState {
   autoPaste: boolean;
   smartCleanup: boolean;
   personalizationEnabled: boolean;
+  contextAwareness: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;
   cloudSyncMock: boolean;
   activeSttProvider: ProviderId;
   activeLlmProvider: ProviderId | 'none';
-  categoryInstructions: Record<PersonalizationCategory, string>;
   dismissedQuickCard: boolean;
   dismissedPromoCard: boolean;
 }

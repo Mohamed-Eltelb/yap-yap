@@ -1,0 +1,201 @@
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+
+export interface DictationContext {
+  application: string;
+  domain?: string;
+  /** Text in the focused field on either side of the caret. Never stored. */
+  textBefore?: string;
+  textAfter?: string;
+}
+
+const windowsContext = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+function Get-DictationContext {
+$element = [Windows.Automation.AutomationElement]::FocusedElement
+if (!$element -or !$element.Current.IsEnabled -or $element.Current.IsPassword) { return }
+$process = Get-Process -Id $element.Current.ProcessId
+$application = $process.ProcessName
+try {
+  $product = $process.MainModule.FileVersionInfo.ProductName
+  if ($product) { $application = $product }
+} catch { }
+$context = @{ application = $application }
+$walker = [Windows.Automation.TreeWalker]::ControlViewWalker
+$window = $element
+# Climb to the top-level window. Browsers nest inner windows that do not contain the toolbar.
+$root = [Windows.Automation.AutomationElement]::RootElement
+while ($true) {
+  $parent = $walker.GetParent($window)
+  if (!$parent -or [Windows.Automation.Automation]::Compare($parent, $root)) { break }
+  $window = $parent
+}
+
+if ($process.ProcessName -match '^(chrome|msedge|firefox|brave|vivaldi|opera|arc|comet|zen)$' -and $window) {
+  # Search browser chrome only. Never treat a page input as the address bar.
+  $queue = [Collections.Generic.Queue[object]]::new()
+  $queue.Enqueue(@{ node = $window; depth = 0 })
+  for ($visited = 0; $queue.Count -and $visited -lt 600; $visited++) {
+    $entry = $queue.Dequeue()
+    $node = $entry.node
+    if ($node.Current.ControlType -in @([Windows.Automation.ControlType]::Document, [Windows.Automation.ControlType]::TabItem)) { continue }
+    if ($node.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
+        ($node.Current.AutomationId -in @('addressEditBox', 'urlbar-input') -or
+         $node.Current.Name -match '^(Address and search bar|Search or enter address|Address bar)$')) {
+      $address = $null
+      if ($node.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$address)) {
+        $context.address = $address.Current.Value
+      }
+      break
+    }
+    if ($entry.depth -ge 10) { continue }
+    for ($child = $walker.GetFirstChild($node); $child -and $queue.Count -lt 600; $child = $walker.GetNextSibling($child)) {
+      $queue.Enqueue(@{ node = $child; depth = $entry.depth + 1 })
+    }
+  }
+}
+
+if ($element.Current.Name -notmatch 'address.*bar|search or enter address' -and
+    $element.Current.AutomationId -notin @('addressEditBox', 'urlbar-input')) {
+  $pattern = $null
+  if ($element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) {
+    $selection = $pattern.GetSelection() | Select-Object -First 1
+    if ($selection -and $selection.CompareEndpoints([Windows.Automation.Text.TextPatternRangeEndpoint]::Start, $selection, [Windows.Automation.Text.TextPatternRangeEndpoint]::End) -eq 0) {
+      $start = [Windows.Automation.Text.TextPatternRangeEndpoint]::Start
+      $end = [Windows.Automation.Text.TextPatternRangeEndpoint]::End
+      $character = [Windows.Automation.Text.TextUnit]::Character
+      $before = $selection.Clone()
+      [void]$before.MoveEndpointByUnit($start, $character, -240)
+      $after = $selection.Clone()
+      [void]$after.MoveEndpointByUnit($end, $character, 120)
+      $textBefore = $before.GetText(240)
+      $textAfter = $after.GetText(120)
+      # Chromium editors expose their placeholder as content. Treat that as an empty field.
+      $labels = @($element.Current.Name, $element.Current.HelpText) | Where-Object { $_ }
+      if (($textBefore + $textAfter).Trim() -notin $labels) {
+        $context.textBefore = $textBefore
+        $context.textAfter = $textAfter
+      }
+    }
+  }
+}
+$context | ConvertTo-Json -Compress
+}
+# One request per input line. Each answer repeats the request id so a late answer is never
+# mistaken for the current one.
+while ($null -ne ($id = [Console]::In.ReadLine())) {
+  $json = $null
+  try { $json = @(Get-DictationContext)[-1] } catch { }
+  if (!$json) { $json = '{}' }
+  [Console]::Out.WriteLine($id + ' ' + $json)
+}
+`;
+
+// Starting PowerShell and loading UI Automation takes about a second, so one helper stays
+// warm for the life of the app and answers each request in a few milliseconds.
+let helper: ChildProcessWithoutNullStreams | undefined;
+let waiting: { id: number; done: (line: string) => void } | undefined;
+let requestId = 0;
+
+function windowsHelper(): ChildProcessWithoutNullStreams {
+  if (helper) return helper;
+  const child = spawn('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand',
+    Buffer.from(windowsContext, 'utf16le').toString('base64'),
+  ], { windowsHide: true });
+  let buffered = '';
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    buffered += chunk;
+    for (let end = buffered.indexOf('\n'); end >= 0; end = buffered.indexOf('\n')) {
+      const [, id, json] = buffered.slice(0, end).match(/^(\d+) (.*)$/s) ?? [];
+      buffered = buffered.slice(end + 1);
+      if (waiting && Number(id) === waiting.id) waiting.done(json.trim());
+    }
+  });
+  child.stderr.resume();
+  const reset = () => {
+    if (helper === child) helper = undefined;
+    waiting?.done('');
+  };
+  child.on('exit', reset);
+  child.on('error', reset);
+  helper = child;
+  return child;
+}
+
+function askWindowsHelper(): Promise<string> {
+  return new Promise((resolve) => {
+    waiting?.done('');
+    const id = ++requestId;
+    const done = (line: string) => {
+      clearTimeout(timer);
+      if (waiting?.id === id) waiting = undefined;
+      resolve(line);
+    };
+    // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
+    const timer = setTimeout(() => done(''), 1500);
+    waiting = { id, done };
+    try {
+      windowsHelper().stdin.write(`${id}\n`);
+    } catch {
+      done('');
+    }
+  });
+}
+
+export function warmDictationContext(): void {
+  if (process.platform === 'win32') windowsHelper();
+}
+
+export function stopDictationContext(): void {
+  helper?.kill();
+  helper = undefined;
+}
+
+// Context reading is skipped when it cannot finish quickly, so dictation is never held up.
+function runContextProbe(file: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(file, args, { timeout: 1500, windowsHide: true, maxBuffer: 8192 }, (error, stdout) => {
+      resolve(error ? '' : stdout.trim());
+    });
+  });
+}
+
+export function browserDomain(address: unknown): string | undefined {
+  if (typeof address !== 'string' || /\s/.test(address) || address.length > 4096) return;
+  try {
+    const url = new URL(address.includes('://') ? address : `https://${address}`);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;
+    if (/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*$/i.test(url.hostname)) return url.hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function captureDictationContext(): Promise<DictationContext | undefined> {
+  if (process.platform === 'win32') {
+    const result = await askWindowsHelper();
+    if (!result) return;
+    try {
+      const data = JSON.parse(result);
+      if (typeof data.application !== 'string') return;
+      return {
+        application: data.application.trim().slice(0, 100),
+        domain: browserDomain(data.address),
+        // Not trimmed: whitespace at the caret decides spacing.
+        textBefore: typeof data.textBefore === 'string' ? data.textBefore.slice(-240) || undefined : undefined,
+        textAfter: typeof data.textAfter === 'string' ? data.textAfter.slice(0, 120) || undefined : undefined,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  const application = process.platform === 'darwin'
+    ? await runContextProbe('osascript', ['-e', 'tell application "System Events" to get name of first application process whose frontmost is true'])
+    : await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']).then((pid) =>
+        /^\d+$/.test(pid) ? runContextProbe('ps', ['-p', pid, '-o', 'comm=']) : '');
+  if (application) return { application: application.slice(0, 100) };
+}

@@ -1,6 +1,7 @@
 import { HistoryItem, ProviderId } from '../types/app';
 import { PROVIDER_CATALOG } from './providers/catalog';
 import { classifyTranscriptCategory, countWords } from './stats';
+import { parseWritingSample } from './personalization';
 
 const categories = new Set(['AI assistants', 'Messaging', 'Social platforms', 'Development tools']);
 
@@ -54,6 +55,9 @@ export function parseHistoryImport(source: string, defaultProvider: ProviderId):
       targetLanguage: typeof item.targetLanguage === 'string' ? item.targetLanguage : undefined,
       flagged: item.flagged === true,
       category: categories.has(item.category) ? item.category : classifyTranscriptCategory(text, mode),
+      writingSample: mode === 'dictate' ? parseWritingSample(item.writingSample) : undefined,
+      writingCorrection: mode === 'dictate' && item.writingCorrection === true,
+      writingSource: mode === 'dictate' && typeof item.writingSource === 'string' ? item.writingSource.trim().toLowerCase().slice(0, 100) || undefined : undefined,
       audioDataUrl: typeof item.audioDataUrl === 'string' && /^data:audio\/[\w.+-]+(?:;codecs=[\w.-]+)?;base64,[a-z0-9+/=]+$/i.test(item.audioDataUrl)
         ? item.audioDataUrl
         : undefined,

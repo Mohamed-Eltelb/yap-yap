@@ -21,17 +21,12 @@ export const DEFAULT_SETTINGS: SettingsState = {
   autoPaste: true,
   smartCleanup: true,
   personalizationEnabled: true,
+  contextAwareness: true,
   floatingHud: true,
   historyRetention: 'forever',
   cloudSyncMock: false,
   activeSttProvider: 'groq',
   activeLlmProvider: 'groq',
-  categoryInstructions: {
-    'AI assistants': 'Preserve technical precision, clear prompts, and structured formatting.',
-    Messaging: 'Keep tone conversational, natural, and concise.',
-    'Social platforms': 'Keep sentences punchy and readable.',
-    'Development tools': 'Preserve camelCase, snake_case, CLI flags, and code identifiers verbatim.',
-  },
   dismissedQuickCard: false,
   dismissedPromoCard: false,
 };
