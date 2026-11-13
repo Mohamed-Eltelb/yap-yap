@@ -53,7 +53,8 @@ export function WindowControls() {
       <button
         type="button"
         onClick={handleMinimize}
-        title="Minimize"
+        data-tooltip="Minimize"
+        aria-label="Minimize"
         className="w-9 h-7 inline-flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
       >
         <Minus className="w-3.5 h-3.5" />
@@ -61,7 +62,8 @@ export function WindowControls() {
       <button
         type="button"
         onClick={handleMaximize}
-        title="Maximize"
+        data-tooltip="Maximize"
+        aria-label="Maximize"
         className="w-9 h-7 inline-flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
       >
         <Square className="w-3 h-3" />
@@ -69,7 +71,8 @@ export function WindowControls() {
       <button
         type="button"
         onClick={handleClose}
-        title="Close"
+        data-tooltip="Close"
+        aria-label="Close"
         className="w-9 h-7 inline-flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-red-500 hover:text-white transition-colors"
       >
         <X className="w-3.5 h-3.5" />

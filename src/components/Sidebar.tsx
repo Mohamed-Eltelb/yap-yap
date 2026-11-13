@@ -131,7 +131,8 @@ export function Sidebar({
             <button
               type="button"
               onClick={() => onOpenModal('providers')}
-              title="Configure API keys for multiple providers"
+              data-tooltip="Configure API keys for multiple providers"
+              aria-label="Configure API keys for multiple providers"
               className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             >
               <Info className="w-3.5 h-3.5" />
@@ -159,7 +160,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onOpenModal('providers')}
-            title="Providers & API Keys"
+            data-tooltip="Providers & API Keys"
+            aria-label="Providers & API Keys"
             className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
             <KeyRound className="w-[15px] h-[15px]" strokeWidth={1.8} />
@@ -167,7 +169,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onStartDictation('ask')}
-            title="Ask anything with voice"
+            data-tooltip="Ask anything with voice"
+            aria-label="Ask anything with voice"
             className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
             <Mail className="w-[15px] h-[15px]" strokeWidth={1.8} />
@@ -175,7 +178,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onOpenModal('settings')}
-            title="Settings"
+            data-tooltip="Settings"
+            aria-label="Settings"
             className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
             <Settings className="w-[15px] h-[15px]" strokeWidth={1.8} />
@@ -183,7 +187,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onOpenModal('help')}
-            title="Help"
+            data-tooltip="Help"
+            aria-label="Help"
             className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
             <HelpCircle className="w-[15px] h-[15px]" strokeWidth={1.8} />

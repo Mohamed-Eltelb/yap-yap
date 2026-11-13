@@ -236,7 +236,7 @@ export function DictionaryView({
               return (
                 <li key={entry.id} className="yy-dictionary-word group relative flex min-w-0 items-center gap-2 px-3 rounded-xl" data-selected={checked}>
                   <Icon aria-hidden="true" size={13} className={entry.source === 'auto' ? 'yy-dictionary-auto shrink-0' : 'yy-dictionary-manual shrink-0'} />
-                  <span dir="auto" title={entry.word} className="flex-1 min-w-0 truncate text-sm">{entry.word}</span>
+                  <span dir="auto" data-tooltip={entry.word} className="flex-1 min-w-0 truncate text-sm">{entry.word}</span>
                   <div className="flex shrink-0 items-center gap-2" onBlur={(event) => {
                     if (menuOpen && !event.currentTarget.contains(event.relatedTarget)) setMenuId(null);
                   }}>

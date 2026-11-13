@@ -475,7 +475,8 @@ export function SettingsModal({
                               )}
                               {cfg.status === 'error' && (
                                 <span
-                                  title={cfg.statusMessage}
+                                  data-tooltip={cfg.statusMessage}
+                                  tabIndex={cfg.statusMessage ? 0 : undefined}
                                   className="inline-flex items-center gap-1 text-[11px] text-red-500"
                                 >
                                   <AlertCircle className="w-3.5 h-3.5" />
@@ -1045,13 +1046,14 @@ export function SettingsModal({
                             >
                               {settings.personalizationEnabled && (
                                 <div id={`style-${item.category}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
+                                  <span className="block font-medium">{item.category}</span>
                                   {item.tone} · {item.phrasing}
                                 </div>
                               )}
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
                                   <CategoryIcon category={item.category} />
-                                  <span className="truncate" title={settings.personalizationEnabled ? item.category : undefined}>{item.category}</span>
+                                  <span className="truncate">{item.category}</span>
                                 </div>
                               </div>
                               <span className="text-center tabular-nums">{item.percent}%</span>

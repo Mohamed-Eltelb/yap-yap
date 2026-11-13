@@ -208,7 +208,8 @@ export function HomeView({
                   type="button"
                   onClick={() => onStartDictation('dictate')}
                   className="flex flex-wrap gap-1 hover:opacity-80 transition-opacity"
-                  title="Click to start Dictate mode"
+                  data-tooltip="Click to start Dictate mode"
+                  aria-label="Click to start Dictate mode"
                 >
                   {dictateKeys.map((k, i) => (
                     <span key={i} className="yy-keycap">
@@ -226,7 +227,8 @@ export function HomeView({
                   type="button"
                   onClick={() => onStartDictation('translate')}
                   className="flex flex-wrap gap-1 hover:opacity-80 transition-opacity text-left"
-                  title="Click to start Translate mode"
+                  data-tooltip="Click to start Translate mode"
+                  aria-label="Click to start Translate mode"
                 >
                   {translateKeys.length === 0 && <span className="yy-keycap">Start</span>}
                   {translateKeys.map((k, i) => (
@@ -245,7 +247,8 @@ export function HomeView({
                   type="button"
                   onClick={() => onStartDictation('ask')}
                   className="flex flex-wrap gap-1 hover:opacity-80 transition-opacity text-left"
-                  title="Click to start Ask anything mode"
+                  data-tooltip="Click to start Ask anything mode"
+                  aria-label="Click to start Ask anything mode"
                 >
                   {askKeys.length === 0 && <span className="yy-keycap">Start</span>}
                   {askKeys.map((k, i) => (

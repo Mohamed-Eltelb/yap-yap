@@ -144,7 +144,8 @@ export function ActivityHeatmap({
               <button
                 type="button"
                 onClick={() => setWeekOffset((v) => v + 1)}
-                title="Earlier months"
+                data-tooltip="Earlier months"
+                aria-label="Earlier months"
                 className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -165,7 +166,8 @@ export function ActivityHeatmap({
                 type="button"
                 onClick={() => setWeekOffset((v) => Math.max(0, v - 1))}
                 disabled={weekOffset === 0}
-                title="Later months"
+                data-tooltip="Later months"
+                aria-label="Later months"
                 className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
