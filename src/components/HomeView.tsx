@@ -5,9 +5,9 @@ import {
   KeyRound,
   Mic,
   Share,
-  UserCheck,
   X,
 } from 'lucide-react';
+import { PersonalizationIcon } from './SettingsModal';
 import {
   InsightsStats,
   formatDurationParts,
@@ -172,7 +172,7 @@ export function HomeView({
             <div className="yy-card yy-personalization-summary px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-[var(--bg-subtle)] p-1.5 text-[var(--text-secondary)]"><UserCheck className="size-4" /></span>
+                  <span className="rounded-lg bg-[var(--bg-subtle)] p-1.5 text-[var(--text-secondary)]"><PersonalizationIcon className="size-4" /></span>
                   <span className="text-[25px] font-bold tracking-tight text-[var(--text-primary)]">
                     {settings.personalizationEnabled ? `${stats.personalizationPercent}%` : 'Off'}
                   </span>

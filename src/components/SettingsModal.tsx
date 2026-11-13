@@ -19,10 +19,9 @@ import {
   Monitor,
   MoreHorizontal,
   Pencil,
+  Settings,
   Share2,
-  SlidersHorizontal,
   Sparkles,
-  UserCheck,
   X,
 } from 'lucide-react';
 import {
@@ -110,6 +109,23 @@ const shortcutDescriptions = {
   translate: 'Press to start and stop translation.',
   ask: 'Press to start and stop asking anything.',
 };
+
+export function PersonalizationIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M4.5 18.5C8 15 12.5 9.5 12.5 5.5C12.5 4.2 11.6 3.5 10.6 3.5C9.3 3.5 8.5 4.9 8.5 7.5C8.5 12.5 9 18.5 12.5 19.5C15 20.2 17.2 18.2 17.2 15.8C17.2 14.3 16.1 13.5 14.9 13.5C13.5 13.5 12.6 14.8 12.6 16.4C12.6 18.3 14.4 19.5 17 19.5C18.2 19.5 19.2 19.1 20 18.5" />
+    </svg>
+  );
+}
 
 export function SettingsModal({
   open,
@@ -241,11 +257,11 @@ export function SettingsModal({
   if (!open) return null;
 
   const navItems: { id: SettingsModalTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'providers', label: 'API Keys', icon: <KeyRound className="w-4 h-4" /> },
-    { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> },
-    { id: 'personalization', label: 'Personalization', icon: <UserCheck className="w-4 h-4" /> },
-    { id: 'about', label: 'About', icon: <Info className="w-4 h-4" /> },
-    { id: 'help', label: 'Help', icon: <HelpCircle className="w-4 h-4" /> },
+    { id: 'providers', label: 'API Keys', icon: <KeyRound className="w-4 h-4" strokeWidth={1.8} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" strokeWidth={1.8} /> },
+    { id: 'personalization', label: 'Personalization', icon: <PersonalizationIcon className="w-4 h-4" /> },
+    { id: 'about', label: 'About', icon: <Info className="w-4 h-4" strokeWidth={1.8} /> },
+    { id: 'help', label: 'Help', icon: <HelpCircle className="w-4 h-4" strokeWidth={1.8} /> },
   ];
 
   const handleTestProvider = async (id: ProviderId) => {
