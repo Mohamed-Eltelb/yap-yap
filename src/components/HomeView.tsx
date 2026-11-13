@@ -61,7 +61,7 @@ export function HomeView({
   const askKeys = settings.shortcuts.ask[0] ?? [];
 
   return (
-    <div className="flex-1 h-full overflow-y-auto main-atmosphere flex flex-col justify-between relative">
+    <div className="yy-home flex-1 h-full overflow-y-auto main-atmosphere flex flex-col justify-between relative">
       {/* Top window controls bar */}
       <div className="sticky top-0 z-20 flex items-center justify-end px-3 pt-2 pb-1 app-drag">
         <WindowControls />
@@ -74,7 +74,7 @@ export function HomeView({
 
         <div className="flex flex-col min-[1080px]:flex-row gap-5 items-start">
           {/* Center Insights Column */}
-          <div className="flex-1 min-w-0 w-full space-y-3.5">
+          <div className="yy-home-insights flex-1 min-w-0 w-full space-y-3.5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[19px] font-semibold text-[var(--text-primary)]">
                 Insights
@@ -169,7 +169,7 @@ export function HomeView({
             />
 
             {/* Personalization Card */}
-            <div className="yy-card yy-personalization-summary px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
+            <div className="yy-card px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-lg bg-[var(--bg-subtle)] p-1.5 text-[var(--text-secondary)]"><PersonalizationIcon className="size-4" /></span>

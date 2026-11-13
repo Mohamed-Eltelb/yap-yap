@@ -122,7 +122,11 @@ html.hud-mode #root {
   border-radius: 14px;
 }
 
-.yy-card.yy-personalization-summary {
+.yy-home .yy-card {
+  border: 0;
+}
+
+.yy-home-insights .yy-card {
   border-radius: 22px;
 }
 

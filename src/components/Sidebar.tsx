@@ -56,7 +56,7 @@ export function Sidebar({
     : 6;
 
   return (
-    <aside className="w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col justify-between select-none">
+    <aside className="w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
       {/* Top Brand + Nav */}
       <div>
         <div className="px-4 pt-4 pb-3.5 flex items-center gap-2 app-drag">
@@ -100,7 +100,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={() => onStartDictation('dictate')}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-full bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] shadow-xs text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-full bg-[var(--bg-card-solid)] shadow-xs text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
             >
               <Mic className={`w-3.5 h-3.5 ${isRecording ? 'text-red-500 animate-pulse' : ''}`} />
               <span>{isRecording ? 'Recording…' : 'Quick dictate'}</span>
@@ -120,7 +120,7 @@ export function Sidebar({
         )}
 
         {/* Word Count & API Key Status Card */}
-        <div className="p-3 rounded-[14px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] shadow-xs">
+        <div className="p-3 rounded-[14px] bg-[var(--bg-card-solid)] shadow-xs">
           <div className="text-[12.5px] font-medium text-[var(--text-secondary)]">
             {hasActiveKey ? `Unlimited · ${activeProvider.name}` : 'Get unlimited words'}
           </div>

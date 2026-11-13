@@ -332,7 +332,7 @@ export function SettingsModal({
         className="w-full max-w-[860px] h-[610px] max-h-[90vh] rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-[var(--shadow-modal)] flex overflow-hidden"
       >
         {/* Modal Left Nav matching Images 7, 8, 10, 11, 14 */}
-        <div className="w-[194px] shrink-0 bg-[var(--bg-modal-sidebar)] border-r border-[var(--border-subtle)] p-3 space-y-1">
+        <div className="w-[194px] shrink-0 bg-[var(--bg-modal-sidebar)] p-3 space-y-1">
           {navItems.map((item) => {
             const active = activeTab === item.id;
             return (
