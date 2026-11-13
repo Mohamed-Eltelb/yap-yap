@@ -18,39 +18,8 @@ import {
   MoreHorizontal,
   Pencil,
   Settings,
-  Sparkles,
   X,
-  Briefcase,
-  ChartColumn,
-  ClipboardList,
-  Code2,
-  FileText,
-  Mail,
-  MessageSquare,
-  Presentation,
-  Share2,
-  Table2,
-  type LucideIcon,
 } from 'lucide-react';
-
-const categoryIcons: Record<string, LucideIcon> = {
-  'AI assistants': Sparkles,
-  Messaging: MessageSquare,
-  Email: Mail,
-  'Social platforms': Share2,
-  'Document editors': FileText,
-  'Development tools': Code2,
-  'Project management': Briefcase,
-  Presentations: Presentation,
-  Spreadsheets: Table2,
-  'Data analytics': ChartColumn,
-  'Form builders': ClipboardList,
-};
-
-function categoryIcon(category: string) {
-  const Icon = categoryIcons[category] ?? Sparkles;
-  return <Icon aria-hidden="true" className="size-3.5 shrink-0" />;
-}
 import {
   PROVIDER_CATALOG,
   PROVIDER_ORDER,
@@ -64,6 +33,7 @@ import {
   SettingsState,
 } from '../types/app';
 import { PersonalizationChart } from './PersonalizationChart';
+import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
 
@@ -1062,7 +1032,7 @@ export function SettingsModal({
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                                {categoryIcon(item.category)}
+                                <CategoryIcon category={item.category} />
                                 <span className="[overflow-wrap:anywhere]">{item.category}</span>
                               </div>
                             </div>
@@ -1142,6 +1112,14 @@ export function SettingsModal({
                       </div>
                     </div>
                   </div>
+                  <p className="border-t border-[var(--border-subtle)] py-2 text-[12.5px] text-[var(--text-secondary)]">
+                    <a href="https://icon-sets.iconify.design/solar/" target="_blank" rel="noreferrer" className="underline">
+                      Solar icons
+                    </a>{' by 480 Design · '}
+                    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="underline">
+                      CC BY 4.0
+                    </a>
+                  </p>
                 </div>
               </div>
             )}
