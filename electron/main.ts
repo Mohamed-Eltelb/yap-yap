@@ -13,9 +13,12 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { registerModifierShortcuts, stopModifierShortcuts } from './modifierShortcuts';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
+let hudReady = false;
+let hudPayload: { show: boolean; state?: unknown } = { show: false };
 let tray: Tray | null = null;
 let isQuitting = false;
 
@@ -38,6 +41,7 @@ function createMainWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -68,18 +72,15 @@ function createMainWindow(): void {
 }
 
 function createHudWindow(): void {
-  const display = screen.getPrimaryDisplay();
-  const { width, height } = display.workAreaSize;
   const hudWidth = 420;
-  const hudHeight = 220;
+  const hudHeight = 300;
 
   hudWindow = new BrowserWindow({
     width: hudWidth,
     height: hudHeight,
-    x: Math.round((width - hudWidth) / 2),
-    y: height - hudHeight - 18,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
@@ -92,6 +93,14 @@ function createHudWindow(): void {
     },
   });
 
+  hudWindow.webContents.on('did-start-loading', () => {
+    hudReady = false;
+    hudWindow?.hide();
+  });
+  hudWindow.webContents.on('render-process-gone', () => {
+    hudReady = false;
+    hudWindow?.hide();
+  });
   if (isDev) {
     void hudWindow.loadURL('http://localhost:5173/#/hud');
   } else {
@@ -101,8 +110,28 @@ function createHudWindow(): void {
   }
 
   hudWindow.on('closed', () => {
+    hudReady = false;
     hudWindow = null;
   });
+}
+
+function updateHudWindow(): void {
+  if (!hudWindow || !hudReady) return;
+  if (!hudPayload.show) {
+    hudWindow.hide();
+    return;
+  }
+
+  hudWindow.webContents.send('hud:state', hudPayload.state);
+  if (!hudWindow.isVisible()) {
+    const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const [width, height] = hudWindow.getSize();
+    hudWindow.setPosition(
+      workArea.x + Math.round((workArea.width - width) / 2),
+      workArea.y + workArea.height - height - 18,
+    );
+    hudWindow.showInactive();
+  }
 }
 
 function createTray(): void {
@@ -178,17 +207,20 @@ function registerAppShortcuts(shortcuts: {
   dictate: string[][];
   translate: string[][];
   ask: string[][];
-}): void {
+}): boolean {
   globalShortcut.unregisterAll();
+  const modifierShortcuts: Parameters<typeof registerModifierShortcuts>[0] = [];
 
   const registerGroup = (combos: string[][], mode: 'dictate' | 'translate' | 'ask') => {
     for (const combo of combos) {
       const accel = toElectronAccelerator(combo);
-      if (!accel) continue;
+      const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
+      if (!accel) {
+        if (combo.length > 0) modifierShortcuts.push({ combo, trigger });
+        continue;
+      }
       try {
-        globalShortcut.register(accel, () => {
-          mainWindow?.webContents.send('trigger-mode', mode);
-        });
+        globalShortcut.register(accel, trigger);
       } catch {
         // Ignore invalid/taken accelerator
       }
@@ -198,6 +230,13 @@ function registerAppShortcuts(shortcuts: {
   registerGroup(shortcuts.dictate, 'dictate');
   registerGroup(shortcuts.translate, 'translate');
   registerGroup(shortcuts.ask, 'ask');
+  try {
+    registerModifierShortcuts(modifierShortcuts);
+    return true;
+  } catch (error) {
+    console.warn('Could not register modifier-only shortcuts', error);
+    return false;
+  }
 }
 
 function simulatePaste(): Promise<boolean> {
@@ -250,7 +289,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
-    registerAppShortcuts(shortcuts);
+    return registerAppShortcuts(shortcuts);
   });
 
   ipcMain.handle('clipboard:paste', async (_e, text: string) => {
@@ -258,24 +297,25 @@ app.whenReady().then(() => {
     return simulatePaste();
   });
 
-  ipcMain.on('hud:toggle', (_e, payload: { show: boolean; state?: unknown }) => {
-    if (!hudWindow) createHudWindow();
-    if (!hudWindow) return;
-    if (payload.show) {
-      if (!mainWindow?.isFocused() || !mainWindow?.isVisible()) {
-        hudWindow.showInactive();
-      }
-      if (payload.state) hudWindow.webContents.send('hud:state', payload.state);
-    } else {
-      hudWindow.hide();
+  ipcMain.on('hud:toggle', (event, payload: typeof hudPayload) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    hudPayload = payload;
+    if (payload.show && !hudWindow) createHudWindow();
+    updateHudWindow();
+  });
+
+  ipcMain.on('hud:ready', (event) => {
+    if (event.sender !== hudWindow?.webContents) return;
+    hudReady = true;
+    updateHudWindow();
+  });
+
+  ipcMain.on('hud:action', (event, action: { type: string; text?: string }) => {
+    if (event.sender !== hudWindow?.webContents) return;
+    if (action.type === 'copy' && typeof action.text === 'string') {
+      clipboard.writeText(action.text);
+      return;
     }
-  });
-
-  ipcMain.on('hud:state', (_e, state) => {
-    hudWindow?.webContents.send('hud:state', state);
-  });
-
-  ipcMain.on('hud:action', (_e, action) => {
     mainWindow?.webContents.send('hud:action', action);
   });
 
@@ -416,6 +456,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  stopModifierShortcuts();
 });
 
 app.on('activate', () => {

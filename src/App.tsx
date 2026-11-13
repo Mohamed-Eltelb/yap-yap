@@ -59,6 +59,8 @@ function comboMatches(pressed: Set<string>, combo: string[]): boolean {
   return combo.every((k) => pressed.has(k));
 }
 
+const modifierOnlyKey = /^(?:(?:Left |Right )?(?:Alt|Shift|Ctrl)|Control|Cmd|Meta|Command)$/;
+
 export function App() {
   const [appState, setAppState] = useState<PersistedAppState>(() => getInitialState());
   const [hydrated, setHydrated] = useState(false);
@@ -68,6 +70,7 @@ export function App() {
   const [modalTab, setModalTab] = useState<SettingsModalTab>('providers');
   const [shareOpen, setShareOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [globalModifiers, setGlobalModifiers] = useState(false);
 
   const [hud, setHud] = useState<HudState>({
     status: 'idle',
@@ -77,6 +80,7 @@ export function App() {
   });
 
   const recorderRef = useRef<RecorderSession | null>(null);
+  const recorderStartRef = useRef<symbol | null>(null);
   const timerRef = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
   const hudRef = useRef<HudState>(hud);
@@ -84,6 +88,7 @@ export function App() {
 
   const isHudRoute =
     typeof window !== 'undefined' && window.location.hash === '#/hud';
+  const useFloatingHud = Boolean(window.yapyap?.isElectron && appState.settings.floatingHud);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -94,6 +99,7 @@ export function App() {
 
   // Load persisted state on boot
   useEffect(() => {
+    if (isHudRoute) return;
     loadPersistedState().then((loaded) => {
       setAppState({
         ...loaded,
@@ -101,7 +107,7 @@ export function App() {
       });
       setHydrated(true);
     });
-  }, []);
+  }, [isHudRoute]);
 
   // Persist on changes
   useEffect(() => {
@@ -129,7 +135,8 @@ export function App() {
   // Sync Electron global shortcuts + login item
   useEffect(() => {
     if (!hydrated || isHudRoute) return;
-    void window.yapyap?.updateShortcuts?.(appState.settings.shortcuts);
+    void window.yapyap?.updateShortcuts?.(appState.settings.shortcuts)
+      .then(setGlobalModifiers, () => setGlobalModifiers(false));
   }, [appState.settings.shortcuts, hydrated, isHudRoute]);
 
   useEffect(() => {
@@ -137,27 +144,24 @@ export function App() {
     void window.yapyap?.setLaunchAtLogin?.(appState.settings.launchAtLogin);
   }, [appState.settings.launchAtLogin, hydrated, isHudRoute]);
 
-  // HUD-only route body styling + IPC subscription
+  // Subscribe before telling Electron it can send the current HUD state.
   useEffect(() => {
     if (!isHudRoute) return;
-    document.body.classList.add('hud-mode');
     const unsub = window.yapyap?.onHudState?.((nextState) => {
       if (nextState && typeof nextState === 'object') {
         setHud(nextState as HudState);
       }
     });
-    return () => {
-      document.body.classList.remove('hud-mode');
-      unsub?.();
-    };
+    window.yapyap?.hudReady?.();
+    return unsub;
   }, [isHudRoute]);
 
   // Forward HUD state from main window to external Electron HUD overlay
   useEffect(() => {
     if (isHudRoute) return;
-    const visible = hud.status !== 'idle' && appState.settings.floatingHud;
+    const visible = hud.status !== 'idle' && useFloatingHud;
     window.yapyap?.toggleHud?.(visible, hud);
-  }, [hud, isHudRoute, appState.settings.floatingHud]);
+  }, [hud, isHudRoute, useFloatingHud]);
 
   const updateSettings = useCallback((patch: Partial<SettingsState>) => {
     setAppState((prev) => {
@@ -461,6 +465,7 @@ export function App() {
     stopRecordingTimer();
     restoreAudioMute();
     const currentMode = hudRef.current.mode;
+    setHud((current) => ({ ...current, status: 'processing' }));
     try {
       const { blob, durationMs, dataUrl, mimeType } = await session.stop();
       await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType);
@@ -477,6 +482,7 @@ export function App() {
   }, [appState.settings.interactionSounds, processAudioPipeline, restoreAudioMute]);
 
   const cancelRecording = useCallback(() => {
+    recorderStartRef.current = null;
     recorderRef.current?.cancel();
     recorderRef.current = null;
     stopRecordingTimer();
@@ -523,13 +529,26 @@ export function App() {
           sttMeta = PROVIDER_CATALOG[sttId];
           updateSettings({ activeSttProvider: sttId });
         } else {
-          setModalTab('providers');
-          setModalOpen(true);
-          showToast(`Add an API key in API Keys to start dictating.`);
+          const message = 'Add an API key in Yap Yap to start dictating.';
+          if (document.hasFocus() || !useFloatingHud) {
+            setModalTab('providers');
+            setModalOpen(true);
+            showToast(message);
+          } else {
+            setHud({
+              status: 'error',
+              mode,
+              levels: [],
+              elapsedMs: 0,
+              errorText: message,
+            });
+          }
           return;
         }
       }
 
+      const start = Symbol();
+      recorderStartRef.current = start;
       try {
         if (appState.settings.muteWhenDictating) {
           void window.yapyap?.setSystemMute?.(true);
@@ -547,11 +566,16 @@ export function App() {
         const session = await startAudioRecording(
           appState.settings.microphoneId,
           (levels) => {
+            if (!recorderRef.current) return;
             setHud((prev) =>
               prev.status === 'recording' ? { ...prev, levels } : prev
             );
           }
         );
+        if (recorderStartRef.current !== start) {
+          session.cancel();
+          return;
+        }
         recorderRef.current = session;
 
         timerRef.current = window.setInterval(() => {
@@ -562,6 +586,7 @@ export function App() {
           );
         }, 200);
       } catch (err) {
+        if (recorderStartRef.current !== start) return;
         restoreAudioMute();
         playInteractionSound('error', appState.settings.interactionSounds);
         setHud({
@@ -574,6 +599,8 @@ export function App() {
               ? `Microphone access error: ${err.message}`
               : 'Could not access microphone',
         });
+      } finally {
+        if (recorderStartRef.current === start) recorderStartRef.current = null;
       }
     },
     [
@@ -586,28 +613,27 @@ export function App() {
       showToast,
       stopAndProcess,
       updateSettings,
+      useFloatingHud,
     ]
   );
 
   // Listen for Electron global shortcut triggers and HUD actions
   useEffect(() => {
-    if (isHudRoute) return;
+    if (isHudRoute || !hydrated) return;
     const unsubTrigger = window.yapyap?.onTriggerMode?.((mode) => {
+      if (modalOpen && document.hasFocus()) return;
       void triggerDictationMode(mode);
     });
     const unsubAction = window.yapyap?.onHudAction?.((action) => {
       if (action.type === 'stop') void stopAndProcess();
       else if (action.type === 'cancel') cancelRecording();
       else if (action.type === 'dismiss') setHud((h) => ({ ...h, status: 'idle' }));
-      else if (action.type === 'copy' && action.text) {
-        void navigator.clipboard?.writeText(action.text).catch(() => {});
-      }
     });
     return () => {
       unsubTrigger?.();
       unsubAction?.();
     };
-  }, [cancelRecording, isHudRoute, stopAndProcess, triggerDictationMode]);
+  }, [cancelRecording, hydrated, isHudRoute, modalOpen, stopAndProcess, triggerDictationMode]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
@@ -626,13 +652,16 @@ export function App() {
       pressed.add(normalizeKey(e));
 
       const { dictate, translate, ask } = appState.settings.shortcuts;
-      if (ask.some((c) => comboMatches(pressed, c))) {
+      const matches = (combo: string[]) =>
+        !(globalModifiers && combo.every((key) => modifierOnlyKey.test(key.trim()))) &&
+        comboMatches(pressed, combo);
+      if (ask.some(matches)) {
         e.preventDefault();
         void triggerDictationMode('ask');
-      } else if (translate.some((c) => comboMatches(pressed, c))) {
+      } else if (translate.some(matches)) {
         e.preventDefault();
         void triggerDictationMode('translate');
-      } else if (dictate.some((c) => comboMatches(pressed, c))) {
+      } else if (dictate.some(matches)) {
         e.preventDefault();
         void triggerDictationMode('dictate');
       }
@@ -650,7 +679,7 @@ export function App() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [appState.settings.shortcuts, isHudRoute, modalOpen, triggerDictationMode]);
+  }, [appState.settings.shortcuts, globalModifiers, isHudRoute, modalOpen, triggerDictationMode]);
 
   const handleCopyText = async (text: string) => {
     await navigator.clipboard?.writeText(text).catch(() => {});
@@ -1015,13 +1044,15 @@ export function App() {
         onShowToast={showToast}
       />
 
-      <DictationHud
-        hud={hud}
-        onStop={() => void stopAndProcess()}
-        onCancel={cancelRecording}
-        onCopyResult={(t) => void handleCopyText(t)}
-        onDismissResult={() => setHud((h) => ({ ...h, status: 'idle' }))}
-      />
+      {!useFloatingHud && (
+        <DictationHud
+          hud={hud}
+          onStop={() => void stopAndProcess()}
+          onCancel={cancelRecording}
+          onCopyResult={(t) => void handleCopyText(t)}
+          onDismissResult={() => setHud((h) => ({ ...h, status: 'idle' }))}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#141416] text-white text-[12.5px] font-medium shadow-xl border border-white/10">

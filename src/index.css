@@ -85,9 +85,11 @@ body,
   user-select: none;
 }
 
-body.hud-mode,
-body.hud-mode #root {
-  background: transparent !important;
+html.hud-mode,
+html.hud-mode body,
+html.hud-mode #root {
+  background: transparent;
+  overflow: hidden;
 }
 
 .app-drag {

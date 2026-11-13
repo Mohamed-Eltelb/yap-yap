@@ -6,7 +6,7 @@
   "author": "Mohamed Eltelb",
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "tsc -p tsconfig.electron.json && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:web": "vite",
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.electron.json",
     "build:electron": "npm run build && electron-builder",
@@ -17,7 +17,8 @@
   "dependencies": {
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.7",
@@ -36,6 +37,7 @@
   "build": {
     "appId": "com.yapyap.desktop",
     "productName": "Yap Yap",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },

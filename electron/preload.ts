@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('yapyap', {
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
   toggleHud: (show: boolean, state?: unknown) =>
     ipcRenderer.send('hud:toggle', { show, state }),
-  sendHudState: (state: unknown) => ipcRenderer.send('hud:state', state),
+  hudReady: () => ipcRenderer.send('hud:ready'),
   sendHudAction: (action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }) =>
     ipcRenderer.send('hud:action', action),
   onTriggerMode: (cb: (mode: 'dictate' | 'translate' | 'ask') => void) => {

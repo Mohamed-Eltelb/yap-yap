@@ -21,10 +21,10 @@ declare global {
         dictate: string[][];
         translate: string[][];
         ask: string[][];
-      }) => Promise<void>;
+      }) => Promise<boolean>;
       pasteText: (text: string) => Promise<boolean>;
       toggleHud: (show: boolean, state?: unknown) => void;
-      sendHudState: (state: unknown) => void;
+      hudReady: () => void;
       sendHudAction: (action: {
         type: 'stop' | 'cancel' | 'dismiss' | 'copy';
         text?: string;
