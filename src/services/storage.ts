@@ -110,6 +110,76 @@ async function writeToIndexedDb(state: PersistedAppState): Promise<void> {
   });
 }
 
+const DEPRECATED_STT_MIGRATIONS: Partial<Record<ProviderId, Record<string, string>>> = {
+  openai: {
+    'whisper-1': 'gpt-transcribe',
+    'gpt-4o-mini-transcribe': 'gpt-transcribe',
+    'gpt-4o-transcribe': 'gpt-transcribe',
+  },
+  elevenlabs: {
+    scribe_v1: 'scribe_v3',
+  },
+  gemini: {
+    'gemini-1.5-flash': 'gemini-3.5-flash-lite',
+    'gemini-2.0-flash': 'gemini-3.5-flash-lite',
+    'gemini-2.5-flash': 'gemini-3.5-flash-lite',
+    'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite',
+    'gemini-3.5-flash': 'gemini-3.5-flash-lite',
+    'gemini-3.7-flash': 'gemini-3.8-flash',
+  },
+};
+
+const DEPRECATED_LLM_MIGRATIONS: Partial<Record<ProviderId, Record<string, string>>> = {
+  openai: {
+    'gpt-4o-mini': 'gpt-6-luna',
+    'gpt-4o': 'gpt-6-luna',
+    'gpt-4.1-mini': 'gpt-6-luna',
+    'gpt-4.1': 'gpt-6.1-terra',
+    'gpt-5-mini': 'gpt-6-luna',
+  },
+  groq: {
+    'llama-3.3-70b-versatile': 'openai/gpt-oss-20b',
+    'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
+    'qwen-qwq-32b': 'openai/gpt-oss-20b',
+    'qwen/qwen3-32b': 'qwen/qwen3.8-27b',
+    'qwen/qwen3.6-27b': 'qwen/qwen3.8-27b',
+    'meta-llama/llama-4-scout-17b-16e-instruct': 'openai/gpt-oss-20b',
+    'meta-llama/llama-4-maverick-17b-128e-instruct': 'openai/gpt-oss-120b',
+  },
+  gemini: {
+    'gemini-1.5-pro': 'gemini-3.8-flash',
+    'gemini-2.0-flash': 'gemini-3.8-flash',
+    'gemini-2.5-flash': 'gemini-3.8-flash',
+    'gemini-2.5-pro': 'gemini-3.8-flash',
+    'gemini-3.5-flash': 'gemini-3.8-flash',
+    'gemini-3.7-flash': 'gemini-3.8-flash',
+  },
+  anthropic: {
+    'claude-3-5-haiku-latest': 'claude-haiku-5-5',
+    'claude-3-5-haiku-20241022': 'claude-haiku-5-5',
+    'claude-3-7-sonnet-latest': 'claude-sonnet-5-5',
+    'claude-3-7-sonnet-20250219': 'claude-sonnet-5-5',
+    'claude-sonnet-4-20250514': 'claude-sonnet-5-5',
+    'claude-opus-4-20250514': 'claude-opus-5-5',
+    'claude-haiku-4-5': 'claude-haiku-5-5',
+    'claude-sonnet-4-5': 'claude-sonnet-5-5',
+  },
+  custom: {
+    'meta-llama/llama-3.3-70b-instruct:free': 'openrouter/free',
+    'openai/gpt-4o-mini': 'openai/gpt-6-luna',
+  },
+};
+
+function migrateModelId(
+  map: Record<string, string> | undefined,
+  currentModel: string | undefined,
+  fallbackModel: string
+): string {
+  const model = currentModel?.trim();
+  if (!model) return fallbackModel;
+  return map?.[model] ?? model;
+}
+
 export function sanitizeLoadedState(
   raw: Partial<PersistedAppState> | null
 ): PersistedAppState {
@@ -121,11 +191,22 @@ export function sanitizeLoadedState(
   if (raw.providers) {
     for (const id of Object.keys(defaultProviders) as ProviderId[]) {
       if (raw.providers[id]) {
+        const stored = raw.providers[id];
         mergedProviders[id] = {
           ...defaultProviders[id],
-          ...raw.providers[id],
-          status: raw.providers[id].apiKey
-            ? raw.providers[id].status ?? 'idle'
+          ...stored,
+          sttModel: migrateModelId(
+            DEPRECATED_STT_MIGRATIONS[id],
+            stored.sttModel,
+            defaultProviders[id].sttModel
+          ),
+          llmModel: migrateModelId(
+            DEPRECATED_LLM_MIGRATIONS[id],
+            stored.llmModel,
+            defaultProviders[id].llmModel
+          ),
+          status: stored.apiKey
+            ? stored.status ?? 'idle'
             : 'idle',
         };
       }

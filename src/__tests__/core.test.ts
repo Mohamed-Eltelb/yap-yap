@@ -9,7 +9,7 @@ import {
   formatDurationParts,
   formatWordCount,
 } from '../services/stats';
-import { getInitialState } from '../services/storage';
+import { getInitialState, sanitizeLoadedState } from '../services/storage';
 import { createDefaultProviders, PROVIDER_CATALOG } from '../services/providers/catalog';
 import {
   processTranscriptWithLlm,
@@ -45,7 +45,7 @@ describe('Stats and Heatmap Engine', () => {
       wordCount: 7,
       wpm: 105,
       providerId: 'openai',
-      model: 'gpt-4o-mini',
+      model: 'gpt-6-luna',
       category: 'AI assistants',
     },
     {
@@ -58,7 +58,7 @@ describe('Stats and Heatmap Engine', () => {
       wordCount: 2,
       wpm: 60,
       providerId: 'gemini',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       category: 'Social platforms',
     },
   ];
@@ -176,12 +176,48 @@ describe('Multi-Provider Engine', () => {
     vi.restoreAllMocks();
   });
 
-  it('creates all 7 default providers with valid catalog entries', () => {
+  it('creates all 7 default providers with latest non-deprecated November 2026 models', () => {
     const providers = createDefaultProviders();
     expect(Object.keys(providers)).toHaveLength(7);
     expect(PROVIDER_CATALOG.anthropic.supportsStt).toBe(false);
     expect(PROVIDER_CATALOG.deepgram.supportsLlm).toBe(false);
     expect(PROVIDER_CATALOG.gemini.supportsDirectAudioLlm).toBe(true);
+
+    expect(providers.openai.sttModel).toBe('gpt-transcribe');
+    expect(providers.openai.llmModel).toBe('gpt-6-luna');
+    expect(providers.groq.sttModel).toBe('whisper-large-v3-turbo');
+    expect(providers.groq.llmModel).toBe('openai/gpt-oss-20b');
+    expect(providers.gemini.sttModel).toBe('gemini-3.5-flash-lite');
+    expect(providers.gemini.llmModel).toBe('gemini-3.8-flash');
+    expect(providers.anthropic.llmModel).toBe('claude-haiku-5-5');
+    expect(providers.deepgram.sttModel).toBe('nova-3');
+    expect(providers.elevenlabs.sttModel).toBe('scribe_v3');
+    expect(providers.custom.llmModel).toBe('openrouter/free');
+  });
+
+  it('auto-upgrades deprecated persisted model IDs while keeping user API keys', () => {
+    const defaults = createDefaultProviders();
+    const migrated = sanitizeLoadedState({
+      providers: {
+        ...defaults,
+        openai: { ...defaults.openai, apiKey: 'sk-keep-me', sttModel: 'whisper-1', llmModel: 'gpt-4o-mini' },
+        groq: { ...defaults.groq, apiKey: 'gsk-keep-me', llmModel: 'llama-3.3-70b-versatile' },
+        gemini: { ...defaults.gemini, apiKey: 'AIza-keep-me', sttModel: 'gemini-2.5-flash', llmModel: 'gemini-2.5-pro' },
+        anthropic: { ...defaults.anthropic, apiKey: 'sk-ant-keep', llmModel: 'claude-3-5-haiku-latest' },
+        elevenlabs: { ...defaults.elevenlabs, apiKey: 'el-keep', sttModel: 'scribe_v1' },
+      },
+    });
+
+    expect(migrated.providers.openai.apiKey).toBe('sk-keep-me');
+    expect(migrated.providers.openai.sttModel).toBe('gpt-transcribe');
+    expect(migrated.providers.openai.llmModel).toBe('gpt-6-luna');
+    expect(migrated.providers.groq.apiKey).toBe('gsk-keep-me');
+    expect(migrated.providers.groq.llmModel).toBe('openai/gpt-oss-20b');
+    expect(migrated.providers.gemini.apiKey).toBe('AIza-keep-me');
+    expect(migrated.providers.gemini.sttModel).toBe('gemini-3.5-flash-lite');
+    expect(migrated.providers.gemini.llmModel).toBe('gemini-3.8-flash');
+    expect(migrated.providers.anthropic.llmModel).toBe('claude-haiku-5-5');
+    expect(migrated.providers.elevenlabs.sttModel).toBe('scribe_v3');
   });
 
   it('validates missing API key without issuing network calls', async () => {
@@ -214,7 +250,7 @@ describe('Multi-Provider Engine', () => {
     expect(init.headers.Authorization).toBe('Bearer gsk_test_123');
   });
 
-  it('routes multipart STT uploads through Electron IPC when window.yapyap.apiMultipart is present', async () => {
+  it('routes multipart STT uploads through Electron IPC with ElevenLabs scribe_v3 default', async () => {
     const providers = createDefaultProviders();
     providers.elevenlabs.apiKey = 'el_test_key';
 
@@ -238,6 +274,40 @@ describe('Multi-Provider Engine', () => {
       'https://api.elevenlabs.io/v1/speech-to-text'
     );
     expect(apiMultipartMock.mock.calls[0][0].headers['xi-api-key']).toBe('el_test_key');
+    expect(apiMultipartMock.mock.calls[0][0].fields.model_id).toBe('scribe_v3');
+  });
+
+  it('omits sampling temperature for OpenAI gpt-6-luna reasoning model', async () => {
+    vi.stubGlobal('window', undefined);
+    const providers = createDefaultProviders();
+    providers.openai.apiKey = 'sk-test-123';
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [{ message: { content: 'Clean dictated sentence.' } }],
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm(
+      'um clean dictated sentence',
+      'dictate',
+      providers.openai,
+      {
+        targetLanguages: ['English (US)'],
+        dictionaryWords: [],
+        smartCleanup: true,
+      }
+    );
+
+    expect(out.finalText).toBe('Clean dictated sentence.');
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('gpt-6-luna');
+    expect(body.temperature).toBeUndefined();
   });
 
   it('processes Ask anything through Anthropic Claude messages API with category instructions', async () => {
@@ -274,6 +344,7 @@ describe('Multi-Provider Engine', () => {
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(init.headers['x-api-key']).toBe('sk-ant-test');
     const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('claude-haiku-5-5');
     expect(body.system).toContain('Preserve camelCase identifiers.');
     expect(body.system).toContain('safeStorage');
   });

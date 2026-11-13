@@ -258,7 +258,7 @@ export async function transcribeAudio(
   if (provider.id === 'openai' || provider.id === 'groq' || provider.id === 'custom') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? 'https://api.openai.com/v1');
     const fields: Record<string, string> = {
-      model: provider.sttModel || meta.sttModels[0]?.id || 'whisper-1',
+      model: provider.sttModel || meta.sttModels[0]?.id || 'gpt-transcribe',
     };
     const promptParts: string[] = [];
     if (variantsHint) promptParts.push(`Preferred languages: ${variantsHint}.`);
@@ -339,7 +339,7 @@ export async function transcribeAudio(
       { 'xi-api-key': key },
       audioBlob,
       `audio.${ext}`,
-      { model_id: provider.sttModel || 'scribe_v1' }
+      { model_id: provider.sttModel || 'scribe_v3' }
     );
     if (!res.ok) {
       throw new Error(extractErrorMessage(res.text, res.status));
@@ -350,7 +350,7 @@ export async function transcribeAudio(
 
   if (provider.id === 'gemini') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-    const model = provider.sttModel || 'gemini-2.5-flash';
+    const model = provider.sttModel || 'gemini-3.5-flash-lite';
     const base64Audio = await blobToBase64(audioBlob);
     const mimeType = (audioBlob.type || 'audio/webm').split(';')[0];
 
@@ -362,31 +362,43 @@ export async function transcribeAudio(
       'Transcribe the spoken audio accurately in its original language(s). Return ONLY the exact transcription with proper punctuation, no commentary.' +
       (hints.length ? ` ${hints.join(' ')}` : '');
 
+    const payload: Record<string, unknown> = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType, data: base64Audio } },
+          ],
+        },
+      ],
+    };
+
     const res = await performRequest(
       `${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: promptText },
-                { inlineData: { mimeType, data: base64Audio } },
-              ],
-            },
-          ],
-          generationConfig: { temperature: 0.1 },
-        }),
+        body: JSON.stringify(payload),
       }
     );
     if (!res.ok) {
       throw new Error(extractErrorMessage(res.text, res.status));
     }
     const json = JSON.parse(res.text) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{
+            text?: string;
+            audioTranscription?: { text?: string };
+          }>;
+        };
+      }>;
     };
-    return (json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '').trim();
+    return (
+      json.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text ?? p.audioTranscription?.text ?? '')
+        .join('') ?? ''
+    ).trim();
   }
 
   throw new Error(`Transcription not implemented for ${provider.name}`);
@@ -455,6 +467,17 @@ export async function processTranscriptWithLlm(
   return { finalText: result };
 }
 
+function omitsSamplingTemperature(model: string): boolean {
+  const lower = model.toLowerCase();
+  return (
+    lower.startsWith('gpt-6') ||
+    lower.startsWith('gpt-5') ||
+    /^o[134](-|$)/.test(lower) ||
+    lower.includes('/gpt-6') ||
+    lower.includes('/gpt-5')
+  );
+}
+
 async function callLlm(
   provider: ProviderConfig,
   systemPrompt: string,
@@ -465,19 +488,24 @@ async function callLlm(
   const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? '');
 
   if (provider.id === 'openai' || provider.id === 'groq' || provider.id === 'custom') {
+    const model = provider.llmModel || meta.llmModels[0]?.id || 'gpt-6-luna';
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
+    const bodyPayload: Record<string, unknown> = {
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    };
+    if (!omitsSamplingTemperature(model)) {
+      bodyPayload.temperature = 0.2;
+    }
+
     const res = await performRequest(`${base}/chat/completions`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        model: provider.llmModel || meta.llmModels[0]?.id,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
+      body: JSON.stringify(bodyPayload),
     });
     if (!res.ok) throw new Error(extractErrorMessage(res.text, res.status));
     const json = JSON.parse(res.text) as {
@@ -496,7 +524,7 @@ async function callLlm(
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: provider.llmModel || 'claude-3-5-haiku-latest',
+        model: provider.llmModel || 'claude-haiku-5-5',
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -510,7 +538,7 @@ async function callLlm(
   }
 
   if (provider.id === 'gemini') {
-    const model = provider.llmModel || 'gemini-2.5-flash';
+    const model = provider.llmModel || 'gemini-3.8-flash';
     const res = await performRequest(
       `${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
       {
@@ -519,7 +547,6 @@ async function callLlm(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.2 },
         }),
       }
     );
