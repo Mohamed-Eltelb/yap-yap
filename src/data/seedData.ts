@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   launchAtLogin: true,
   autoPaste: true,
   smartCleanup: true,
+  personalizationEnabled: true,
   floatingHud: true,
   historyRetention: 'forever',
   cloudSyncMock: false,

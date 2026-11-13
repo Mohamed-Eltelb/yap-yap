@@ -1,13 +1,23 @@
+import type { PersonalizationCategory } from '../types/app';
+
 interface Sector {
-  label: string;
+  category: PersonalizationCategory;
   percent: number;
-  color: string;
 }
 
 interface Props {
   sectors: Sector[];
   size?: number;
+  activeCategory?: PersonalizationCategory | null;
+  onHighlight?: (category: PersonalizationCategory | null) => void;
 }
+
+const petals = {
+  'AI assistants': { start: -90, end: 122, color: 'var(--personalization-ai)' },
+  Messaging: { start: 123, end: 185, color: 'var(--personalization-messaging)' },
+  'Social platforms': { start: 186, end: 248, color: 'var(--personalization-social)' },
+  'Development tools': { start: 249, end: 269, color: 'var(--personalization-development)' },
+} satisfies Record<PersonalizationCategory, { start: number; end: number; color: string }>;
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -22,71 +32,62 @@ function describeWedge(
   cy: number,
   r: number,
   startAngle: number,
-  endAngle: number
+  endAngle: number,
+  cornerRadius: number
 ): string {
-  const start = polarToCartesian(cx, cy, r, endAngle);
-  const end = polarToCartesian(cx, cy, r, startAngle);
-  const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
+  const corner = Math.min(cornerRadius, r * 0.15);
+  const inset = Math.min((corner / r) * 180 / Math.PI, (endAngle - startAngle) / 4);
+  const point = (radius: number, angle: number) => {
+    const { x, y } = polarToCartesian(cx, cy, radius, angle);
+    return `${x} ${y}`;
+  };
+  const largeArc = endAngle - startAngle - 2 * inset > 180 ? 1 : 0;
   return [
-    'M',
-    cx,
-    cy,
-    'L',
-    start.x,
-    start.y,
-    'A',
-    r,
-    r,
-    0,
-    largeArc,
-    0,
-    end.x,
-    end.y,
+    `M ${cx} ${cy}`,
+    `L ${point(r - corner, startAngle)}`,
+    `Q ${point(r, startAngle)} ${point(r, startAngle + inset)}`,
+    `A ${r} ${r} 0 ${largeArc} 1 ${point(r, endAngle - inset)}`,
+    `Q ${point(r, endAngle)} ${point(r - corner, endAngle)}`,
     'Z',
   ].join(' ');
 }
 
-export function PersonalizationChart({ sectors, size = 180 }: Props) {
+export function PersonalizationChart({ sectors, size = 180, activeCategory, onHighlight }: Props) {
   const cx = size / 2;
   const cy = size / 2;
-  const maxR = size * 0.46;
-
-  // Match the asymmetric/balanced radial proportions seen in Screenshots 1, 7, 13
-  const defaultAngles = [
-    [-92, 128], // large top/right sector (AI assistants)
-    [131, 186], // bottom-right sector (Messaging)
-    [189, 250], // bottom-left sector (Social platforms)
-    [253, 268], // thin left-mid sector (Development tools)
-  ];
+  const maxR = size * 0.49;
 
   return (
     <svg
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className="overflow-visible select-none"
+      className="yy-personalization-chart block h-auto max-w-full select-none"
+      role="img"
       aria-label="Personalization radial chart"
     >
-      {sectors.map((sector, idx) => {
-        const [start, end] = defaultAngles[idx % defaultAngles.length];
-        // Scale inner colored petal visibly even at low percentages (like 9.6% -> ~22% radius)
-        const normalized = Math.max(0.08, Math.min(1, sector.percent / 100));
-        const innerR = Math.max(10, maxR * Math.pow(normalized, 0.55));
+      {sectors.map((sector) => {
+        const { start, end, color } = petals[sector.category];
+        const innerR = maxR * Math.max(0, Math.min(1, sector.percent / 100));
 
         return (
-          <g key={sector.label}>
+          <g
+            key={sector.category}
+            data-category={sector.category}
+            data-highlighted={activeCategory === sector.category}
+            onPointerEnter={() => onHighlight?.(sector.category)}
+            onPointerLeave={() => onHighlight?.(null)}
+          >
+            <title>{`${sector.category}: ${sector.percent}%`}</title>
             <path
-              d={describeWedge(cx, cy, maxR, start, end)}
-              fill="var(--radial-track)"
-              className="transition-opacity duration-200 hover:opacity-90"
+              d={describeWedge(cx, cy, maxR, start, end, size * 0.03)}
+              className="yy-personalization-track"
             />
-            <path
-              d={describeWedge(cx, cy, innerR, start, end)}
-              fill={sector.color}
-              className="transition-all duration-300"
-            >
-              <title>{`${sector.label}: ${sector.percent}%`}</title>
-            </path>
+            {innerR > 0 && <path
+              d={describeWedge(cx, cy, innerR, start, end, size * 0.008)}
+              fill={color}
+              className="yy-personalization-fill"
+            />}
           </g>
         );
       })}

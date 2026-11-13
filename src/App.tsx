@@ -303,7 +303,9 @@ export function App() {
       });
 
       try {
-        const dictWords = appState.dictionary.map((d) => d.word);
+        const dictWords = appState.dictionary
+          .filter((entry) => appState.settings.personalizationEnabled || entry.source === 'manual')
+          .map((entry) => entry.word);
         const rawText = await transcribeAudio(audioBlob, sttProvider, {
           dictionaryWords: dictWords,
           languageVariants: getPreferredLanguageVariants(appState.settings.languageVariants),
@@ -362,8 +364,9 @@ export function App() {
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
                 category: initialCategory,
-                categoryInstruction:
-                  appState.settings.categoryInstructions[initialCategory],
+                categoryInstruction: appState.settings.personalizationEnabled
+                  ? appState.settings.categoryInstructions[initialCategory]
+                  : undefined,
               }
             );
             finalText = processed.finalText || rawText;
@@ -434,7 +437,7 @@ export function App() {
             const existingSet = new Set(
               prev.dictionary.map((d) => d.word.toLowerCase())
             );
-            const newAutoEntries = autoWords
+            const newAutoEntries = (prev.settings.personalizationEnabled ? autoWords : [])
               .filter((w) => !existingSet.has(w.toLowerCase()))
               .map((w, idx) => ({
                 id: `d-auto-${Date.now()}-${idx}`,
@@ -808,10 +811,12 @@ export function App() {
         {
           targetLanguages: appState.settings.translationTargets,
           targetLanguage: item.targetLanguage,
-          dictionaryWords: appState.dictionary.map((d) => d.word),
+          dictionaryWords: appState.dictionary
+            .filter((entry) => appState.settings.personalizationEnabled || entry.source === 'manual')
+            .map((entry) => entry.word),
           smartCleanup: appState.settings.smartCleanup,
           category: cat,
-          categoryInstruction: appState.settings.categoryInstructions[cat],
+          categoryInstruction: appState.settings.personalizationEnabled ? appState.settings.categoryInstructions[cat] : undefined,
         }
       );
       const nextText = processed.finalText || item.text;
@@ -917,7 +922,7 @@ export function App() {
         .filter((t) => t.length >= 3 && !oldTokens.has(t.toLowerCase()));
 
       const existingDict = new Set(prev.dictionary.map((d) => d.word.toLowerCase()));
-      const autoLearned = newTokens
+      const autoLearned = (prev.settings.personalizationEnabled ? newTokens : [])
         .filter((t) => !existingDict.has(t.toLowerCase()))
         .slice(0, 3)
         .map((w, idx) => ({

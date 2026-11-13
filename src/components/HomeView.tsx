@@ -60,13 +60,6 @@ export function HomeView({
   const translateKeys = settings.shortcuts.translate[0] ?? [];
   const askKeys = settings.shortcuts.ask[0] ?? [];
 
-  const chartColors = ['#5B9BF8', '#5B9BF8', '#4DC9E6', '#8BA7F9'];
-  const sectors = stats.categoryBreakdown.map((c, i) => ({
-    label: c.category,
-    percent: c.percent,
-    color: chartColors[i % chartColors.length],
-  }));
-
   return (
     <div className="flex-1 h-full overflow-y-auto main-atmosphere flex flex-col justify-between relative">
       {/* Top window controls bar */}
@@ -176,12 +169,12 @@ export function HomeView({
             />
 
             {/* Personalization Card */}
-            <div className="yy-card px-6 py-5 flex items-center justify-between gap-4">
+            <div className="yy-card yy-personalization-summary px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <UserCheck className="w-[18px] h-[18px] text-[var(--text-secondary)]" />
-                  <span className="text-[22px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {stats.personalizationPercent}%
+                  <span className="rounded-lg bg-[var(--bg-subtle)] p-1.5 text-[var(--text-secondary)]"><UserCheck className="size-4" /></span>
+                  <span className="text-[25px] font-bold tracking-tight text-[var(--text-primary)]">
+                    {settings.personalizationEnabled ? `${stats.personalizationPercent}%` : 'Off'}
                   </span>
                 </div>
                 <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
@@ -195,9 +188,9 @@ export function HomeView({
                   View report
                 </button>
               </div>
-              <div className="pr-2">
-                <PersonalizationChart sectors={sectors} size={172} />
-              </div>
+              <button type="button" aria-label="Open personalization settings" onClick={() => onOpenModal('personalization')} className="yy-personalization-chart-button w-[34%] max-w-[210px] shrink-0 self-center rounded-full">
+                <PersonalizationChart sectors={stats.categoryBreakdown} size={210} />
+              </button>
             </div>
           </div>
 

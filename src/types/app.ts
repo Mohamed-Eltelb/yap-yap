@@ -72,6 +72,7 @@ export interface SettingsState {
   launchAtLogin: boolean;
   autoPaste: boolean;
   smartCleanup: boolean;
+  personalizationEnabled: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;
   cloudSyncMock: boolean;

@@ -32,7 +32,6 @@
   --heatmap-4: #1d64f2;
   --hatch-a: #f4f4f6;
   --hatch-b: #e6e7eb;
-  --radial-track: #f1f2f4;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 16px rgba(0, 0, 0, 0.025);
   --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.18);
   --mesh-bg: radial-gradient(ellipse 70% 45% at 45% 8%, rgba(214, 232, 250, 0.55) 0%, rgba(238, 242, 248, 0.32) 45%, rgba(255, 255, 255, 0) 80%);
@@ -70,7 +69,6 @@ html.dark {
   --heatmap-4: #658aff;
   --hatch-a: #3c3b3b;
   --hatch-b: #454444;
-  --radial-track: #454444;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
   --mesh-bg: radial-gradient(ellipse 60% 60% at 42% 43%, #000 35%, transparent 88%);
@@ -122,6 +120,94 @@ html.hud-mode #root {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
   border-radius: 14px;
+}
+
+.yy-card.yy-personalization-summary {
+  border-radius: 22px;
+}
+
+.yy-personalization-report {
+  container-type: inline-size;
+}
+
+.yy-personalization-panel {
+  background: var(--bg-subtle);
+}
+
+.yy-personalization-chart {
+  --personalization-ai: #3479db;
+  --personalization-messaging: #00869f;
+  --personalization-social: #6569c8;
+  --personalization-development: #008a77;
+  --personalization-track: #e3e3e7;
+  --personalization-track-active: #cfd0d8;
+}
+
+.dark .yy-personalization-chart {
+  --personalization-ai: #79adfd;
+  --personalization-messaging: #4bc4df;
+  --personalization-social: #9baaf7;
+  --personalization-development: #70d5c7;
+  --personalization-track: #454444;
+  --personalization-track-active: #545353;
+}
+
+.dark .yy-personalization-panel {
+  background: var(--bg-modal-sidebar);
+  --bg-hover: #545353;
+}
+
+.dark .yy-personalization-panel .yy-personalization-chart {
+  --personalization-track: #4b4a4a;
+  --personalization-track-active: #585757;
+}
+
+.yy-personalization-track {
+  fill: var(--personalization-track);
+  transition: fill 150ms;
+}
+
+.yy-personalization-chart [data-highlighted='true'] .yy-personalization-track,
+.yy-personalization-chart-button:is(:hover, :focus-visible) .yy-personalization-track {
+  fill: var(--personalization-track-active);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .yy-personalization-chart-button .yy-personalization-chart {
+    transition: transform 150ms ease-out;
+  }
+
+  .yy-personalization-chart-button:is(:hover, :focus-visible) .yy-personalization-chart {
+    transform: scale(1.05);
+  }
+}
+
+.yy-personalization-fill {
+  pointer-events: none;
+}
+
+.yy-personalization-columns {
+  grid-template-columns: minmax(0, 1fr) 80px;
+}
+
+@container (width >= 480px) {
+  .yy-personalization-content {
+    grid-template-columns: minmax(0, 1.35fr) minmax(224px, 1fr);
+  }
+}
+
+.yy-personalization-options[open] summary {
+  background: var(--bg-hover);
+}
+
+.yy-personalization-tooltip {
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+}
+
+.dark .yy-personalization-tooltip {
+  background: #211e1e;
+  color: var(--text-primary);
 }
 
 .yy-keycap {

@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Mic,
   Monitor,
+  MoreHorizontal,
   Pencil,
   Share2,
   SlidersHorizontal,
@@ -134,6 +135,7 @@ export function SettingsModal({
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
+  const [highlightedCat, setHighlightedCat] = useState<PersonalizationCategory | null>(null);
   const shortcutEditorOpen = open && activeTab === 'settings';
 
   useEffect(() => {
@@ -283,13 +285,6 @@ export function SettingsModal({
     const hasKey = provider.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
     return `${provider.name} (${provider[model]})${hasKey ? '' : ' — No key'}`;
   };
-
-  const chartColors = ['#5B9BF8', '#5B9BF8', '#4DC9E6', '#8BA7F9'];
-  const sectors = stats.categoryBreakdown.map((c, i) => ({
-    label: c.category,
-    percent: c.percent,
-    color: chartColors[i % chartColors.length],
-  }));
 
   const categoryIcons: Record<PersonalizationCategory, React.ReactNode> = {
     'AI assistants': <Sparkles className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
@@ -942,79 +937,102 @@ export function SettingsModal({
               </div>
             )}
 
-            {/* TAB 3: PERSONALIZATION (Exact match to Image 7) */}
             {activeTab === 'personalization' && (
-              <div className="space-y-5">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
-                    Personalization
-                  </h2>
-                  <span
-                    title="Personalization adapts formatting & dictionary hints per app context."
-                    className="text-[var(--text-muted)]"
-                  >
-                    <Info className="w-4 h-4" />
-                  </span>
-                </div>
-
-                <div className="rounded-2xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="text-[14px] text-[var(--text-secondary)]">
-                      Overall personalization:{' '}
-                      <strong className="text-[var(--text-primary)] font-bold">
-                        {stats.personalizationPercent}%
-                      </strong>
+              <div className="yy-personalization-report space-y-5 text-[var(--text-primary)]" onPointerLeave={() => setHighlightedCat(null)}>
+                <div className="flex items-center gap-1.5 pr-8">
+                  <h2 className="text-[25px] font-medium tracking-tight">Personalization</h2>
+                  <div className="group relative">
+                    <button type="button" aria-label="About personalization" aria-describedby="personalization-tooltip" className="rounded p-1 text-[var(--text-secondary)]">
+                      <Info aria-hidden="true" className="size-3.5" />
+                    </button>
+                    <div id="personalization-tooltip" role="tooltip" className="yy-personalization-tooltip invisible absolute left-0 top-full z-20 mt-1 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-hover:visible group-focus-within:visible">
+                      Yap Yap uses category instructions and learned words to adapt how it formats your dictation.
                     </div>
                   </div>
+                </div>
 
-                  <div className="flex flex-col md:flex-row items-center gap-8">
-                    <div className="shrink-0">
-                      <PersonalizationChart sectors={sectors} size={240} />
+                <div className="yy-personalization-panel rounded-[18px] p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      Overall personalization{' '}
+                      <strong className="ml-1 text-lg font-bold text-[var(--text-primary)]">
+                        {stats.personalizationPercent}%
+                      </strong>
+                      {!settings.personalizationEnabled && <span className="ml-2 text-xs">Off</span>}
+                    </p>
+                    <details
+                      className="yy-personalization-options relative shrink-0"
+                      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Escape' || !event.currentTarget.open) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.currentTarget.open = false;
+                        event.currentTarget.querySelector('summary')?.focus();
+                      }}
+                    >
+                      <summary aria-label="Personalization options" className="grid size-8 cursor-pointer list-none place-items-center rounded-lg hover:bg-[var(--bg-hover)]">
+                        <MoreHorizontal aria-hidden="true" size={16} />
+                      </summary>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          const details = event.currentTarget.closest('details');
+                          if (details) {
+                            details.open = false;
+                            details.querySelector('summary')?.focus();
+                          }
+                          onUpdateSettings({ personalizationEnabled: !settings.personalizationEnabled });
+                        }}
+                        className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] px-3 py-2.5 text-sm shadow-lg hover:bg-[var(--bg-hover)]"
+                      >
+                        {settings.personalizationEnabled ? 'Disable personalization' : 'Enable personalization'}
+                      </button>
+                    </details>
+                  </div>
+
+                  <div className="yy-personalization-content mt-4 grid items-start gap-5">
+                    <div className="mx-auto min-w-0 w-full max-w-[375px]">
+                      <PersonalizationChart sectors={stats.categoryBreakdown} size={375} activeCategory={highlightedCat ?? editingCat} onHighlight={setHighlightedCat} />
                     </div>
-
-                    <div className="flex-1 w-full">
-                      <div className="grid grid-cols-[1fr_auto] text-[12px] text-[var(--text-muted)] pb-2 border-b border-[var(--border-subtle)]">
+                    <div className="min-w-0">
+                      <div className="yy-personalization-columns grid gap-2 px-2 pb-1 text-xs text-[var(--text-secondary)]">
                         <span>Category</span>
-                        <span>Personalization</span>
+                        <span className="text-center">Personalization</span>
                       </div>
-
                       <div className="divide-y divide-[var(--border-subtle)]">
                         {stats.categoryBreakdown.map((item) => (
-                          <div key={item.category} className="py-2.5">
+                          <div key={item.category}>
                             <button
                               type="button"
-                              onClick={() =>
-                                setEditingCat(
-                                  editingCat === item.category ? null : item.category
-                                )
-                              }
-                              className="w-full grid grid-cols-[1fr_auto] items-center text-left hover:opacity-80"
+                              aria-expanded={editingCat === item.category}
+                              data-highlighted={(highlightedCat ?? editingCat) === item.category}
+                              onPointerEnter={() => setHighlightedCat(item.category)}
+                              onPointerLeave={() => setHighlightedCat(null)}
+                              onFocus={() => setHighlightedCat(item.category)}
+                              onBlur={() => setHighlightedCat(null)}
+                              onClick={() => setEditingCat(editingCat === item.category ? null : item.category)}
+                              className="yy-personalization-columns grid w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
                             >
-                              <span className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--text-primary)]">
+                              <span className="flex items-center gap-1.5 whitespace-nowrap [&>svg]:shrink-0">
                                 {categoryIcons[item.category]}
-                                <span>{item.category}</span>
+                                {item.category}
                               </span>
-                              <span className="text-[13px] text-[var(--text-secondary)] tabular-nums">
-                                {item.percent}%
-                              </span>
+                              <span className="text-center tabular-nums">{item.percent}%</span>
                             </button>
-
                             {editingCat === item.category && (
-                              <div className="mt-2">
-                                <textarea
-                                  rows={2}
-                                  value={settings.categoryInstructions[item.category]}
-                                  onChange={(e) =>
-                                    onUpdateSettings({
-                                      categoryInstructions: {
-                                        ...settings.categoryInstructions,
-                                        [item.category]: e.target.value,
-                                      },
-                                    })
-                                  }
-                                  className="w-full p-2.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                                />
-                              </div>
+                              <textarea
+                                rows={2}
+                                aria-label={item.category + ' formatting instructions'}
+                                value={settings.categoryInstructions[item.category]}
+                                onChange={(event) => onUpdateSettings({
+                                  categoryInstructions: {
+                                    ...settings.categoryInstructions,
+                                    [item.category]: event.target.value,
+                                  },
+                                })}
+                                className="mb-2 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-input)] p-2.5 text-xs"
+                              />
                             )}
                           </div>
                         ))}
@@ -1022,9 +1040,8 @@ export function SettingsModal({
                     </div>
                   </div>
                 </div>
-
-                <p className="text-[12.5px] text-[var(--text-secondary)]">
-                  Click any category above to customize AI formatting instructions for that workflow.
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Select a category to edit its formatting instructions.
                 </p>
               </div>
             )}
