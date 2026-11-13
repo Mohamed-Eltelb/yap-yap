@@ -1033,7 +1033,7 @@ export function SettingsModal({
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
                                 <CategoryIcon category={item.category} />
-                                <span className="[overflow-wrap:anywhere]">{item.category}</span>
+                                <span className="truncate" title={item.category}>{item.category}</span>
                               </div>
                             </div>
                             <span className="text-center tabular-nums">{item.percent}%</span>

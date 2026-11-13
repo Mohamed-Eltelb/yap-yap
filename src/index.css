@@ -192,7 +192,7 @@ html.hud-mode #root {
 
 @container (width >= 480px) {
   .yy-personalization-content {
-    grid-template-columns: minmax(0, 1.35fr) minmax(224px, 1fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(264px, 1fr);
   }
 }
 
