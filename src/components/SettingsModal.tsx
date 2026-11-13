@@ -965,85 +965,105 @@ export function SettingsModal({
                   <Toggle label="Context awareness" checked={settings.contextAwareness} onChange={(contextAwareness) => onUpdateSettings({ contextAwareness })} />
                 </div>
 
-                <div className="yy-personalization-panel rounded-[18px] p-4">
+                <div data-personalization-disabled={!settings.personalizationEnabled} className="yy-personalization-panel rounded-[18px] p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-[var(--text-secondary)]">
-                      Overall personalization{' '}
-                      <strong className="ml-1 text-lg font-bold text-[var(--text-primary)]">
+                      Overall personalization:{' '}
+                      <strong className="yy-personalization-score ml-1 text-lg font-bold text-[var(--text-primary)]">
                         {stats.personalizationPercent}%
                       </strong>
-                      {!settings.personalizationEnabled && <span className="ml-2 text-xs">Off</span>}
                     </p>
-                    <details
-                      className="yy-personalization-options relative shrink-0"
-                      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}
-                      onKeyDown={(event) => {
-                        if (event.key !== 'Escape' || !event.currentTarget.open) return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.currentTarget.open = false;
-                        event.currentTarget.querySelector('summary')?.focus();
-                      }}
-                    >
-                      <summary aria-label="Personalization options" className="grid size-8 cursor-pointer list-none place-items-center rounded-lg hover:bg-[var(--bg-hover)]">
-                        <MoreHorizontal aria-hidden="true" size={16} />
-                      </summary>
+                    {settings.personalizationEnabled ? (
+                      <details
+                        className="yy-personalization-options relative shrink-0"
+                        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Escape' || !event.currentTarget.open) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          event.currentTarget.open = false;
+                          event.currentTarget.querySelector('summary')?.focus();
+                        }}
+                      >
+                        <summary aria-label="Personalization options" className="grid size-8 cursor-pointer list-none place-items-center rounded-lg hover:bg-[var(--bg-hover)]">
+                          <MoreHorizontal aria-hidden="true" size={16} />
+                        </summary>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            const details = event.currentTarget.closest('details');
+                            if (details) {
+                              details.open = false;
+                              details.querySelector('summary')?.focus();
+                            }
+                            setHighlightedCat(null);
+                            onUpdateSettings({ personalizationEnabled: false });
+                          }}
+                          className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] px-3 py-2.5 text-sm shadow-lg hover:bg-[var(--bg-hover)]"
+                        >
+                          Disable personalization
+                        </button>
+                      </details>
+                    ) : (
                       <button
                         type="button"
-                        onClick={(event) => {
-                          const details = event.currentTarget.closest('details');
-                          if (details) {
-                            details.open = false;
-                            details.querySelector('summary')?.focus();
-                          }
-                          onUpdateSettings({ personalizationEnabled: !settings.personalizationEnabled });
-                        }}
-                        className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] px-3 py-2.5 text-sm shadow-lg hover:bg-[var(--bg-hover)]"
+                        onClick={() => onUpdateSettings({ personalizationEnabled: true })}
+                        className="yy-personalization-action inline-flex h-8 shrink-0 items-center rounded-full px-3 text-sm font-medium transition-colors"
                       >
-                        {settings.personalizationEnabled ? 'Disable personalization' : 'Enable personalization'}
+                        Enable personalization
                       </button>
-                    </details>
+                    )}
                   </div>
 
                   <div className="yy-personalization-content mt-4 grid items-start gap-5">
                     <div className="mx-auto min-w-0 w-full max-w-[375px]">
-                      <PersonalizationChart sectors={stats.categoryBreakdown} size={375} activeCategory={highlightedCat} onHighlight={setHighlightedCat} />
+                      <PersonalizationChart
+                        sectors={stats.categoryBreakdown}
+                        size={375}
+                        activeCategory={settings.personalizationEnabled ? highlightedCat : null}
+                        onHighlight={settings.personalizationEnabled ? setHighlightedCat : undefined}
+                      />
                     </div>
-                    <div className="min-w-0">
-                      <div className="yy-personalization-columns grid gap-2 px-2 pb-1 text-xs text-[var(--text-secondary)]">
-                        <span>Category</span>
-                        <span className="text-center">Personalization</span>
-                      </div>
-                      <div className="divide-y divide-[var(--border-subtle)]">
-                        {stats.categoryBreakdown.map((item) => (
-                          <div
-                            key={item.category}
-                            tabIndex={0}
-                            data-highlighted={highlightedCat === item.category}
-                            onPointerEnter={() => setHighlightedCat(item.category)}
-                            onPointerLeave={() => setHighlightedCat(null)}
-                            onFocus={() => setHighlightedCat(item.category)}
-                            onBlur={() => setHighlightedCat(null)}
-                            aria-describedby={`style-${item.category}`}
-                            className="group/row relative yy-personalization-columns grid items-center gap-2 rounded-lg px-2 py-2.5 text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
-                          >
-                            <div id={`style-${item.category}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
-                              {item.tone} · {item.phrasing}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                                <CategoryIcon category={item.category} />
-                                <span className="truncate" title={item.category}>{item.category}</span>
+                    {stats.categoryBreakdown.length > 0 ? (
+                      <div className="min-w-0">
+                        <div className="yy-personalization-columns grid gap-2 px-2 pb-1 text-xs text-[var(--text-secondary)]">
+                          <span>Category</span>
+                          <span className="text-center">Personalization</span>
+                        </div>
+                        <div className="divide-y divide-[var(--border-subtle)]">
+                          {stats.categoryBreakdown.map((item) => (
+                            <div
+                              key={item.category}
+                              tabIndex={settings.personalizationEnabled ? 0 : undefined}
+                              data-highlighted={settings.personalizationEnabled && highlightedCat === item.category}
+                              onPointerEnter={settings.personalizationEnabled ? () => setHighlightedCat(item.category) : undefined}
+                              onPointerLeave={settings.personalizationEnabled ? () => setHighlightedCat(null) : undefined}
+                              onFocus={settings.personalizationEnabled ? () => setHighlightedCat(item.category) : undefined}
+                              onBlur={settings.personalizationEnabled ? () => setHighlightedCat(null) : undefined}
+                              aria-describedby={settings.personalizationEnabled ? `style-${item.category}` : undefined}
+                              className="yy-personalization-row group/row relative yy-personalization-columns grid items-center gap-2 rounded-lg px-2 py-2.5 text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
+                            >
+                              {settings.personalizationEnabled && (
+                                <div id={`style-${item.category}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
+                                  {item.tone} · {item.phrasing}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                                  <CategoryIcon category={item.category} />
+                                  <span className="truncate" title={settings.personalizationEnabled ? item.category : undefined}>{item.category}</span>
+                                </div>
                               </div>
+                              <span className="text-center tabular-nums">{item.percent}%</span>
                             </div>
-                            <span className="text-center tabular-nums">{item.percent}%</span>
-                          </div>
-                        ))}
-                        {!stats.categoryBreakdown.length && (
-                          <p className="px-2 py-3 text-xs text-[var(--text-secondary)]">Use Dictate with Smart cleanup and an AI provider to start learning your writing style.</p>
-                        )}
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <p className="self-center text-center text-sm font-medium text-[var(--text-secondary)]">
+                        Not Enough Data
+                      </p>
+                    )}
                   </div>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)]">

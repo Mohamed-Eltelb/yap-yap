@@ -85,10 +85,10 @@ export function PersonalizationChart({ sectors, size = 180, activeCategory, onHi
             key={sector.category}
             data-category={sector.category}
             data-highlighted={activeCategory === sector.category}
-            onPointerEnter={() => onHighlight?.(sector.category)}
-            onPointerLeave={() => onHighlight?.(null)}
+            onPointerEnter={onHighlight && (() => onHighlight(sector.category))}
+            onPointerLeave={onHighlight && (() => onHighlight(null))}
           >
-            <title>{`${sector.category}: ${sector.percent}% personalized`}</title>
+            {onHighlight && <title>{`${sector.category}: ${sector.percent}% personalized`}</title>}
             <path
               d={describeWedge(cx, cy, maxR, start, end, size * 0.03)}
               className="yy-personalization-track"

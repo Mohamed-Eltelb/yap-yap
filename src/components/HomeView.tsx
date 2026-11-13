@@ -34,6 +34,7 @@ interface Props {
   onOpenShare: () => void;
   onOpenModal: (tab: SettingsModalTab) => void;
   onStartDictation: (mode: DictationMode) => void;
+  onEnablePersonalization: () => void;
   onDismissPromoCard: () => void;
 }
 
@@ -45,6 +46,7 @@ export function HomeView({
   onOpenShare,
   onOpenModal,
   onStartDictation,
+  onEnablePersonalization,
   onDismissPromoCard,
 }: Props) {
   const wordsFmt = formatWordCount(stats.totalWords);
@@ -169,12 +171,12 @@ export function HomeView({
             />
 
             {/* Personalization Card */}
-            <div className="yy-card px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
+            <div data-personalization-disabled={!settings.personalizationEnabled} className="yy-card px-4 py-4 sm:px-5 sm:py-5 flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-lg bg-[var(--bg-subtle)] p-1.5 text-[var(--text-secondary)]"><PersonalizationIcon className="size-4" /></span>
-                  <span className="text-[25px] font-bold tracking-tight text-[var(--text-primary)]">
-                    {settings.personalizationEnabled ? `${stats.personalizationPercent}%` : 'Off'}
+                  <span className="yy-personalization-score text-[25px] font-bold tracking-tight text-[var(--text-primary)]">
+                    {stats.personalizationPercent}%
                   </span>
                 </div>
                 <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
@@ -182,15 +184,15 @@ export function HomeView({
                 </p>
                 <button
                   type="button"
-                  onClick={() => onOpenModal('personalization')}
-                  className="mt-4 px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
+                  onClick={settings.personalizationEnabled ? () => onOpenModal('personalization') : onEnablePersonalization}
+                  className="yy-personalization-action mt-4 px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
                 >
-                  View report
+                  {settings.personalizationEnabled ? 'View report' : 'Enable'}
                 </button>
               </div>
-              <button type="button" aria-label="Open personalization settings" onClick={() => onOpenModal('personalization')} className="yy-personalization-chart-button w-[34%] max-w-[210px] shrink-0 self-center rounded-full">
+              <div className="w-[34%] max-w-[210px] shrink-0 self-center">
                 <PersonalizationChart sectors={stats.categoryBreakdown} size={210} />
-              </button>
+              </div>
             </div>
           </div>
 

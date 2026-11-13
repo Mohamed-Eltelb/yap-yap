@@ -1251,6 +1251,7 @@ export function App() {
               setModalOpen(true);
             }}
             onStartDictation={(mode) => void triggerDictationMode(mode)}
+            onEnablePersonalization={() => updateSettings({ personalizationEnabled: true })}
             onDismissPromoCard={() => updateSettings({ dismissedPromoCard: true })}
           />
         )}
