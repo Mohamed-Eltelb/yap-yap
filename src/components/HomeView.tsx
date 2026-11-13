@@ -202,7 +202,7 @@ export function HomeView({
           </div>
 
           {/* Right Rail matching Images 1 & 13 */}
-          <div className="w-full min-[1080px]:w-[188px] shrink-0 space-y-3 pt-1">
+          <div className="yy-home-rail w-full min-[1080px]:w-[188px] shrink-0 space-y-3 pt-1">
             {/* Shortcuts Cheatsheet Card */}
             <div className="yy-card p-3.5 space-y-3">
               <div>

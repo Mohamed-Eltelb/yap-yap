@@ -356,7 +356,7 @@ export function HistoryView({
                                 <button
                                   type="button"
                                   onClick={() => handleSaveEdit(item.id)}
-                                  className="p-1.5 rounded-lg bg-[var(--accent-blue)] text-white"
+                                  className="p-1.5 rounded-lg bg-[var(--accent-blue-fill)] text-white"
                                   title="Save transcript"
                                 >
                                   <Check className="w-3.5 h-3.5" />

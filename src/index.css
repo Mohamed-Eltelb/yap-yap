@@ -9,15 +9,19 @@
   --bg-active-nav: #e7e7ea;
   --bg-modal: #ffffff;
   --bg-modal-sidebar: #f7f7f8;
+  --bg-modal-active-nav: var(--bg-active-nav);
+  --bg-modal-backdrop: rgb(0 0 0 / 45%);
   --bg-input: #ffffff;
   --bg-subtle: #f4f4f6;
   --bg-keycap: #ffffff;
+  --bg-switch-off: var(--color-zinc-300);
   --border-subtle: rgba(0, 0, 0, 0.065);
   --border-strong: rgba(0, 0, 0, 0.12);
   --text-primary: #141416;
   --text-secondary: #71717a;
   --text-muted: #9ca3af;
   --accent-blue: #1d64f2;
+  --accent-blue-fill: var(--accent-blue);
   --accent-blue-hover: #1556d8;
   --btn-dark-bg: #18181b;
   --btn-dark-text: #ffffff;
@@ -35,37 +39,45 @@
 }
 
 html.dark {
-  --bg-main: #1b1b1d;
-  --bg-sidebar: #232326;
-  --bg-card: #29292c;
-  --bg-card-solid: #29292c;
-  --bg-hover: #323236;
-  --bg-active-nav: #343438;
-  --bg-modal: #2e2e31;
-  --bg-modal-sidebar: #27272a;
-  --bg-input: #232326;
-  --bg-subtle: #333337;
-  --bg-keycap: #36363a;
-  --border-subtle: rgba(255, 255, 255, 0.075);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --accent-blue: #2f6feb;
-  --accent-blue-hover: #2563eb;
-  --btn-dark-bg: #f4f4f5;
-  --btn-dark-text: #18181b;
-  --heatmap-0: #333338;
-  --heatmap-1: #2b3a59;
-  --heatmap-2: #365699;
-  --heatmap-3: #4b78ee;
-  --heatmap-4: #5e8eff;
-  --hatch-a: #2c2c30;
-  --hatch-b: #38383d;
-  --radial-track: #343438;
+  --bg-main: #242121;
+  --bg-sidebar: #302e2e;
+  --bg-card: #3c3b3b;
+  --bg-card-solid: #3c3b3b;
+  --bg-hover: #4c4c4c;
+  --bg-active-nav: #3e3c3c;
+  --bg-modal: #3c3b3b;
+  --bg-modal-sidebar: #424242;
+  --bg-modal-active-nav: #4c4c4c;
+  --bg-modal-backdrop: rgb(0 0 0 / 50%);
+  --bg-input: #3c3b3b;
+  --bg-subtle: #454444;
+  --bg-keycap: #3c3b3b;
+  --bg-switch-off: #595858;
+  --border-subtle: rgb(242 241 240 / 6%);
+  --border-strong: rgb(242 241 240 / 11%);
+  --text-primary: #f2f1f0;
+  --text-secondary: #a9a8a7;
+  --text-muted: #a29f9e;
+  --accent-blue: #89a5ff;
+  --accent-blue-fill: #4269e6;
+  --accent-blue-hover: #3b5fd3;
+  --btn-dark-bg: #f2f1f0;
+  --btn-dark-text: #242121;
+  --heatmap-0: #454444;
+  --heatmap-1: #3a4462;
+  --heatmap-2: #394e89;
+  --heatmap-3: #3656ae;
+  --heatmap-4: #658aff;
+  --hatch-a: #3c3b3b;
+  --hatch-b: #454444;
+  --radial-track: #454444;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
-  --mesh-bg: radial-gradient(ellipse 65% 42% at 45% 8%, rgba(45, 55, 72, 0.28) 0%, rgba(27, 27, 29, 0) 75%);
+  --mesh-bg: radial-gradient(ellipse 60% 60% at 42% 43%, #000 35%, transparent 88%);
+}
+
+html.dark .yy-home-rail {
+  --bg-card: var(--bg-sidebar);
 }
 
 * {
@@ -250,6 +262,10 @@ textarea,
   background: var(--bg-input);
   font-size: 12.5px;
   font-weight: 500;
+}
+
+.dark .yy-shortcut-add:not(:hover) {
+  color: var(--text-secondary);
 }
 
 .yy-shortcut-remove:hover,

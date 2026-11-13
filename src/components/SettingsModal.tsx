@@ -73,7 +73,7 @@ function Toggle({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full transition-colors ${
-        checked ? 'bg-[var(--accent-blue)]' : 'bg-zinc-300 dark:bg-zinc-600'
+        checked ? 'bg-[var(--accent-blue-fill)]' : 'bg-[var(--bg-switch-off)]'
       }`}
     >
       <span
@@ -319,7 +319,7 @@ export function SettingsModal({
     <dialog
       ref={dialogRef}
       aria-label="Yap Yap settings"
-      className="m-auto w-[calc(100%-2rem)] max-w-[860px] overflow-visible bg-transparent backdrop:bg-black/45 backdrop:backdrop-blur-[1.5px]"
+      className="m-auto w-[calc(100%-2rem)] max-w-[860px] overflow-visible bg-transparent backdrop:bg-[var(--bg-modal-backdrop)] backdrop:backdrop-blur-[1.5px]"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -343,7 +343,7 @@ export function SettingsModal({
                 onClick={() => onChangeTab(item.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] text-[13px] font-medium transition-colors ${
                   active
-                    ? 'bg-[var(--bg-active-nav)] text-[var(--text-primary)]'
+                    ? 'bg-[var(--bg-modal-active-nav)] text-[var(--text-primary)]'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
                 }`}
               >

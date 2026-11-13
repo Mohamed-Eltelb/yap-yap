@@ -148,7 +148,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onOpenModal('providers')}
-            className="w-full py-2 rounded-full bg-[var(--accent-blue)] hover:bg-[var(--accent-blue-hover)] text-white text-[13px] font-semibold transition-colors shadow-xs"
+            className="w-full py-2 rounded-full bg-[var(--accent-blue-fill)] hover:bg-[var(--accent-blue-hover)] text-white text-[13px] font-semibold transition-colors shadow-xs"
           >
             API Keys
           </button>
