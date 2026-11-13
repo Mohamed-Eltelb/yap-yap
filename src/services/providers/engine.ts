@@ -1,3 +1,4 @@
+import type { HudAction } from '../../../electron/hudActions';
 import { DictationMode, PersonalizationCategory, ProviderConfig } from '../../types/app';
 import { PROVIDER_CATALOG } from './catalog';
 
@@ -24,21 +25,16 @@ declare global {
         ask: string[][];
       }) => Promise<boolean>;
       setShortcutEditorOpen: (open: boolean) => void;
+      preparePaste: () => void;
       pasteText: (text: string) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;
-      sendHudAction: (action: {
-        type: 'stop' | 'cancel' | 'dismiss' | 'copy';
-        text?: string;
-      }) => void;
+      sendHudAction: (action: HudAction) => void;
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
       onHudState: (cb: (state: unknown) => void) => () => void;
       onHudAction: (
-        cb: (action: {
-          type: 'stop' | 'cancel' | 'dismiss' | 'copy';
-          text?: string;
-        }) => void
+        cb: (action: HudAction) => void
       ) => () => void;
       loadStore: () => Promise<Record<string, unknown> | null>;
       saveStore: (data: Record<string, unknown>) => Promise<void>;
@@ -413,6 +409,7 @@ export async function processTranscriptWithLlm(
   provider: ProviderConfig,
   options: {
     targetLanguages: string[];
+    targetLanguage?: string;
     dictionaryWords: string[];
     smartCleanup: boolean;
     category?: PersonalizationCategory;
@@ -452,9 +449,12 @@ export async function processTranscriptWithLlm(
       styleClause;
   } else if (mode === 'translate') {
     const targets = options.targetLanguages.length ? options.targetLanguages : ['English'];
-    const primaryTarget = targets[0];
+    const primaryTarget = options.targetLanguage ?? targets[0];
+    const fallback = !options.targetLanguage && targets.length > 1
+      ? ` If the speech is already in ${primaryTarget}, translate into another configured target language (${targets.slice(1).join(', ')}).`
+      : '';
     systemPrompt =
-      `You are Yap Yap in Translate mode. Translate the user's dictated speech naturally and accurately into ${primaryTarget}. If the speech is already in ${primaryTarget} and another target language is configured (${targets.join(', ')}), translate into the other target language. Output ONLY the translated text.` +
+      `You are Yap Yap in Translate mode. Translate the user's dictated speech naturally and accurately into ${primaryTarget}.${fallback} Output ONLY the translated text.` +
       dictClause;
   } else if (mode === 'ask') {
     systemPrompt =

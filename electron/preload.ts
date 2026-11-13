@@ -1,3 +1,4 @@
+import type { HudAction } from './hudActions';
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('yapyap', {
@@ -15,12 +16,13 @@ contextBridge.exposeInMainWorld('yapyap', {
     ask: string[][];
   }) => ipcRenderer.invoke('shortcuts:update', shortcuts),
   setShortcutEditorOpen: (open: boolean) => ipcRenderer.send('shortcuts:editor', open),
+  preparePaste: () => ipcRenderer.send('clipboard:prepare-paste'),
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>
     ipcRenderer.send('hud:toggle', { show, state }),
   hudReady: () => ipcRenderer.send('hud:ready'),
-  sendHudAction: (action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }) =>
+  sendHudAction: (action: HudAction) =>
     ipcRenderer.send('hud:action', action),
   onTriggerMode: (cb: (mode: 'dictate' | 'translate' | 'ask') => void) => {
     const handler = (_e: Electron.IpcRendererEvent, mode: 'dictate' | 'translate' | 'ask') =>
@@ -34,11 +36,11 @@ contextBridge.exposeInMainWorld('yapyap', {
     return () => ipcRenderer.removeListener('hud:state', handler);
   },
   onHudAction: (
-    cb: (action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }) => void
+    cb: (action: HudAction) => void
   ) => {
     const handler = (
       _e: Electron.IpcRendererEvent,
-      action: { type: 'stop' | 'cancel' | 'dismiss' | 'copy'; text?: string }
+      action: HudAction
     ) => cb(action);
     ipcRenderer.on('hud:action', handler);
     return () => ipcRenderer.removeListener('hud:action', handler);

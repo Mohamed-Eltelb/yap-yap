@@ -1,159 +1,166 @@
-import {
-  Check,
-  Copy,
-  Languages,
-  Loader2,
-  Mic,
-  Sparkles,
-  Square,
-  X,
-} from 'lucide-react';
-import { DictationMode } from '../types/app';
+import { useEffect, useState } from 'react';
+import { Check, ChevronsUpDown, Copy, Mic, Sparkles, X } from 'lucide-react';
+import type { AppearanceMode, DictationMode } from '../types/app';
+import { YapLogo } from './YapLogo';
 
 export interface HudState {
   status: 'idle' | 'recording' | 'processing' | 'result' | 'error';
   mode: DictationMode;
   levels: number[];
-  elapsedMs: number;
   resultText?: string;
+  questionText?: string;
   errorText?: string;
-  providerLabel?: string;
+  targets?: string[];
+  targetLanguage?: string;
+  appearance?: AppearanceMode;
 }
 
 interface Props {
   hud: HudState;
   onStop: () => void;
   onCancel: () => void;
+  onRetry: () => void;
+  onSelectTarget: (target: string) => void;
+  onEditTargets: () => void;
   onCopyResult: (text: string) => void;
   onDismissResult: () => void;
 }
 
-function formatTimer(ms: number): string {
-  const secs = Math.floor(ms / 1000);
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
+const bars = [0.22, 0.37, 0.49, 0.67, 0.79, 1, 0.75, 0.55, 0.4, 0.32, 0.2];
 
 export function DictationHud({
   hud,
   onStop,
   onCancel,
+  onRetry,
+  onSelectTarget,
+  onEditTargets,
   onCopyResult,
   onDismissResult,
 }: Props) {
+  const [showTargets, setShowTargets] = useState(false);
+  useEffect(() => {
+    if (hud.status !== 'recording' || hud.mode !== 'translate') setShowTargets(false);
+  }, [hud.status, hud.mode]);
+
   if (hud.status === 'idle') return null;
 
-  const modeBadge =
-    hud.mode === 'dictate'
-      ? { label: 'Dictate', icon: <Mic className="w-3.5 h-3.5 text-sky-400" /> }
-      : hud.mode === 'translate'
-      ? { label: 'Translate', icon: <Languages className="w-3.5 h-3.5 text-emerald-400" /> }
-      : { label: 'Ask anything', icon: <Sparkles className="w-3.5 h-3.5 text-violet-400" /> };
+  const { questionText, resultText } = hud;
+  const targets = hud.targets ?? [];
+  const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
+    ? hud.targetLanguage : targets[0] ?? 'English';
 
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2.5 pointer-events-auto">
-      {/* Floating Result / Error Card */}
-      {(hud.status === 'result' || hud.status === 'error') && (
-        <div className="w-[380px] max-w-[92vw] rounded-2xl bg-[#18181b]/95 text-white border border-white/12 shadow-2xl p-4 backdrop-blur-md">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-zinc-300">
-              {modeBadge.icon}
-              <span>{modeBadge.label}</span>
-              {hud.providerLabel && (
-                <span className="text-zinc-500 font-normal">· {hud.providerLabel}</span>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={onDismissResult}
-              className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/10"
+    <div className="yy-hud" data-mode={hud.mode}>
+      {hud.status === 'recording' && (
+        <>
+          {hud.mode === 'ask' && <div className="yy-hud-mode">Ask anything</div>}
+          {hud.mode === 'translate' && (
+            <div
+              className="yy-hud-mode yy-hud-translate"
+              onMouseEnter={() => setShowTargets(true)}
+              onMouseLeave={() => setShowTargets(false)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setShowTargets(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && showTargets) {
+                  event.stopPropagation();
+                  event.currentTarget.querySelector('button')?.focus();
+                  setShowTargets(false);
+                }
+              }}
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {hud.status === 'error' ? (
-            <p className="text-[12.5px] text-red-400 leading-relaxed">
-              {hud.errorText}
-            </p>
-          ) : (
-            <>
-              <p
-                dir="auto"
-                className="text-[13px] text-zinc-100 leading-relaxed max-h-44 overflow-y-auto"
-              >
-                {hud.resultText}
-              </p>
-              <div className="flex items-center justify-end gap-2 mt-3">
-                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 mr-auto">
-                  <Check className="w-3 h-3" />
-                  <span>Copied &amp; saved</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => hud.resultText && onCopyResult(hud.resultText)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-zinc-900 text-[11.5px] font-semibold hover:bg-zinc-200 transition-colors"
-                >
-                  <Copy className="w-3 h-3" />
-                  <span>Copy</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Sleek Floating Pill Capsule */}
-      {(hud.status === 'recording' || hud.status === 'processing') && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#141416]/95 text-white border border-white/12 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center gap-1.5 text-[12px] font-semibold pr-1 border-r border-white/10">
-            {modeBadge.icon}
-            <span>{modeBadge.label}</span>
-          </div>
-
-          {hud.status === 'recording' ? (
-            <>
-              {/* Live Waveform Bars */}
-              <div className="flex items-center gap-[3px] h-5 px-1">
-                {hud.levels.map((lvl, idx) => (
-                  <span
-                    key={idx}
-                    style={{ height: `${Math.round(4 + lvl * 16)}px` }}
-                    className="w-[2.5px] rounded-full bg-white/90 transition-all duration-75"
-                  />
-                ))}
-              </div>
-
-              <span className="text-[11.5px] text-zinc-400 tabular-nums w-9 text-center">
-                {formatTimer(hud.elapsedMs)}
-              </span>
-
+              <span>Translating to</span>
               <button
                 type="button"
-                onClick={onStop}
-                title="Stop & Transcribe"
-                className="w-7 h-7 rounded-full bg-[#1d64f2] hover:bg-[#1556d8] flex items-center justify-center transition-colors"
+                className="yy-hud-target"
+                aria-expanded={showTargets}
+                onFocus={(event) => {
+                  if (event.currentTarget.matches(':focus-visible')) setShowTargets(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setShowTargets(true);
+                  }
+                }}
               >
-                <Square className="w-3 h-3 fill-white" />
+                <span>{selectedTarget}</span><ChevronsUpDown size={11} aria-hidden="true" />
               </button>
-
-              <button
-                type="button"
-                onClick={onCancel}
-                title="Cancel"
-                className="w-6 h-6 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 px-2 text-[12.5px] text-zinc-300">
-              <Loader2 className="w-4 h-4 animate-spin text-[#4b8bff]" />
-              <span>Processing with {hud.providerLabel ?? 'AI'}…</span>
+              {showTargets && (
+                <div className="yy-hud-targets" role="group" aria-label="Translation target">
+                  <button type="button" className="yy-hud-edit-targets" onClick={() => {
+                    setShowTargets(false);
+                    onEditTargets();
+                  }}>Add another language</button>
+                  {targets.map((target) => (
+                    <button key={target} type="button" aria-pressed={target === selectedTarget} onClick={(event) => {
+                      event.currentTarget.closest('.yy-hud-translate')?.querySelector('button')?.focus();
+                      setShowTargets(false);
+                      onSelectTarget(target);
+                    }}>{target}</button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+          <div className="yy-hud-pill" role="group" aria-label="Recording controls">
+            <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel}>
+              <X size={15} aria-hidden="true" />
+            </button>
+            <div className="yy-hud-wave" aria-hidden="true">
+              {bars.map((weight, index) => {
+                const level = hud.levels[Math.floor(index * hud.levels.length / bars.length)] ?? 0;
+                return <span key={index} style={{ height: `${2 + Math.min(1, Math.max(0, level)) * weight * 16}px` }} />;
+              })}
+            </div>
+            <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}>
+              <Check size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </>
+      )}
+      {hud.status === 'processing' && (
+        <div className="yy-hud-thinking" role="status">
+          <span>Thinking</span>
         </div>
+      )}
+      {hud.status === 'result' && hud.mode === 'ask' && (
+        <section className="yy-hud-answer" aria-label="Ask anything result">
+          <header className="yy-hud-answer-brand">
+            <span><YapLogo className="size-5" />Yap Yap</span>
+            <button type="button" className="yy-hud-icon" aria-label="Close answer" onClick={onDismissResult}><X size={17} /></button>
+          </header>
+          {questionText && (
+            <div className="yy-hud-question">
+              <Mic size={15} aria-hidden="true" />
+              <p dir="auto">{questionText}</p>
+              <button type="button" className="yy-hud-icon" aria-label="Copy question" onClick={() => onCopyResult(questionText)}><Copy size={15} /></button>
+            </div>
+          )}
+          <div className="yy-hud-answer-card">
+            <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
+              {resultText && <button type="button" className="yy-hud-icon" aria-label="Copy answer" onClick={() => onCopyResult(resultText)}><Copy size={15} /></button>}
+            </header>
+            <p dir="auto">{resultText}</p>
+          </div>
+        </section>
+      )}
+      {(hud.status === 'error' || (hud.status === 'result' && hud.mode !== 'ask')) && (
+        <section className="yy-hud-message" aria-label={hud.status === 'error' ? 'Recording error' : 'Recording result'}>
+          <header>
+            <span>{hud.mode === 'translate' ? 'Translate' : hud.mode === 'ask' ? 'Ask anything' : 'Dictate'}</span>
+            <button type="button" className="yy-hud-icon" aria-label="Dismiss" onClick={onDismissResult}><X size={16} /></button>
+          </header>
+          <p dir="auto" role={hud.status === 'error' ? 'alert' : undefined}>{hud.status === 'error' ? hud.errorText : resultText}</p>
+          {hud.status === 'error' && (
+            <button type="button" className="yy-hud-retry" onClick={onRetry}>Try again</button>
+          )}
+          {hud.status === 'result' && resultText && (
+            <button type="button" className="yy-hud-icon" aria-label="Copy result" onClick={() => onCopyResult(resultText)}><Copy size={15} /></button>
+          )}
+        </section>
       )}
     </div>
   );

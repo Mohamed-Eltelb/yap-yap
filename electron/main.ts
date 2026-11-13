@@ -17,11 +17,14 @@ import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, stopModi
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
+import type { HudAction } from './hudActions';
+import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
 let hudReady = false;
-let hudPayload: { show: boolean; state?: unknown } = { show: false };
+let hudPayload: { show: boolean; state?: { status?: string; mode?: string } } = { show: false };
+let hudDisplayId: number | undefined;
 let tray: Tray | null = null;
 let isQuitting = false;
 let quitAfterAudioRestore = false;
@@ -97,12 +100,9 @@ function createMainWindow(): void {
 }
 
 function createHudWindow(): void {
-  const hudWidth = 420;
-  const hudHeight = 300;
-
   hudWindow = new BrowserWindow({
-    width: hudWidth,
-    height: hudHeight,
+    width: 148,
+    height: 54,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -144,19 +144,37 @@ function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
   if (!hudPayload.show) {
     hudWindow.hide();
+    hudDisplayId = undefined;
     return;
   }
 
-  hudWindow.webContents.send('hud:state', hudPayload.state);
-  if (!hudWindow.isVisible()) {
-    const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const [width, height] = hudWindow.getSize();
-    hudWindow.setPosition(
-      workArea.x + Math.round((workArea.width - width) / 2),
-      workArea.y + workArea.height - height - 18,
-    );
-    hudWindow.showInactive();
+  const state = hudPayload.state;
+  const display = screen.getAllDisplays().find((item) => item.id === hudDisplayId) ??
+    screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  hudDisplayId = display.id;
+  const { workArea } = display;
+  let width = 148;
+  let height = 54;
+  if (state?.status === 'recording' && state.mode === 'ask') height = 94;
+  if (state?.status === 'recording' && state.mode === 'translate') {
+    width = 290;
+    height = 215;
   }
+  if (state?.status === 'error' || state?.status === 'result') {
+    const answer = state.status === 'result' && state.mode === 'ask';
+    width = answer ? 620 : 360;
+    height = answer ? 334 : 230;
+  }
+  width = Math.min(width, workArea.width);
+  height = Math.min(height, workArea.height - 12);
+  const x = workArea.x + Math.round((workArea.width - width) / 2);
+  const y = workArea.y + workArea.height - height - 12;
+  const bounds = hudWindow.getBounds();
+  if (bounds.width !== width || bounds.height !== height || bounds.x !== x || bounds.y !== y) {
+    hudWindow.setBounds({ x, y, width, height });
+  }
+  hudWindow.webContents.send('hud:state', state);
+  if (!hudWindow.isVisible()) hudWindow.showInactive();
 }
 
 function createTray(): void {
@@ -240,22 +258,19 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   }
 }
 
-function simulatePaste(): Promise<boolean> {
+function pasteIntoFocusedField(): Promise<boolean> {
+  if (process.platform === 'win32') return pasteIntoWindowsField(pasteWithKeyboard);
+
+  // These commands can send the shortcut but cannot confirm insertion.
   return new Promise((resolve) => {
     if (process.platform === 'darwin') {
       exec(
         'osascript -e \'tell application "System Events" to keystroke "v" using command down\'',
-        (err) => resolve(!err)
+        { timeout: 5000 },
+        () => resolve(false)
       );
-    } else if (process.platform === 'win32') {
-      try {
-        pasteWithKeyboard();
-        resolve(true);
-      } catch {
-        resolve(false);
-      }
     } else {
-      exec('xdotool key --clearmodifiers ctrl+v', (err) => resolve(!err));
+      exec('xdotool key --clearmodifiers ctrl+v', { timeout: 5000 }, () => resolve(false));
     }
   });
 }
@@ -298,9 +313,13 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  ipcMain.handle('clipboard:paste', async (_e, text: string) => {
+  ipcMain.handle('clipboard:paste', async (event, text: string) => {
+    if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
     await clipboard.writeText(text);
-    return simulatePaste();
+    return pasteIntoFocusedField();
+  });
+  ipcMain.on('clipboard:prepare-paste', (event) => {
+    if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();
   });
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
@@ -319,11 +338,16 @@ app.whenReady().then(() => {
     updateHudWindow();
   });
 
-  ipcMain.on('hud:action', async (event, action: { type: string; text?: string }) => {
+  ipcMain.on('hud:action', async (event, action: HudAction) => {
     if (event.sender !== hudWindow?.webContents) return;
     if (action.type === 'copy' && typeof action.text === 'string') {
       await clipboard.writeText(action.text).catch(console.warn);
       return;
+    }
+    if (action.type === 'edit-targets') {
+      if (mainWindow?.isMinimized()) mainWindow.restore();
+      mainWindow?.show();
+      mainWindow?.focus();
     }
     mainWindow?.webContents.send('hud:action', action);
   });

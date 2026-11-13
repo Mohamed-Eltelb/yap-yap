@@ -43,6 +43,8 @@ import { SelectMenu } from './SelectMenu';
 
 interface Props {
   open: boolean;
+  openTranslationTargets: boolean;
+  onTranslationTargetsOpened: () => void;
   activeTab: SettingsModalTab;
   onChangeTab: (tab: SettingsModalTab) => void;
   onClose: () => void;
@@ -110,6 +112,8 @@ const shortcutDescriptions = {
 
 export function SettingsModal({
   open,
+  openTranslationTargets,
+  onTranslationTargetsOpened,
   activeTab,
   onChangeTab,
   onClose,
@@ -152,6 +156,12 @@ export function SettingsModal({
       if (opener instanceof HTMLElement) opener.focus();
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !openTranslationTargets) return;
+    setLanguageDialog('targets');
+    onTranslationTargetsOpened();
+  }, [open, openTranslationTargets, onTranslationTargetsOpened]);
 
   const checkForUpdates = async () => {
     if (!window.yapyap) return;

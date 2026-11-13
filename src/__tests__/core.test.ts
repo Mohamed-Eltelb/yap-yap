@@ -387,6 +387,29 @@ describe('Multi-Provider Engine', () => {
     expect(body.temperature).toBeUndefined();
   });
 
+  it('honors a HUD translation target even when the source is already in that language', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = createDefaultProviders().openai;
+    provider.apiKey = 'sk-test';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content: 'Hello' } }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await processTranscriptWithLlm('Hello', 'translate', provider, {
+      targetLanguages: ['Arabic (Egypt)', 'English (US)'],
+      targetLanguage: 'English (US)',
+      dictionaryWords: [],
+      smartCleanup: true,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.messages[0].content).toContain('into English (US)');
+    expect(body.messages[0].content).not.toContain('Arabic (Egypt)');
+  });
+
   it('processes Ask anything through Anthropic Claude messages API with category instructions', async () => {
     vi.stubGlobal('window', undefined);
     const providers = createDefaultProviders();

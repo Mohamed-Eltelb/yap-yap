@@ -41,6 +41,7 @@ import {
   startAudioRecording,
 } from './utils/audioRecorder';
 import { playInteractionSound } from './utils/sounds';
+import { deliverDictationResult } from './utils/dictationResult';
 
 function normalizeKey(e: KeyboardEvent): string {
   if (e.code === 'AltRight') return 'Right Alt';
@@ -69,6 +70,7 @@ export function App() {
 
   const [activeNav, setActiveNav] = useState<ActiveNav>('home');
   const [modalOpen, setModalOpen] = useState(false);
+  const [showHudTargetSettings, setShowHudTargetSettings] = useState(false);
   const [modalTab, setModalTab] = useState<SettingsModalTab>('providers');
   const [shareOpen, setShareOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -78,15 +80,14 @@ export function App() {
     status: 'idle',
     mode: 'dictate',
     levels: Array(20).fill(0.1),
-    elapsedMs: 0,
   });
 
   const recorderRef = useRef<RecorderSession | null>(null);
   const recorderStartRef = useRef<symbol | null>(null);
   const mutedForRecording = useRef(false);
-  const timerRef = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
   const hudRef = useRef<HudState>(hud);
+  const openedTargetsDuringRecording = useRef(false);
   hudRef.current = hud;
 
   const isHudRoute =
@@ -120,7 +121,7 @@ export function App() {
 
   // Apply light/dark theme class and listen for live OS system theme changes
   useEffect(() => {
-    const mode = appState.settings.appearance;
+    const mode = isHudRoute ? hud.appearance ?? 'system' : appState.settings.appearance;
     const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
 
     const applyTheme = () => {
@@ -133,7 +134,7 @@ export function App() {
       mql.addEventListener('change', applyTheme);
       return () => mql.removeEventListener('change', applyTheme);
     }
-  }, [appState.settings.appearance]);
+  }, [appState.settings.appearance, hud.appearance, isHudRoute]);
 
   // Sync Electron global shortcuts + login item
   useEffect(() => {
@@ -163,8 +164,12 @@ export function App() {
   useEffect(() => {
     if (isHudRoute) return;
     const visible = hud.status !== 'idle' && useFloatingHud;
-    window.yapyap?.toggleHud?.(visible, hud);
-  }, [hud, isHudRoute, useFloatingHud]);
+    window.yapyap?.toggleHud?.(visible, {
+      ...hud,
+      targets: appState.settings.translationTargets,
+      appearance: appState.settings.appearance,
+    });
+  }, [hud, isHudRoute, useFloatingHud, appState.settings.translationTargets, appState.settings.appearance]);
 
   const updateSettings = useCallback((patch: Partial<SettingsState>) => {
     setAppState((prev) => {
@@ -227,13 +232,6 @@ export function App() {
     [appState.history, appState.dictionary.length]
   );
 
-  const stopRecordingTimer = () => {
-    if (timerRef.current !== null) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
   const restoreAudioMute = useCallback(() => {
     if (!mutedForRecording.current) return;
     mutedForRecording.current = false;
@@ -247,8 +245,13 @@ export function App() {
       mode: DictationMode,
       audioDataUrl?: string,
       audioMimeType?: string,
-      existingItemId?: string
+      existingItemId?: string,
+      targetLanguage?: string,
+      allowAutoPaste = true
     ) => {
+      retryAudioRef.current = null;
+      const autoPaste = mode !== 'ask' && allowAutoPaste && appState.settings.autoPaste;
+      if (autoPaste) window.yapyap?.preparePaste?.();
       let sttProviderId = appState.settings.activeSttProvider;
       let sttProvider = appState.providers[sttProviderId];
       if (
@@ -272,8 +275,6 @@ export function App() {
         status: 'processing',
         mode,
         levels: Array(20).fill(0.1),
-        elapsedMs: durationMs,
-        providerLabel: sttProvider.name,
       });
 
       try {
@@ -284,7 +285,14 @@ export function App() {
         });
 
         if (!rawText) {
-          throw new Error('No speech was detected in the recording.');
+          playInteractionSound('error', appState.settings.interactionSounds);
+          setHud({
+            status: 'error',
+            mode,
+            levels: [],
+            errorText: 'No speech was detected in the recording.',
+          });
+          return;
         }
 
         let finalText = rawText;
@@ -326,6 +334,7 @@ export function App() {
               llmProvider,
               {
                 targetLanguages: appState.settings.translationTargets,
+                targetLanguage,
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
                 category: initialCategory,
@@ -386,7 +395,7 @@ export function App() {
             text: finalText,
             answer,
             targetLanguage:
-              mode === 'translate' ? appState.settings.translationTargets[0] : undefined,
+              mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
             durationMs,
             wordCount: words,
             wpm,
@@ -421,41 +430,36 @@ export function App() {
           });
         }
 
-        // Copy & optionally auto-paste
-        if (appState.settings.autoPaste && window.yapyap?.pasteText) {
-          await window.yapyap.pasteText(finalText);
-        } else if (window.yapyap) {
-          await window.yapyap.copyText(finalText);
-        } else {
-          await navigator.clipboard?.writeText(finalText);
-        }
+        const desktop = window.yapyap;
+        const pasted = await deliverDictationResult(
+          mode,
+          finalText,
+          autoPaste ? desktop?.pasteText : undefined,
+          async (text) => {
+            if (desktop) await desktop.copyText(text);
+            else await navigator.clipboard?.writeText(text);
+          },
+        );
 
         playInteractionSound('stop', appState.settings.interactionSounds);
 
         setHud({
-          status: 'result',
+          status: pasted ? 'idle' : 'result',
           mode,
           levels: Array(20).fill(0.1),
-          elapsedMs: durationMs,
           resultText: finalText,
-          providerLabel: appState.providers[usedProviderId].name,
+          questionText: mode === 'ask' ? rawText : undefined,
         });
-
-        window.setTimeout(() => {
-          setHud((curr) =>
-            curr.status === 'result' && curr.resultText === finalText
-              ? { ...curr, status: 'idle' }
-              : curr
-          );
-        }, mode === 'ask' ? 12000 : 4500);
       } catch (err) {
+        retryAudioRef.current = [
+          audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste,
+        ];
         playInteractionSound('error', appState.settings.interactionSounds);
         const message = err instanceof Error ? err.message : 'Transcription failed';
         setHud({
           status: 'error',
           mode,
           levels: Array(20).fill(0.1),
-          elapsedMs: durationMs,
           errorText: message,
         });
       }
@@ -463,40 +467,44 @@ export function App() {
     [appState.dictionary, appState.providers, appState.settings]
   );
 
+  const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
+
   const stopAndProcess = useCallback(async () => {
     const session = recorderRef.current;
     if (!session) return;
     recorderRef.current = null;
-    stopRecordingTimer();
     restoreAudioMute();
-    const currentMode = hudRef.current.mode;
+    const { mode: currentMode, targetLanguage } = hudRef.current;
+    const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
     setHud((current) => ({ ...current, status: 'processing' }));
     try {
       const { blob, durationMs, dataUrl, mimeType } = await session.stop();
-      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType);
+      const targets = appState.settings.translationTargets;
+      const selectedTarget = currentMode === 'translate'
+        ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
+        : undefined;
+      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste);
     } catch (err) {
       playInteractionSound('error', appState.settings.interactionSounds);
       setHud({
         status: 'error',
         mode: currentMode,
         levels: Array(20).fill(0.1),
-        elapsedMs: 0,
         errorText: err instanceof Error ? err.message : 'Recording stopped unexpectedly',
       });
     }
-  }, [appState.settings.interactionSounds, processAudioPipeline, restoreAudioMute]);
+  }, [appState.settings.interactionSounds, appState.settings.translationTargets, processAudioPipeline, restoreAudioMute]);
 
   const cancelRecording = useCallback(() => {
+    retryAudioRef.current = null;
     recorderStartRef.current = null;
     recorderRef.current?.cancel();
     recorderRef.current = null;
-    stopRecordingTimer();
     restoreAudioMute();
     setHud({
       status: 'idle',
       mode: 'dictate',
       levels: Array(20).fill(0.1),
-      elapsedMs: 0,
     });
   }, [restoreAudioMute]);
 
@@ -515,6 +523,7 @@ export function App() {
         return;
       }
       if (hudRef.current.status === 'processing') return;
+      retryAudioRef.current = null;
 
       let sttId = appState.settings.activeSttProvider;
       let sttCfg = appState.providers[sttId];
@@ -544,7 +553,6 @@ export function App() {
               status: 'error',
               mode,
               levels: [],
-              elapsedMs: 0,
               errorText: message,
             });
           }
@@ -554,19 +562,17 @@ export function App() {
 
       const start = Symbol();
       recorderStartRef.current = start;
+      openedTargetsDuringRecording.current = false;
       try {
         if (appState.settings.muteWhenDictating && window.yapyap) {
           mutedForRecording.current = true;
           void window.yapyap.setSystemMute(true).catch(() => showToast('Could not mute system audio.'));
         }
         playInteractionSound('start', appState.settings.interactionSounds);
-        const startTime = Date.now();
         setHud({
           status: 'recording',
           mode,
           levels: Array(20).fill(0.12),
-          elapsedMs: 0,
-          providerLabel: sttCfg.name,
         });
 
         const session = await startAudioRecording(
@@ -583,14 +589,6 @@ export function App() {
           return;
         }
         recorderRef.current = session;
-
-        timerRef.current = window.setInterval(() => {
-          setHud((prev) =>
-            prev.status === 'recording'
-              ? { ...prev, elapsedMs: Date.now() - startTime }
-              : prev
-          );
-        }, 200);
       } catch (err) {
         if (recorderStartRef.current !== start) return;
         restoreAudioMute();
@@ -599,7 +597,6 @@ export function App() {
           status: 'error',
           mode,
           levels: Array(20).fill(0.1),
-          elapsedMs: 0,
           errorText:
             err instanceof Error
               ? `Microphone access error: ${err.message}`
@@ -623,6 +620,40 @@ export function App() {
     ]
   );
 
+  const dismissHud = useCallback(() => {
+    retryAudioRef.current = null;
+    setHud((current) => ({ ...current, status: 'idle' }));
+  }, []);
+
+  const retryHud = useCallback(() => {
+    const current = hudRef.current;
+    if (current.status !== 'error') return;
+    const audio = retryAudioRef.current;
+    if (!audio) {
+      lastTriggerTimeRef.current = 0;
+      void triggerDictationMode(current.mode);
+      return;
+    }
+    hudRef.current = { ...current, status: 'processing' };
+    void processAudioPipeline(...audio);
+  }, [processAudioPipeline, triggerDictationMode]);
+
+  const selectHudTarget = useCallback((target: string) => {
+    const current = hudRef.current;
+    if (current.status !== 'recording' || current.mode !== 'translate' ||
+        !appState.settings.translationTargets.includes(target)) return;
+    hudRef.current = { ...current, targetLanguage: target };
+    setHud((state) => ({ ...state, targetLanguage: target }));
+  }, [appState.settings.translationTargets]);
+
+  const editHudTargets = useCallback(() => {
+    if (hudRef.current.status !== 'recording' || hudRef.current.mode !== 'translate') return;
+    openedTargetsDuringRecording.current = true;
+    setModalTab('settings');
+    setModalOpen(true);
+    setShowHudTargetSettings(true);
+  }, []);
+
   // Listen for Electron global shortcut triggers and HUD actions
   useEffect(() => {
     if (isHudRoute || !hydrated) return;
@@ -633,13 +664,16 @@ export function App() {
     const unsubAction = window.yapyap?.onHudAction?.((action) => {
       if (action.type === 'stop') void stopAndProcess();
       else if (action.type === 'cancel') cancelRecording();
-      else if (action.type === 'dismiss') setHud((h) => ({ ...h, status: 'idle' }));
+      else if (action.type === 'dismiss') dismissHud();
+      else if (action.type === 'retry') retryHud();
+      else if (action.type === 'select-target') selectHudTarget(action.target);
+      else if (action.type === 'edit-targets') editHudTargets();
     });
     return () => {
       unsubTrigger?.();
       unsubAction?.();
     };
-  }, [cancelRecording, hydrated, isHudRoute, modalOpen, stopAndProcess, triggerDictationMode]);
+  }, [cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
@@ -707,7 +741,8 @@ export function App() {
           item.mode,
           item.audioDataUrl,
           item.audioMimeType,
-          item.id
+          item.id,
+          item.targetLanguage
         );
         return;
       } catch {
@@ -736,6 +771,7 @@ export function App() {
         llm,
         {
           targetLanguages: appState.settings.translationTargets,
+          targetLanguage: item.targetLanguage,
           dictionaryWords: appState.dictionary.map((d) => d.word),
           smartCleanup: appState.settings.smartCleanup,
           category: cat,
@@ -930,8 +966,11 @@ export function App() {
     return (
       <DictationHud
         hud={hud}
+        onSelectTarget={(target) => window.yapyap?.sendHudAction?.({ type: 'select-target', target })}
+        onEditTargets={() => window.yapyap?.sendHudAction?.({ type: 'edit-targets' })}
         onStop={() => window.yapyap?.sendHudAction?.({ type: 'stop' })}
         onCancel={() => window.yapyap?.sendHudAction?.({ type: 'cancel' })}
+        onRetry={() => window.yapyap?.sendHudAction?.({ type: 'retry' })}
         onCopyResult={(t) => window.yapyap?.sendHudAction?.({ type: 'copy', text: t })}
         onDismissResult={() => window.yapyap?.sendHudAction?.({ type: 'dismiss' })}
       />
@@ -1024,6 +1063,8 @@ export function App() {
         open={modalOpen}
         activeTab={modalTab}
         onChangeTab={setModalTab}
+        openTranslationTargets={showHudTargetSettings}
+        onTranslationTargetsOpened={() => setShowHudTargetSettings(false)}
         onClose={() => setModalOpen(false)}
         settings={appState.settings}
         onUpdateSettings={updateSettings}
@@ -1043,11 +1084,14 @@ export function App() {
 
       {!useFloatingHud && (
         <DictationHud
-          hud={hud}
+          hud={{ ...hud, targets: appState.settings.translationTargets }}
+          onSelectTarget={selectHudTarget}
+          onEditTargets={editHudTargets}
           onStop={() => void stopAndProcess()}
           onCancel={cancelRecording}
+          onRetry={retryHud}
           onCopyResult={(t) => void handleCopyText(t)}
-          onDismissResult={() => setHud((h) => ({ ...h, status: 'idle' }))}
+          onDismissResult={dismissHud}
         />
       )}
 
