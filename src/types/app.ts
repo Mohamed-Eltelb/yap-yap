@@ -1,3 +1,5 @@
+import type { ShortcutGroup } from '../../electron/shortcutBindings';
+
 export type ProviderId =
   | 'openai'
   | 'groq'
@@ -56,12 +58,6 @@ export interface DictionaryEntry {
   word: string;
   source: 'auto' | 'manual';
   createdAt: string;
-}
-
-export interface ShortcutGroup {
-  dictate: string[][];
-  translate: string[][];
-  ask: string[][];
 }
 
 export interface SettingsState {

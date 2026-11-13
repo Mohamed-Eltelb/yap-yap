@@ -23,6 +23,7 @@ declare global {
         translate: string[][];
         ask: string[][];
       }) => Promise<boolean>;
+      setShortcutEditorOpen: (open: boolean) => void;
       pasteText: (text: string) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;

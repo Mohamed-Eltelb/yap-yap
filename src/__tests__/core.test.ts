@@ -22,6 +22,40 @@ import { assignHistoryIds, parseHistoryImport } from '../services/historyImport'
 import { matchShortcut } from '../../electron/shortcutMatch';
 import { UiohookKey as Key } from 'uiohook-napi';
 
+describe('Saved shortcuts', () => {
+  it('keeps the first assignment and removes repeated chords regardless of key order', () => {
+    const { settings } = getInitialState();
+    const shortcuts = {
+      dictate: [['Right Alt'], ['Left Ctrl', 'K'], ['K', 'Left Ctrl']],
+      translate: [['Right Shift', 'Right Alt'], ['Right Alt']],
+      ask: [['Right Alt', 'Right Shift'], ['Right Alt', 'Space']],
+    };
+    const loaded = sanitizeLoadedState({ settings: { ...settings, shortcuts } });
+
+    expect(loaded.settings.shortcuts).toEqual({
+      dictate: [['Right Alt'], ['Left Ctrl', 'K']],
+      translate: [['Right Shift', 'Right Alt']],
+      ask: [['Right Alt', 'Space']],
+    });
+  });
+
+  it('removes equivalent global accelerators while retaining distinct sided modifier chords', () => {
+    const { settings } = getInitialState();
+    const shortcuts = {
+      dictate: [['Left Shift'], ['Left Ctrl', 'K']],
+      translate: [['Right Shift'], ['K', 'Right Ctrl']],
+      ask: [['Shift'], ['Right Ctrl', 'L']],
+    };
+    const loaded = sanitizeLoadedState({ settings: { ...settings, shortcuts } });
+
+    expect(loaded.settings.shortcuts).toEqual({
+      dictate: [['Left Shift'], ['Left Ctrl', 'K']],
+      translate: [['Right Shift']],
+      ask: [['Right Ctrl', 'L']],
+    });
+  });
+});
+
 describe('Windows AltGr shortcuts', () => {
   const dictate = { keys: [[Key.AltRight]] };
   const translate = { keys: [[Key.AltRight], [Key.ShiftRight]] };

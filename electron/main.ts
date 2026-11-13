@@ -14,6 +14,7 @@ import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, stopModifierShortcuts } from './modifierShortcuts';
+import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 
@@ -24,11 +25,16 @@ let hudPayload: { show: boolean; state?: unknown } = { show: false };
 let tray: Tray | null = null;
 let isQuitting = false;
 let quitAfterAudioRestore = false;
+let shortcutEditorOpen = false;
 
 const isDev = !app.isPackaged;
 
 function getStorePath(): string {
   return path.join(app.getPath('userData'), 'yapyap-store.json');
+}
+
+function syncShortcutSuspension() {
+  globalShortcut.setSuspended(shortcutEditorOpen && mainWindow?.isFocused() === true);
 }
 
 function createMainWindow(): void {
@@ -71,12 +77,20 @@ function createMainWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    shortcutEditorOpen = false;
+    syncShortcutSuspension();
   });
+  mainWindow.on('focus', syncShortcutSuspension);
+  mainWindow.on('blur', syncShortcutSuspension);
   mainWindow.webContents.on('render-process-gone', () => {
+    shortcutEditorOpen = false;
+    syncShortcutSuspension();
     void setRecordingMute(false).catch(console.warn);
   });
   mainWindow.webContents.on('did-start-navigation', (event) => {
     if (event.isMainFrame && !event.isSameDocument) {
+      shortcutEditorOpen = false;
+      syncShortcutSuspension();
       void setRecordingMute(false).catch(console.warn);
     }
   });
@@ -192,38 +206,15 @@ function createTray(): void {
   }
 }
 
-function toElectronAccelerator(keys: string[]): string | null {
-  if (!keys || keys.length === 0) return null;
-  const mapKey = (k: string): string => {
-    const norm = k.trim();
-    if (norm === 'Right Alt' || norm === 'Left Alt' || norm === 'Alt') return 'Alt';
-    if (norm === 'Right Shift' || norm === 'Left Shift' || norm === 'Shift') return 'Shift';
-    if (norm === 'Right Ctrl' || norm === 'Left Ctrl' || norm === 'Ctrl' || norm === 'Control')
-      return 'CommandOrControl';
-    if (norm === 'Cmd' || norm === 'Meta' || norm === 'Command') return 'Super';
-    if (norm === ' ') return 'Space';
-    return norm;
-  };
-
-  const mapped = keys.map(mapKey);
-  const modifiers = new Set(['Alt', 'Shift', 'CommandOrControl', 'Super']);
-  const hasNonModifier = mapped.some((m) => !modifiers.has(m));
-  if (!hasNonModifier) {
-    return null;
-  }
-  return Array.from(new Set(mapped)).join('+');
-}
-
-function registerAppShortcuts(shortcuts: {
-  dictate: string[][];
-  translate: string[][];
-  ask: string[][];
-}): boolean {
+function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
+  const unique = removeDuplicateShortcuts(shortcuts, process.platform);
   globalShortcut.unregisterAll();
+  // Electron requires shortcut handling to be active when adding registrations.
+  globalShortcut.setSuspended(false);
   const modifierShortcuts: Parameters<typeof registerModifierShortcuts>[0] = [];
 
-  const registerGroup = (combos: string[][], mode: 'dictate' | 'translate' | 'ask') => {
-    for (const combo of combos) {
+  for (const mode of shortcutModes) {
+    for (const combo of unique[mode]) {
       const accel = toElectronAccelerator(combo);
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
       if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
@@ -237,17 +228,15 @@ function registerAppShortcuts(shortcuts: {
         // Ignore invalid/taken accelerator
       }
     }
-  };
-
-  registerGroup(shortcuts.dictate, 'dictate');
-  registerGroup(shortcuts.translate, 'translate');
-  registerGroup(shortcuts.ask, 'ask');
+  }
   try {
     registerModifierShortcuts(modifierShortcuts);
     return true;
   } catch (error) {
     console.warn('Could not register modifier-only shortcuts', error);
     return false;
+  } finally {
+    syncShortcutSuspension();
   }
 }
 
@@ -301,6 +290,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
     return registerAppShortcuts(shortcuts);
+  });
+
+  ipcMain.on('shortcuts:editor', (event, open: boolean) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    shortcutEditorOpen = open;
+    syncShortcutSuspension();
   });
 
   ipcMain.handle('clipboard:paste', async (_e, text: string) => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
+import { findShortcutConflict, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
   AlertCircle,
   CheckCircle2,
@@ -95,6 +96,18 @@ function formatKeyName(e: KeyboardEvent): string {
   return e.key.length === 1 ? e.key.toUpperCase() : e.key;
 }
 
+const shortcutLabels = {
+  dictate: 'Dictate',
+  translate: 'Translate',
+  ask: 'Ask anything',
+};
+
+const shortcutDescriptions = {
+  dictate: 'Press to start and stop dictation.',
+  translate: 'Press to start and stop translation.',
+  ask: 'Press to start and stop asking anything.',
+};
+
 export function SettingsModal({
   open,
   activeTab,
@@ -112,13 +125,18 @@ export function SettingsModal({
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
-  const [capturingTarget, setCapturingTarget] = useState<{
-    mode: 'dictate' | 'translate' | 'ask';
-    index: number;
-  } | null>(null);
+  const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
+  const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
+  const shortcutEditorOpen = open && activeTab === 'settings';
+
+  useEffect(() => {
+    if (!shortcutEditorOpen) return;
+    window.yapyap?.setShortcutEditorOpen(true);
+    return () => window.yapyap?.setShortcutEditorOpen(false);
+  }, [shortcutEditorOpen]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -167,6 +185,7 @@ export function SettingsModal({
   useEffect(() => {
     if (!open || activeTab !== 'settings' || !capturingTarget) {
       if (capturingTarget) setCapturingTarget(null);
+      if (!open || activeTab !== 'settings') setShortcutError(null);
       return;
     }
     const pressed = new Set<string>();
@@ -183,15 +202,21 @@ export function SettingsModal({
       if (!pressed.size) return;
       e.preventDefault();
       e.stopPropagation();
+      const combo = [...pressed];
+      const conflict = findShortcutConflict(settings.shortcuts, capturingTarget, combo, window.yapyap?.platform);
+      setCapturingTarget(null);
+      if (conflict) {
+        setShortcutError({ target: capturingTarget, combo });
+        return;
+      }
       const list = [...settings.shortcuts[capturingTarget.mode]];
-      list[capturingTarget.index] = Array.from(pressed);
+      list[capturingTarget.index] = combo;
       onUpdateSettings({
         shortcuts: {
           ...settings.shortcuts,
           [capturingTarget.mode]: list,
         },
       });
-      setCapturingTarget(null);
     };
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
@@ -263,9 +288,15 @@ export function SettingsModal({
     'Development tools': <Code2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
   };
 
-  const removeShortcutSlot = (mode: 'dictate' | 'translate' | 'ask', index: number) => {
+  const startShortcutCapture = (target: ShortcutSlot) => {
+    setShortcutError(null);
+    setCapturingTarget(target);
+  };
+
+  const removeShortcutSlot = (mode: ShortcutSlot['mode'], index: number) => {
     if (mode === 'dictate' && settings.shortcuts.dictate.length <= 1) return;
     setCapturingTarget(null);
+    setShortcutError(null);
     onUpdateSettings({
       shortcuts: {
         ...settings.shortcuts,
@@ -602,86 +633,81 @@ export function SettingsModal({
                   </div>
 
                   <div className="yy-shortcut-list">
-                    {(
-                      [
-                        {
-                          mode: 'dictate',
-                          title: 'Dictate',
-                          desc: 'Press to start and stop dictation.',
-                        },
-                        {
-                          mode: 'translate',
-                          title: 'Translate',
-                          desc: 'Press to start and stop translation.',
-                        },
-                        {
-                          mode: 'ask',
-                          title: 'Ask anything',
-                          desc: 'Press to start and stop asking anything.',
-                        },
-                      ] as const
-                    ).map((item) => {
-                      const combos = settings.shortcuts[item.mode];
-                      const adding = capturingTarget?.mode === item.mode && capturingTarget.index === combos.length;
+                    {shortcutModes.map((mode) => {
+                      const title = shortcutLabels[mode];
+                      const combos = settings.shortcuts[mode];
+                      const rowError = shortcutError?.target.mode === mode ? shortcutError : null;
+                      const activeSlot = capturingTarget ?? rowError?.target;
+                      const adding = activeSlot?.mode === mode && activeSlot.index === combos.length;
                       return (
                         <div
-                          key={item.mode}
+                          key={mode}
                           className="yy-shortcut-row"
                         >
                           <div>
                             <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                              {item.title}
+                              {title}
                             </div>
                             <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                              {item.desc}
+                              {shortcutDescriptions[mode]}
                             </p>
                           </div>
 
                           <div className="yy-shortcut-controls">
-                            {(adding ? [...combos, []] : combos).map((combo, idx) => {
+                            {(adding ? [...combos, rowError?.combo ?? []] : combos).map((combo, idx) => {
                               const isCapturing =
-                                capturingTarget?.mode === item.mode &&
+                                capturingTarget?.mode === mode &&
                                 capturingTarget?.index === idx;
-                              const canRemove = idx < combos.length && (item.mode !== 'dictate' || combos.length > 1);
+                              const canRemove = idx < combos.length && (mode !== 'dictate' || combos.length > 1);
+                              const errorId = rowError?.target.index === idx ? `shortcut-error-${mode}-${idx}` : undefined;
                               return (
-                                <div key={idx} className="yy-shortcut-field" data-capturing={isCapturing}>
-                                  <button
-                                    type="button"
-                                    className="yy-shortcut-edit"
-                                    aria-label={`Edit ${item.title} shortcut ${idx + 1}: ${isCapturing ? 'Press keys' : combo.join(' + ')}`}
-                                    onClick={() => setCapturingTarget({ mode: item.mode, index: idx })}
-                                  >
-                                    {isCapturing ? (
-                                      <span role="status" className="yy-shortcut-prompt">Press keys…</span>
-                                    ) : (
-                                      combo.map((key, ki) => (
-                                        <span key={ki} className="yy-keycap">
-                                          {key}
-                                        </span>
-                                      ))
-                                    )}
-                                  </button>
-                                  {canRemove && (
+                                <div key={idx} className="w-full">
+                                  <div className="yy-shortcut-field" data-capturing={isCapturing}>
                                     <button
                                       type="button"
-                                      aria-label={`Remove ${item.title} shortcut ${idx + 1}`}
-                                      className="yy-shortcut-remove"
-                                      onClick={(event) => {
-                                        const controls = event.currentTarget.parentElement?.parentElement;
-                                        removeShortcutSlot(item.mode, idx);
-                                        controls?.querySelector<HTMLButtonElement>('.yy-shortcut-add')?.focus();
-                                      }}
+                                      className="yy-shortcut-edit"
+                                      aria-label={`Edit ${title} shortcut ${idx + 1}: ${isCapturing ? 'Press keys' : combo.join(' + ')}`}
+                                      aria-describedby={errorId}
+                                      aria-invalid={errorId ? true : undefined}
+                                      onClick={() => startShortcutCapture({ mode, index: idx })}
                                     >
-                                      <X size={16} aria-hidden="true" />
+                                      {isCapturing ? (
+                                        <span role="status" className="yy-shortcut-prompt">Press keys…</span>
+                                      ) : (
+                                        combo.map((key, ki) => (
+                                          <span key={ki} className="yy-keycap">
+                                            {key}
+                                          </span>
+                                        ))
+                                      )}
                                     </button>
+                                    {canRemove && (
+                                      <button
+                                        type="button"
+                                        aria-label={`Remove ${title} shortcut ${idx + 1}`}
+                                        className="yy-shortcut-remove"
+                                        onClick={(event) => {
+                                          const controls = event.currentTarget.closest('.yy-shortcut-controls');
+                                          removeShortcutSlot(mode, idx);
+                                          controls?.querySelector<HTMLButtonElement>('.yy-shortcut-add')?.focus();
+                                        }}
+                                      >
+                                        <X size={16} aria-hidden="true" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  {errorId && (
+                                    <p id={errorId} role="alert" className="mt-1 px-1 text-[12px] text-red-700 dark:text-red-300">
+                                      This shortcut is already in use
+                                    </p>
                                   )}
                                 </div>
                               );
                             })}
                             <button
                               type="button"
-                              aria-label={`Add another ${item.title} shortcut`}
-                              onClick={() => setCapturingTarget({ mode: item.mode, index: combos.length })}
+                              aria-label={`Add another ${title} shortcut`}
+                              onClick={() => startShortcutCapture({ mode, index: combos.length })}
                               className="yy-shortcut-add"
                             >
                               Add another

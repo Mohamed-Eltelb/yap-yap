@@ -1,3 +1,4 @@
+import { removeDuplicateShortcuts } from '../../electron/shortcutBindings';
 import {
   DEFAULT_SETTINGS,
   INITIAL_DICTIONARY,
@@ -237,10 +238,10 @@ export function sanitizeLoadedState(
     settings: {
       ...DEFAULT_SETTINGS,
       ...(raw.settings ?? {}),
-      shortcuts: {
+      shortcuts: removeDuplicateShortcuts({
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),
-      },
+      }, typeof window === 'undefined' ? undefined : window.yapyap?.platform),
       categoryInstructions: {
         ...DEFAULT_SETTINGS.categoryInstructions,
         ...(raw.settings?.categoryInstructions ?? {}),

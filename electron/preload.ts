@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('yapyap', {
     translate: string[][];
     ask: string[][];
   }) => ipcRenderer.invoke('shortcuts:update', shortcuts),
+  setShortcutEditorOpen: (open: boolean) => ipcRenderer.send('shortcuts:editor', open),
   pasteText: (text: string) => ipcRenderer.invoke('clipboard:paste', text),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>
