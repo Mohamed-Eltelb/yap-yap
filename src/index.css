@@ -150,6 +150,196 @@ html.hud-mode #root {
   );
 }
 
+.yy-dictionary {
+  container-type: inline-size;
+  --dictionary-auto: #007e6d;
+  --dictionary-filter-active: var(--bg-card-solid);
+  --dictionary-filter-bg: var(--bg-subtle);
+  --dictionary-delete: #b91c1c;
+}
+
+.dark .yy-dictionary {
+  --dictionary-auto: #269881;
+  --dictionary-filter-active: var(--bg-main);
+  --dictionary-filter-bg: #343232;
+  --dictionary-delete: #ff777b;
+}
+
+.yy-dictionary-filters {
+  background: var(--dictionary-filter-bg);
+  color: var(--text-secondary);
+}
+
+.yy-dictionary-filters button:hover,
+.yy-dictionary-filters button[aria-pressed='true'] {
+  color: var(--text-primary);
+}
+
+.yy-dictionary-filters button[aria-pressed='true'] {
+  background: var(--dictionary-filter-active);
+}
+
+.yy-dictionary-auto {
+  color: var(--dictionary-auto);
+  fill: currentColor;
+}
+
+.yy-dictionary-manual,
+.yy-dictionary-search {
+  color: var(--text-secondary);
+}
+
+.yy-dictionary-search input:focus {
+  outline: 1px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.yy-dictionary-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (width >= 440px) {
+  .yy-dictionary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (width >= 650px) {
+  .yy-dictionary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.yy-dictionary-word {
+  min-height: 40px;
+  border: 1px solid var(--border-subtle);
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.yy-dictionary-word:hover,
+.yy-dictionary-word:focus-within {
+  background: var(--bg-card-solid);
+}
+
+.yy-dictionary-word[data-selected='true'] {
+  background: var(--dictionary-filter-bg);
+  border-color: var(--text-primary);
+}
+
+@media (hover: hover) {
+  .yy-dictionary-row-action {
+    opacity: 0;
+  }
+
+  .yy-dictionary-word:hover .yy-dictionary-row-action,
+  .yy-dictionary-word:focus-within .yy-dictionary-row-action {
+    opacity: 1;
+  }
+}
+
+.yy-dictionary-checkbox {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.yy-dictionary-menu-trigger {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--text-secondary);
+}
+
+.yy-dictionary-menu-trigger:hover,
+.yy-dictionary-menu-trigger[aria-expanded='true'] {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.yy-dictionary-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: -6px;
+  z-index: 10;
+  width: 116px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-modal);
+  box-shadow: var(--shadow-modal);
+}
+
+.yy-dictionary-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: left;
+}
+
+.yy-dictionary-menu button:hover,
+.yy-dictionary-menu button:focus-visible {
+  background: var(--bg-hover);
+}
+
+.yy-dictionary-menu .yy-dictionary-menu-delete {
+  color: var(--dictionary-delete);
+}
+
+.yy-dictionary-word-error {
+  color: #b91c1c;
+}
+
+.dark .yy-dictionary-word-error {
+  color: #ff777b;
+}
+
+.yy-dictionary-checkbox input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.yy-dictionary-checkbox input:is(:checked, :indeterminate) {
+  background: currentColor;
+}
+
+.yy-dictionary-checkbox svg {
+  position: absolute;
+  inset: 2px;
+  width: 10px;
+  height: 10px;
+  color: var(--bg-main);
+  stroke-width: 3;
+  pointer-events: none;
+}
+
+.yy-dictionary-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: var(--dictionary-delete);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.yy-dictionary-delete:hover {
+  background: var(--bg-hover);
+}
+
 /* Custom sleek scrollbar matching screenshots */
 ::-webkit-scrollbar {
   width: 6px;

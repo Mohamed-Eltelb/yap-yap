@@ -979,6 +979,18 @@ export function App() {
     showToast(`Added "${normalized}" to dictionary`);
   };
 
+  const handleEditDictionaryWord = (id: string, word: string) => {
+    setAppState((prev) => {
+      if (prev.dictionary.some((entry) => entry.id !== id && entry.word.toLowerCase() === word.toLowerCase())) {
+        return prev;
+      }
+      return {
+        ...prev,
+        dictionary: prev.dictionary.map((entry) => entry.id === id ? { ...entry, word } : entry),
+      };
+    });
+  };
+
   const handleImportDictionaryWords = (words: string[]) => {
     setAppState((prev) => {
       const existing = new Set(prev.dictionary.map((d) => d.word.toLowerCase()));
@@ -1085,10 +1097,11 @@ export function App() {
             entries={appState.dictionary}
             onAddWord={handleAddDictionaryWord}
             onImportWords={handleImportDictionaryWords}
-            onDeleteWord={(id) =>
+            onEditWord={handleEditDictionaryWord}
+            onDeleteWords={(ids) =>
               setAppState((prev) => ({
                 ...prev,
-                dictionary: prev.dictionary.filter((d) => d.id !== id),
+                dictionary: prev.dictionary.filter((d) => !ids.includes(d.id)),
               }))
             }
           />

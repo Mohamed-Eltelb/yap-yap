@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Feather, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { Check, Feather, Minus, MoreHorizontal, Pencil, Search, Sparkle, Trash2, Upload, X } from 'lucide-react';
 import { DictionaryEntry } from '../types/app';
 import { WindowControls } from './YapLogo';
 
@@ -7,10 +7,17 @@ interface Props {
   entries: DictionaryEntry[];
   onAddWord: (word: string, source?: 'auto' | 'manual') => void;
   onImportWords: (words: string[]) => void;
-  onDeleteWord: (id: string) => void;
+  onEditWord: (id: string, word: string) => void;
+  onDeleteWords: (ids: readonly string[]) => void;
 }
 
 type DictFilter = 'all' | 'auto' | 'manual';
+
+const filters = [
+  { id: 'all', label: 'All' },
+  { id: 'auto', label: 'Auto-added', Icon: Sparkle },
+  { id: 'manual', label: 'Manually-added', Icon: Feather },
+] as const;
 
 export function parseDictionaryImportText(raw: string): string[] {
   return raw
@@ -23,13 +30,19 @@ export function DictionaryView({
   entries,
   onAddWord,
   onImportWords,
-  onDeleteWord,
+  onEditWord,
+  onDeleteWords,
 }: Props) {
   const [filter, setFilter] = useState<DictFilter>('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [wordForm, setWordForm] = useState<'add' | DictionaryEntry | null>(null);
   const [newWord, setNewWord] = useState('');
+  const [wordError, setWordError] = useState('');
+  const editingEntry = wordForm === 'add' ? null : wordForm;
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -42,13 +55,48 @@ export function DictionaryView({
     });
   }, [entries, filter, searchQuery]);
 
+  const selected = filtered.filter((entry) => selectedIds.has(entry.id));
+  const selecting = selected.length > 0;
+  const allSelected = selecting && selected.length === filtered.length;
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    setMenuId(null);
+  };
+
+  const deleteSelected = () => {
+    onDeleteWords(selected.map((entry) => entry.id));
+    setSelectedIds(new Set());
+  };
+
+  const openWordForm = (form: 'add' | DictionaryEntry) => {
+    setMenuId(null);
+    setNewWord(form === 'add' ? '' : form.word);
+    setWordError('');
+    setWordForm(form);
+  };
+
   const handleSubmitWord = (e: React.FormEvent) => {
     e.preventDefault();
     const cleaned = newWord.trim();
     if (!cleaned) return;
-    onAddWord(cleaned, 'manual');
-    setNewWord('');
-    setAddModalOpen(false);
+    if (entries.some((entry) => entry.id !== editingEntry?.id && entry.word.toLowerCase() === cleaned.toLowerCase())) {
+      setWordError('This word is already in your dictionary.');
+      return;
+    }
+    if (editingEntry) onEditWord(editingEntry.id, cleaned);
+    else onAddWord(cleaned, 'manual');
+    setWordForm(null);
   };
 
   const handleCsvSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +108,7 @@ export function DictionaryView({
       onImportWords(words);
     }
     e.target.value = '';
-    setAddModalOpen(false);
+    setWordForm(null);
   };
 
   return (
@@ -70,159 +118,199 @@ export function DictionaryView({
         <WindowControls />
       </div>
 
-      <div className="px-10 pb-10 pt-1 max-w-[980px] w-full mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-[28px] font-bold tracking-tight text-[var(--text-primary)]">
-            Dictionary
-          </h1>
+      <div className="yy-dictionary w-full max-w-[1200px] mx-auto px-5 pb-10 pt-1 sm:px-6"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          if (menuId) setMenuId(null);
+          else if (selecting) setSelectedIds(new Set());
+          else if (searchOpen) {
+            closeSearch();
+            requestAnimationFrame(() => searchButtonRef.current?.focus());
+          }
+        }}
+      >
+        <header className="flex items-center justify-between gap-3 mb-5">
+          <h1 className="text-[clamp(28px,4vw,36px)] font-bold tracking-tight">Dictionary</h1>
           <button
             type="button"
-            onClick={() => setAddModalOpen(true)}
-            className="px-4 py-2 rounded-full bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] text-[13px] font-semibold hover:opacity-90 transition-opacity shadow-xs"
+            onClick={() => openWordForm('add')}
+            className="shrink-0 px-3.5 py-2 rounded-full bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] text-sm hover:opacity-90 transition-opacity"
           >
             New word
           </button>
-        </div>
+        </header>
 
-        {/* Filter Pills + Search */}
-        <div className="flex items-center justify-between gap-3 mb-5">
-          <div className="inline-flex items-center p-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              className={`px-3.5 py-1 rounded-full text-[12.5px] font-medium transition-colors ${
-                filter === 'all'
-                  ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-xs'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('auto')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[12.5px] font-medium transition-colors ${
-                filter === 'auto'
-                  ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-xs'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-teal-500" />
-              <span>Auto-added</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('manual')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[12.5px] font-medium transition-colors ${
-                filter === 'manual'
-                  ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-xs'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Feather className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-              <span>Manually-added</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {searchOpen && (
-              <div className="relative">
-                <input
-                  type="text"
-                  autoFocus
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search words..."
-                  className="w-48 pl-3 pr-7 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[12.5px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-strong)]"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 min-h-10">
+          {selecting ? (
+            <div className="flex items-center gap-3 text-sm">
+              <label className="flex items-center gap-2.5 px-2">
+                <span className="yy-dictionary-checkbox relative">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible words"
+                    checked={allSelected}
+                    ref={(input) => { if (input) input.indeterminate = !allSelected; }}
+                    onChange={(event) => setSelectedIds(new Set(event.target.checked ? filtered.map((entry) => entry.id) : []))}
+                  />
+                  {allSelected ? <Check aria-hidden="true" /> : <Minus aria-hidden="true" />}
+                </span>
+                <span role="status">{selected.length} {selected.length === 1 ? 'word' : 'words'} selected</span>
+              </label>
+              <button type="button" onClick={deleteSelected} className="yy-dictionary-delete">
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="yy-dictionary-filters inline-flex items-center p-1 rounded-full" aria-label="Filter dictionary">
+                {filters.map(({ id, label, ...item }) => {
+                  const Icon = 'Icon' in item ? item.Icon : null;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={filter === id}
+                      onClick={() => { setFilter(id); setMenuId(null); }}
+                      className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap transition-colors"
+                    >
+                      {Icon && <Icon aria-hidden="true" size={13} className={id === 'auto' ? 'yy-dictionary-auto' : 'yy-dictionary-manual'} />}
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setSearchOpen((v) => !v);
-                if (searchOpen) setSearchQuery('');
-              }}
-              aria-label="Search dictionary"
-              className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              <Search className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
 
-        {/* 3-Column Word Grid matching Image 5 */}
-        {filtered.length === 0 ? (
-          <div className="yy-card p-10 text-center text-[13.5px] text-[var(--text-secondary)]">
-            No custom words found. Add names, technical terms, or URLs so every STT provider spells them accurately.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-            {filtered.map((entry) => (
-              <div
-                key={entry.id}
-                className="group flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-colors"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {entry.source === 'auto' ? (
-                    <Sparkles className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                  ) : (
-                    <Feather className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+              {searchOpen ? (
+                <div className="yy-dictionary-search relative w-full sm:w-56">
+                  <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" size={14} />
+                  <input
+                    type="text"
+                    autoFocus
+                    value={searchQuery}
+                    onChange={(event) => { setSearchQuery(event.target.value); setMenuId(null); }}
+                    onBlur={(event) => {
+                      if (!searchQuery && !event.currentTarget.parentElement?.contains(event.relatedTarget)) closeSearch();
+                    }}
+                    aria-label="Search words"
+                    placeholder="Search"
+                    className="w-full rounded-full bg-[var(--bg-main)] border border-[var(--border-strong)] py-1.5 pl-8 pr-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={(event) => { setSearchQuery(''); event.currentTarget.parentElement?.querySelector('input')?.focus(); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
+                    >
+                      <X size={13} />
+                    </button>
                   )}
-                  <span
-                    dir="auto"
-                    className="text-[13px] font-medium text-[var(--text-primary)] truncate"
-                  >
-                    {entry.word}
-                  </span>
                 </div>
+              ) : (
                 <button
+                  ref={searchButtonRef}
                   type="button"
-                  onClick={() => onDeleteWord(entry.id)}
-                  title="Remove word"
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-[var(--text-muted)] hover:text-red-500 hover:bg-[var(--bg-hover)] transition-all"
+                  onClick={() => { setSearchOpen(true); setMenuId(null); }}
+                  aria-label="Search dictionary"
+                  className="ml-auto size-8 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Search size={14} />
                 </button>
-              </div>
-            ))}
-          </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="py-10 text-center text-[13.5px] text-[var(--text-secondary)]">
+            {entries.length ? 'No words match your filters.' : 'Add names, technical terms, or URLs to your dictionary.'}
+          </p>
+        ) : (
+          <ul className="yy-dictionary-grid grid gap-x-1.5 gap-y-3">
+            {filtered.map((entry) => {
+              const checked = selectedIds.has(entry.id);
+              const menuOpen = menuId === entry.id;
+              const Icon = entry.source === 'auto' ? Sparkle : Feather;
+
+              return (
+                <li key={entry.id} className="yy-dictionary-word group relative flex min-w-0 items-center gap-2 px-3 rounded-xl" data-selected={checked}>
+                  <Icon aria-hidden="true" size={13} className={entry.source === 'auto' ? 'yy-dictionary-auto shrink-0' : 'yy-dictionary-manual shrink-0'} />
+                  <span dir="auto" title={entry.word} className="flex-1 min-w-0 truncate text-sm">{entry.word}</span>
+                  <div className="flex shrink-0 items-center gap-2" onBlur={(event) => {
+                    if (menuOpen && !event.currentTarget.contains(event.relatedTarget)) setMenuId(null);
+                  }}>
+                    {!selecting && (
+                      <button
+                        type="button"
+                        aria-label={`Actions for ${entry.word}`}
+                        aria-expanded={menuOpen}
+                        onClick={() => setMenuId(menuOpen ? null : entry.id)}
+                        className="yy-dictionary-row-action yy-dictionary-menu-trigger"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                    )}
+                    <span className={`yy-dictionary-checkbox relative ${selecting ? '' : 'yy-dictionary-row-action'}`}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${entry.word}`}
+                        checked={checked}
+                        onChange={(event) => toggleSelected(entry.id, event.target.checked)}
+                      />
+                      {checked && <Check aria-hidden="true" />}
+                    </span>
+                    {menuOpen && !selecting && (
+                      <div className="yy-dictionary-menu">
+                        <button type="button" onClick={() => openWordForm(entry)}>
+                          <Pencil size={14} />
+                          Edit
+                        </button>
+                        <button type="button" className="yy-dictionary-menu-delete" onClick={() => { onDeleteWords([entry.id]); setMenuId(null); }}>
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
-      {/* Add to Dictionary Modal matching Image 6 */}
-      {addModalOpen && (
+      {wordForm && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4"
-          onClick={() => setAddModalOpen(false)}
+          onClick={() => setWordForm(null)}
         >
           <form
             onSubmit={handleSubmitWord}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(event) => { if (event.key === 'Escape') setWordForm(null); }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dictionary-word-form-title"
             className="w-full max-w-[460px] rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl p-6"
           >
-            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] mb-4">
-              Add to dictionary
+            <h2 id="dictionary-word-form-title" className="text-[17px] font-semibold text-[var(--text-primary)] mb-4">
+              {editingEntry ? 'Edit word' : 'Add to dictionary'}
             </h2>
 
             <input
               type="text"
               autoFocus
               value={newWord}
-              onChange={(e) => setNewWord(e.target.value)}
-              placeholder="Add a new word"
+              onChange={(e) => { setNewWord(e.target.value); setWordError(''); }}
+              placeholder={editingEntry ? 'Edit word' : 'Add a new word'}
+              aria-label="Word"
+              aria-invalid={Boolean(wordError)}
+              aria-describedby={wordError ? 'dictionary-word-error' : undefined}
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--text-primary)]/70 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
             />
+
+            {wordError && <p id="dictionary-word-error" role="alert" className="yy-dictionary-word-error mt-2 text-sm">{wordError}</p>}
 
             <input
               ref={fileInputRef}
@@ -236,16 +324,17 @@ export function DictionaryView({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--text-primary)] hover:opacity-75 transition-opacity"
+                hidden={Boolean(editingEntry)}
+                className="not-hidden:inline-flex items-center gap-2 text-[13px] font-medium text-[var(--text-primary)] hover:opacity-75 transition-opacity"
               >
                 <Upload className="w-4 h-4" />
                 <span>Import CSV</span>
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="ml-auto flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setAddModalOpen(false)}
+                  onClick={() => setWordForm(null)}
                   className="px-4 py-2 rounded-full border border-[var(--border-strong)] text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   Cancel
@@ -254,7 +343,7 @@ export function DictionaryView({
                   type="submit"
                   className="px-4 py-2 rounded-full bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] text-[13px] font-semibold hover:opacity-90 transition-opacity"
                 >
-                  Add word
+                  {editingEntry ? 'Save' : 'Add word'}
                 </button>
               </div>
             </div>
