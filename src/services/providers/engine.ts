@@ -30,6 +30,7 @@ declare global {
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;
+      setHudIgnoreMouse: (ignore: boolean) => void;
       sendHudAction: (action: HudAction) => void;
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
       onHudState: (cb: (state: unknown) => void) => () => void;

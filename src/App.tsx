@@ -136,6 +136,27 @@ export function App() {
     }
   }, [appState.settings.appearance, hud.appearance, isHudRoute]);
 
+  // The HUD window is larger than what it draws, so it only takes the mouse
+  // while the pointer is over the HUD itself.
+  useEffect(() => {
+    if (!isHudRoute) return;
+    let ignoring = true;
+    const setIgnoring = (ignore: boolean) => {
+      if (ignore === ignoring) return;
+      ignoring = ignore;
+      window.yapyap?.setHudIgnoreMouse?.(ignore);
+    };
+    const onMove = (event: MouseEvent) =>
+      setIgnoring(!(event.target instanceof Element && event.target.closest('.yy-hud')));
+    const onLeave = () => setIgnoring(true);
+    window.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseleave', onLeave);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
+    };
+  }, [isHudRoute]);
+
   // Sync Electron global shortcuts + login item
   useEffect(() => {
     if (!hydrated || isHudRoute) return;

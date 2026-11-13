@@ -1045,7 +1045,7 @@ textarea,
 }
 
 .yy-hud-message p {
-  max-height: min(160px, calc(100vh - 100px));
+  max-height: min(160px, calc(100vh - 106px));
   margin: 4px 0;
 }
 

@@ -118,8 +118,13 @@ function createHudWindow(): void {
     },
   });
 
+  // The window is larger than the HUD it draws; clicks on the transparent part
+  // go to the app underneath. The HUD page turns this off while hovered.
+  if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
+
   hudWindow.webContents.on('did-start-loading', () => {
     hudReady = false;
+    if (process.platform !== 'linux') hudWindow?.setIgnoreMouseEvents(true, { forward: true });
     hudWindow?.hide();
   });
   hudWindow.webContents.on('render-process-gone', () => {
@@ -261,16 +266,17 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
 function pasteIntoFocusedField(): Promise<boolean> {
   if (process.platform === 'win32') return pasteIntoWindowsField(pasteWithKeyboard);
 
-  // These commands can send the shortcut but cannot confirm insertion.
+  // These commands can send the shortcut but cannot confirm insertion, so a
+  // shortcut that was sent counts as pasted.
   return new Promise((resolve) => {
     if (process.platform === 'darwin') {
       exec(
         'osascript -e \'tell application "System Events" to keystroke "v" using command down\'',
         { timeout: 5000 },
-        () => resolve(false)
+        (err) => resolve(!err)
       );
     } else {
-      exec('xdotool key --clearmodifiers ctrl+v', { timeout: 5000 }, () => resolve(false));
+      exec('xdotool key --clearmodifiers ctrl+v', { timeout: 5000 }, (err) => resolve(!err));
     }
   });
 }
@@ -336,6 +342,11 @@ app.whenReady().then(() => {
     if (event.sender !== hudWindow?.webContents) return;
     hudReady = true;
     updateHudWindow();
+  });
+
+  ipcMain.on('hud:ignore-mouse', (event, ignore: boolean) => {
+    if (event.sender !== hudWindow?.webContents || process.platform === 'linux') return;
+    hudWindow.setIgnoreMouseEvents(ignore === true, { forward: true });
   });
 
   ipcMain.on('hud:action', async (event, action: HudAction) => {
