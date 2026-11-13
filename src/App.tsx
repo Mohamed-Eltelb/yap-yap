@@ -253,12 +253,15 @@ export function App() {
     []
   );
 
+  // Silent and cancelled recordings stay in History but never count as dictation.
+  const completedHistory = useMemo(() => appState.history.filter((item) => !item.outcome), [appState.history]);
+
   const stats = useMemo(
-    () => computeInsights(appState.history),
-    [appState.history]
+    () => computeInsights(completedHistory),
+    [completedHistory]
   );
 
-  const learnedSources = useMemo(() => buildSourceCategories(appState.history), [appState.history]);
+  const learnedSources = useMemo(() => buildSourceCategories(completedHistory), [completedHistory]);
 
   const restoreAudioMute = useCallback(() => {
     if (muteTimer.current !== null) {
@@ -325,6 +328,28 @@ export function App() {
             mode,
             levels: [],
             errorText: 'No speech was detected in the recording.',
+          });
+          setAppState((prev) => existingItemId ? {
+            ...prev,
+            history: prev.history.map((h) => h.id === existingItemId && !h.text.trim() ? { ...h, outcome: 'silent' as const } : h),
+          } : {
+            ...prev,
+            history: filterByRetention([{
+              id: `h-${Date.now()}`,
+              createdAt: new Date().toISOString(),
+              mode,
+              rawText: '',
+              text: '',
+              targetLanguage: mode === 'translate' ? targetLanguage : undefined,
+              durationMs,
+              wordCount: 0,
+              wpm: 0,
+              providerId: sttProviderId,
+              model: sttProvider.sttModel,
+              audioDataUrl,
+              audioMimeType,
+              outcome: 'silent' as const,
+            }, ...prev.history], prev.settings.historyRetention),
           });
           return;
         }
@@ -440,6 +465,7 @@ export function App() {
                     providerId: usedProviderId,
                     model: usedModel,
                     category,
+                    outcome: undefined,
                   }
                 : h
             ),
@@ -587,18 +613,73 @@ export function App() {
     }
   }, [appState.settings, processAudioPipeline, restoreAudioMute]);
 
+  // A cancelled recording is kept: it gets a History entry and can be brought back with Undo.
+  const cancelledRef = useRef<Promise<Parameters<typeof processAudioPipeline> | null> | null>(null);
+  const cancelTimerRef = useRef<number | undefined>(undefined);
+
   const cancelRecording = useCallback(() => {
     retryAudioRef.current = null;
     recorderStartRef.current = null;
-    recorderRef.current?.cancel();
+    const session = recorderRef.current;
     recorderRef.current = null;
     restoreAudioMute();
-    setHud({
-      status: 'idle',
-      mode: 'dictate',
-      levels: Array(20).fill(0.1),
-    });
-  }, [restoreAudioMute]);
+    const { mode, targetLanguage } = hudRef.current;
+    if (!session) {
+      setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+      return;
+    }
+    const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
+    const targets = appState.settings.translationTargets;
+    const selectedTarget = mode === 'translate'
+      ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
+      : undefined;
+    const sttId = appState.settings.activeSttProvider;
+    cancelledRef.current = session.stop().then(({ blob, durationMs, dataUrl, mimeType }) => {
+      const id = `h-${Date.now()}`;
+      setAppState((prev) => ({
+        ...prev,
+        history: filterByRetention([{
+          id,
+          createdAt: new Date().toISOString(),
+          mode,
+          rawText: '',
+          text: '',
+          targetLanguage: selectedTarget,
+          durationMs,
+          wordCount: 0,
+          wpm: 0,
+          providerId: sttId,
+          model: prev.providers[sttId].sttModel,
+          audioDataUrl: dataUrl,
+          audioMimeType: mimeType,
+          outcome: 'cancelled' as const,
+        }, ...prev.history], prev.settings.historyRetention),
+      }));
+      return [blob, durationMs, mode, dataUrl, mimeType, id, selectedTarget, allowAutoPaste] as Parameters<typeof processAudioPipeline>;
+    }).catch(() => null);
+    setHud({ status: 'cancelled', mode, levels: Array(20).fill(0.1) });
+    window.clearTimeout(cancelTimerRef.current);
+    cancelTimerRef.current = window.setTimeout(() => {
+      cancelledRef.current = null;
+      setHud((current) => current.status === 'cancelled' ? { ...current, status: 'idle' } : current);
+    }, 5000);
+  }, [appState.settings.activeSttProvider, appState.settings.translationTargets, restoreAudioMute]);
+
+  const undoCancel = useCallback(async () => {
+    const pending = cancelledRef.current;
+    if (!pending || hudRef.current.status !== 'cancelled') return;
+    cancelledRef.current = null;
+    window.clearTimeout(cancelTimerRef.current);
+    hudRef.current = { ...hudRef.current, status: 'processing' };
+    setHud((current) => ({ ...current, status: 'processing' }));
+    const audio = await pending;
+    if (!audio) {
+      setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+      return;
+    }
+    audio[8] = audio[2] === 'dictate' ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
+    await processAudioPipeline(...audio);
+  }, [processAudioPipeline]);
 
   const triggerDictationMode = useCallback(
     async (mode: DictationMode) => {
@@ -616,6 +697,7 @@ export function App() {
       }
       if (hudRef.current.status === 'processing') return;
       retryAudioRef.current = null;
+      cancelledRef.current = null;
 
       let sttId = appState.settings.activeSttProvider;
       let sttCfg = appState.providers[sttId];
@@ -762,6 +844,7 @@ export function App() {
     const unsubAction = window.yapyap?.onHudAction?.((action) => {
       if (action.type === 'stop') void stopAndProcess();
       else if (action.type === 'cancel') cancelRecording();
+      else if (action.type === 'undo') void undoCancel();
       else if (action.type === 'dismiss') dismissHud();
       else if (action.type === 'retry') retryHud();
       else if (action.type === 'select-target') selectHudTarget(action.target);
@@ -771,7 +854,7 @@ export function App() {
       unsubTrigger?.();
       unsubAction?.();
     };
-  }, [cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets]);
+  }, [cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
@@ -1109,6 +1192,7 @@ export function App() {
         onEditTargets={() => window.yapyap?.sendHudAction?.({ type: 'edit-targets' })}
         onStop={() => window.yapyap?.sendHudAction?.({ type: 'stop' })}
         onCancel={() => window.yapyap?.sendHudAction?.({ type: 'cancel' })}
+        onUndo={() => window.yapyap?.sendHudAction?.({ type: 'undo' })}
         onRetry={() => window.yapyap?.sendHudAction?.({ type: 'retry' })}
         onCopyResult={(t) => window.yapyap?.sendHudAction?.({ type: 'copy', text: t })}
         onDismissResult={() => window.yapyap?.sendHudAction?.({ type: 'dismiss' })}
@@ -1138,7 +1222,7 @@ export function App() {
         {activeNav === 'home' && (
           <HomeView
             stats={stats}
-            history={appState.history}
+            history={completedHistory}
             settings={appState.settings}
             providers={appState.providers}
             onOpenShare={() => setShareOpen(true)}
@@ -1218,7 +1302,7 @@ export function App() {
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         stats={stats}
-        history={appState.history}
+        history={completedHistory}
         onShowToast={showToast}
       />
 
@@ -1229,6 +1313,7 @@ export function App() {
           onEditTargets={editHudTargets}
           onStop={() => void stopAndProcess()}
           onCancel={cancelRecording}
+          onUndo={() => void undoCancel()}
           onRetry={retryHud}
           onCopyResult={(t) => void handleCopyText(t)}
           onDismissResult={dismissHud}

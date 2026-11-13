@@ -194,6 +194,7 @@ function updateHudWindow(): void {
     width = 290;
     height = 215;
   }
+  if (state?.status === 'cancelled') width = 260;
   if (state?.status === 'error' || state?.status === 'result') {
     const answer = state.status === 'result' && state.mode === 'ask';
     width = answer ? 620 : 360;

@@ -4,7 +4,7 @@ import type { AppearanceMode, DictationMode } from '../types/app';
 import { YapLogo } from './YapLogo';
 
 export interface HudState {
-  status: 'idle' | 'recording' | 'processing' | 'result' | 'error';
+  status: 'idle' | 'recording' | 'processing' | 'cancelled' | 'result' | 'error';
   mode: DictationMode;
   levels: number[];
   resultText?: string;
@@ -19,6 +19,7 @@ interface Props {
   hud: HudState;
   onStop: () => void;
   onCancel: () => void;
+  onUndo: () => void;
   onRetry: () => void;
   onSelectTarget: (target: string) => void;
   onEditTargets: () => void;
@@ -32,6 +33,7 @@ export function DictationHud({
   hud,
   onStop,
   onCancel,
+  onUndo,
   onRetry,
   onSelectTarget,
   onEditTargets,
@@ -124,6 +126,12 @@ export function DictationHud({
       {hud.status === 'processing' && (
         <div className="yy-hud-thinking" role="status">
           <span>Thinking</span>
+        </div>
+      )}
+      {hud.status === 'cancelled' && (
+        <div className="yy-hud-cancelled" role="status">
+          <span>Transcript cancelled</span>
+          <button type="button" onClick={onUndo}>Undo</button>
         </div>
       )}
       {hud.status === 'result' && hud.mode === 'ask' && (

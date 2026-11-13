@@ -342,7 +342,12 @@ export function HistoryView({
                     const isEditing = editingId === item.id;
                     const isPlaying = playingId === item.id;
                     const hasAnswer = Boolean(getHistoryAnswer(item));
-                    const needsRetry = !hasAnswer && !item.text.trim() && Boolean(item.audioDataUrl);
+                    const needsRetry = !hasAnswer && !item.text.trim() && Boolean(item.audioDataUrl || item.outcome);
+                    const emptyNote = item.outcome === 'silent'
+                      ? ['Audio is silent.', "Yap Yap didn't detect any words in this dictation, so the transcript is empty."]
+                      : item.outcome === 'cancelled'
+                        ? ['The transcription was cancelled.', 'You cancelled this transcription. To recover it, click Retry.']
+                        : ['No transcription available.', 'This recording has no transcript yet. Click Retry to transcribe it.'];
                     const keepActionsVisible = needsRetry || isMenuOpen || isPlaying || (!hasAnswer && item.flagged);
 
                     return (
@@ -390,8 +395,15 @@ export function HistoryView({
                               <>
                                 {needsRetry ? (
                                   <p className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
-                                    No transcription available.
-                                    <Info aria-hidden="true" className="size-3.5 shrink-0" />
+                                    {emptyNote[0]}
+                                    <span className="group/tip relative inline-flex">
+                                      <button type="button" aria-label="Why is this transcript empty?" aria-describedby={`empty-${item.id}`} className="rounded-full hover:text-[var(--text-primary)]">
+                                        <Info aria-hidden="true" className="size-3.5 shrink-0" />
+                                      </button>
+                                      <span id={`empty-${item.id}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute bottom-full left-0 z-20 mb-1.5 w-64 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-hover/tip:visible group-focus-within/tip:visible">
+                                        {emptyNote[1]}
+                                      </span>
+                                    </span>
                                   </p>
                                 ) : <p
                                   dir="auto"
@@ -420,7 +432,7 @@ export function HistoryView({
                               <span>View answer</span>
                             </button>
                           )}
-                          {needsRetry && (
+                          {needsRetry && item.audioDataUrl && (
                             <button type="button" onClick={() => onRetryItem(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5 text-sm hover:bg-[var(--bg-hover)]">
                               <RotateCcw className="size-3.5" />
                               Retry

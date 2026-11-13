@@ -1251,6 +1251,33 @@ textarea,
   font-weight: 550;
 }
 
+.yy-hud-cancelled {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 5px 0 15px;
+  border: 1px solid #ffffff4a;
+  border-radius: 999px;
+  background: #060707;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.yy-hud-cancelled button {
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: #ffffff26;
+  color: #fff;
+  font-weight: 650;
+}
+
+.yy-hud-cancelled button:hover {
+  background: #ffffff40;
+}
+
 .yy-hud-thinking::before {
   position: absolute;
   inset: 0;

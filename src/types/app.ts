@@ -53,6 +53,8 @@ export interface HistoryItem {
   isSample?: boolean;
   writingSample?: WritingSample;
   writingCorrection?: boolean;
+  /** Set when a recording produced no transcript. The audio is kept so it can be retried. */
+  outcome?: 'silent' | 'cancelled';
   /** Site or app the dictation was written into. */
   writingSource?: string;
 }
