@@ -1,5 +1,15 @@
 import { UiohookKey } from 'uiohook-napi';
 
+const menuKeys: number[] = [UiohookKey.Alt, UiohookKey.AltRight, UiohookKey.Meta, UiohookKey.MetaRight];
+
+/**
+ * Releasing Alt or the Windows key on its own opens the focused app's menu or
+ * the Start menu. Tapping an unused key while they are held prevents that.
+ */
+export function needsMenuMask(pressed: ReadonlyMap<number, number>): boolean {
+  return menuKeys.some((key) => pressed.has(key));
+}
+
 export function matchShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,

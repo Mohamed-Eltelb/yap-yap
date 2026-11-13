@@ -235,3 +235,16 @@ export function createDefaultProviders(): Record<ProviderId, ProviderConfig> {
     },
   };
 }
+
+/**
+ * Whether a provider can be picked automatically when the chosen one has no key.
+ * A keyless provider only counts once it has been set up, so a fresh install is
+ * asked for a key instead of being pointed at a local server that is not there.
+ */
+export function isProviderConfigured(provider: ProviderConfig): boolean {
+  if (provider.apiKey.trim()) return true;
+  const meta = PROVIDER_CATALOG[provider.id];
+  if (meta.requiresKey) return false;
+  const baseUrl = provider.baseUrl?.trim() || meta.defaultBaseUrl;
+  return provider.status === 'connected' || baseUrl !== meta.defaultBaseUrl;
+}

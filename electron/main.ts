@@ -13,7 +13,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, stopModifierShortcuts } from './modifierShortcuts';
+import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
@@ -37,7 +37,32 @@ function getStorePath(): string {
 }
 
 function syncShortcutSuspension() {
-  globalShortcut.setSuspended(shortcutEditorOpen && mainWindow?.isFocused() === true);
+  const suspended = shortcutEditorOpen && mainWindow?.isFocused() === true;
+  globalShortcut.setSuspended(suspended);
+  setMenuMasking(!suspended);
+}
+
+let escapeRegistered = false;
+
+/** Esc cancels a recording from anywhere, and is left alone the rest of the time. */
+function syncEscapeCancel() {
+  const recording = hudPayload.state?.status === 'recording';
+  if (recording === escapeRegistered) return;
+  if (recording) {
+    escapeRegistered = globalShortcut.register('Escape', () => {
+      mainWindow?.webContents.send('hud:action', { type: 'cancel' } satisfies HudAction);
+    });
+  } else {
+    globalShortcut.unregister('Escape');
+    escapeRegistered = false;
+  }
+}
+
+/** The page that owns the HUD state is gone, so nothing would ever clear it. */
+function resetHud() {
+  hudPayload = { show: false };
+  updateHudWindow();
+  syncEscapeCancel();
 }
 
 function createMainWindow(): void {
@@ -88,12 +113,14 @@ function createMainWindow(): void {
   mainWindow.webContents.on('render-process-gone', () => {
     shortcutEditorOpen = false;
     syncShortcutSuspension();
+    resetHud();
     void setRecordingMute(false).catch(console.warn);
   });
   mainWindow.webContents.on('did-start-navigation', (event) => {
     if (event.isMainFrame && !event.isSameDocument) {
       shortcutEditorOpen = false;
       syncShortcutSuspension();
+      resetHud();
       void setRecordingMute(false).catch(console.warn);
     }
   });
@@ -232,6 +259,7 @@ function createTray(): void {
 function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   const unique = removeDuplicateShortcuts(shortcuts, process.platform);
   globalShortcut.unregisterAll();
+  escapeRegistered = false;
   // Electron requires shortcut handling to be active when adding registrations.
   globalShortcut.setSuspended(false);
   const modifierShortcuts: Parameters<typeof registerModifierShortcuts>[0] = [];
@@ -242,6 +270,15 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
       if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
         modifierShortcuts.push({ combo, trigger });
+        // The hook only observes keys. Claiming the chord as well keeps it from
+        // reaching the focused app (Alt+Space would open its window menu).
+        if (accel) {
+          try {
+            globalShortcut.register(accel, () => undefined);
+          } catch {
+            // Another app owns it; the hook still triggers the mode.
+          }
+        }
         continue;
       }
       if (!accel) continue;
@@ -260,6 +297,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
     return false;
   } finally {
     syncShortcutSuspension();
+    syncEscapeCancel();
   }
 }
 
@@ -336,6 +374,7 @@ app.whenReady().then(() => {
     hudPayload = payload;
     if (payload.show && !hudWindow) createHudWindow();
     updateHudWindow();
+    syncEscapeCancel();
   });
 
   ipcMain.on('hud:ready', (event) => {

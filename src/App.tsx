@@ -7,7 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ShareModal } from './components/ShareModal';
 import { Sidebar } from './components/Sidebar';
 import { getPreferredLanguageVariants } from './data/languages';
-import { PROVIDER_CATALOG } from './services/providers/catalog';
+import { PROVIDER_CATALOG, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
 import {
   processTranscriptWithLlm,
@@ -85,6 +85,7 @@ export function App() {
   const recorderRef = useRef<RecorderSession | null>(null);
   const recorderStartRef = useRef<symbol | null>(null);
   const mutedForRecording = useRef(false);
+  const muteTimer = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
   const hudRef = useRef<HudState>(hud);
   const openedTargetsDuringRecording = useRef(false);
@@ -254,6 +255,10 @@ export function App() {
   );
 
   const restoreAudioMute = useCallback(() => {
+    if (muteTimer.current !== null) {
+      window.clearTimeout(muteTimer.current);
+      muteTimer.current = null;
+    }
     if (!mutedForRecording.current) return;
     mutedForRecording.current = false;
     void window.yapyap?.setSystemMute(false).catch(console.warn);
@@ -281,8 +286,7 @@ export function App() {
       ) {
         const fallbackStt = (Object.values(appState.providers) as ProviderConfig[]).find(
           (p) =>
-            PROVIDER_CATALOG[p.id].supportsStt &&
-            (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+            PROVIDER_CATALOG[p.id].supportsStt && isProviderConfigured(p)
         );
         if (fallbackStt) {
           sttProviderId = fallbackStt.id;
@@ -338,8 +342,7 @@ export function App() {
               Object.values(appState.providers) as ProviderConfig[]
             ).find(
               (p) =>
-                PROVIDER_CATALOG[p.id].supportsLlm &&
-                (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+                PROVIDER_CATALOG[p.id].supportsLlm && isProviderConfigured(p)
             );
             if (fallbackLlm) {
               llmProvider = fallbackLlm;
@@ -555,8 +558,7 @@ export function App() {
           Object.values(appState.providers) as ProviderConfig[]
         ).find(
           (p) =>
-            PROVIDER_CATALOG[p.id].supportsStt &&
-            (!PROVIDER_CATALOG[p.id].requiresKey || p.apiKey.trim().length > 0)
+            PROVIDER_CATALOG[p.id].supportsStt && isProviderConfigured(p)
         );
         if (configuredStt) {
           sttId = configuredStt.id;
@@ -585,11 +587,18 @@ export function App() {
       recorderStartRef.current = start;
       openedTargetsDuringRecording.current = false;
       try {
-        if (appState.settings.muteWhenDictating && window.yapyap) {
-          mutedForRecording.current = true;
-          void window.yapyap.setSystemMute(true).catch(() => showToast('Could not mute system audio.'));
-        }
         playInteractionSound('start', appState.settings.interactionSounds);
+        const desktop = window.yapyap;
+        if (appState.settings.muteWhenDictating && desktop) {
+          const mute = () => {
+            muteTimer.current = null;
+            mutedForRecording.current = true;
+            void desktop.setSystemMute(true).catch(() => showToast('Could not mute system audio.'));
+          };
+          // Muting right away would silence the start sound.
+          if (appState.settings.interactionSounds) muteTimer.current = window.setTimeout(mute, 300);
+          else mute();
+        }
         setHud({
           status: 'recording',
           mode,
@@ -702,6 +711,12 @@ export function App() {
     const pressed = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
+      // The desktop app handles Esc globally; this covers the browser build.
+      if (e.key === 'Escape' && !window.yapyap && hudRef.current.status === 'recording') {
+        e.preventDefault();
+        cancelRecording();
+        return;
+      }
       if (
         modalOpen ||
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(
@@ -740,7 +755,7 @@ export function App() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [appState.settings.shortcuts, globalModifiers, isHudRoute, modalOpen, triggerDictationMode]);
+  }, [appState.settings.shortcuts, cancelRecording, globalModifiers, isHudRoute, modalOpen, triggerDictationMode]);
 
   const handleCopyText = async (text: string) => {
     try {

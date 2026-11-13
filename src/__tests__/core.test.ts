@@ -10,7 +10,7 @@ import {
   formatWordCount,
 } from '../services/stats';
 import { getInitialState, sanitizeLoadedState } from '../services/storage';
-import { createDefaultProviders, PROVIDER_CATALOG } from '../services/providers/catalog';
+import { createDefaultProviders, PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import {
   processTranscriptWithLlm,
   testProviderConnection,
@@ -19,7 +19,7 @@ import {
 import { parseDictionaryImportText } from '../components/DictionaryView';
 import { HistoryItem } from '../types/app';
 import { assignHistoryIds, parseHistoryImport } from '../services/historyImport';
-import { matchShortcut } from '../../electron/shortcutMatch';
+import { matchShortcut, needsMenuMask } from '../../electron/shortcutMatch';
 import { UiohookKey as Key } from 'uiohook-napi';
 
 describe('Saved shortcuts', () => {
@@ -68,6 +68,12 @@ describe('Windows AltGr shortcuts', () => {
     expect(matchShortcut(bindings, new Map([...pressed, [Key.ShiftRight, 130]]), true)).toBe(translate);
     expect(matchShortcut(bindings, new Map([...pressed, [Key.Space, 130]]), true)).toBe(ask);
     expect(matchShortcut(bindings, new Map([...pressed, [Key.E, 130]]), true)).toBeUndefined();
+  });
+
+  it('masks only chords that would open a menu when released', () => {
+    expect(needsMenuMask(new Map([[Key.AltRight, 1]]))).toBe(true);
+    expect(needsMenuMask(new Map([[Key.Meta, 1], [Key.Ctrl, 2]]))).toBe(true);
+    expect(needsMenuMask(new Map([[Key.Ctrl, 1], [Key.Shift, 2]]))).toBe(false);
   });
 
   it('preserves a deliberate Ctrl hold and prefers explicitly configured Ctrl chords', () => {
@@ -385,6 +391,15 @@ describe('Multi-Provider Engine', () => {
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('gpt-6-luna');
     expect(body.temperature).toBeUndefined();
+  });
+
+  it('only falls back to a keyless provider that has been set up', () => {
+    const providers = createDefaultProviders();
+    expect(isProviderConfigured(providers.groq)).toBe(false);
+    expect(isProviderConfigured(providers.custom)).toBe(false);
+    expect(isProviderConfigured({ ...providers.custom, baseUrl: 'http://localhost:8000/v1' })).toBe(true);
+    expect(isProviderConfigured({ ...providers.custom, status: 'connected' })).toBe(true);
+    expect(isProviderConfigured({ ...providers.groq, apiKey: 'gsk_test' })).toBe(true);
   });
 
   it('honors a HUD translation target even when the source is already in that language', async () => {

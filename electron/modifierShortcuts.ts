@@ -1,5 +1,5 @@
 import { UiohookKey, uIOhook } from 'uiohook-napi';
-import { matchShortcut } from './shortcutMatch';
+import { matchShortcut, needsMenuMask } from './shortcutMatch';
 
 const modifierKeys: Record<string, number[]> = {
   'Right Alt': [UiohookKey.AltRight],
@@ -39,6 +39,14 @@ let bindings: Binding[] = [];
 let running = false;
 const pressed = new Map<number, number>();
 let pending: Binding | undefined;
+let maskMenus = true;
+// Never bound by apps, so tapping it has no effect of its own.
+const maskKey = UiohookKey.F24;
+
+/** The shortcut editor must see the keys exactly as pressed. */
+export function setMenuMasking(enabled: boolean) {
+  maskMenus = enabled;
+}
 
 export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger: () => void }[]) {
   bindings = shortcuts.map(({ combo, trigger }) => ({
@@ -58,13 +66,17 @@ export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger:
 }
 
 uIOhook.on('keydown', ({ keycode, time }) => {
-  if (pressed.has(keycode)) return;
+  if (keycode === maskKey || pressed.has(keycode)) return;
   pressed.set(keycode, time);
   pending = matchShortcut(bindings, pressed, process.platform === 'win32');
+  // The hook cannot block keys, so stop the focused app from also acting on the shortcut.
+  if (pending && maskMenus && process.platform === 'win32' && needsMenuMask(pressed)) {
+    uIOhook.keyTap(maskKey);
+  }
 });
 
 uIOhook.on('keyup', ({ keycode }) => {
-  if (!pressed.delete(keycode)) return;
+  if (keycode === maskKey || !pressed.delete(keycode)) return;
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.
   if (pressed.size > 0) return;
   const binding = pending;
