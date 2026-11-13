@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
 import {
   AlertCircle,
-  Check,
   CheckCircle2,
   Code2,
   ExternalLink,
@@ -18,7 +17,6 @@ import {
   Mic,
   Monitor,
   Pencil,
-  Plus,
   Share2,
   SlidersHorizontal,
   Sparkles,
@@ -32,7 +30,6 @@ import {
 import { testProviderConnection } from '../services/providers/engine';
 import { InsightsStats } from '../services/stats';
 import {
-  AppearanceMode,
   PersonalizationCategory,
   ProviderConfig,
   ProviderId,
@@ -40,6 +37,8 @@ import {
   SettingsState,
 } from '../types/app';
 import { PersonalizationChart } from './PersonalizationChart';
+import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSettingsDialogs';
+import { SelectMenu } from './SelectMenu';
 
 interface Props {
   open: boolean;
@@ -51,26 +50,8 @@ interface Props {
   providers: Record<ProviderId, ProviderConfig>;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   stats: InsightsStats;
-  onShowToast: (msg: string) => void;
   toast: string | null;
 }
-
-const ALL_LANGUAGES = [
-  'English (US)',
-  'English (UK)',
-  'Arabic (Egypt)',
-  'Arabic (MSA)',
-  'Spanish',
-  'French',
-  'German',
-  'Italian',
-  'Portuguese',
-  'Japanese',
-  'Korean',
-  'Chinese (Simplified)',
-  'Turkish',
-  'Hindi',
-];
 
 function Toggle({
   label,
@@ -124,7 +105,6 @@ export function SettingsModal({
   providers,
   onUpdateProvider,
   stats,
-  onShowToast,
   toast,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -136,14 +116,16 @@ export function SettingsModal({
     mode: 'dictate' | 'translate' | 'ask';
     index: number;
   } | null>(null);
-  const [editingTargets, setEditingTargets] = useState(false);
-  const [editingVariants, setEditingVariants] = useState(false);
+  const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [editingCat, setEditingCat] = useState<PersonalizationCategory | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!open || !dialog) {
+      setLanguageDialog(null);
+      return;
+    }
     const opener = document.activeElement;
     dialog.showModal();
     closeButtonRef.current?.focus();
@@ -183,7 +165,10 @@ export function SettingsModal({
   }, [open]);
 
   useEffect(() => {
-    if (!capturingTarget) return;
+    if (!open || activeTab !== 'settings' || !capturingTarget) {
+      if (capturingTarget) setCapturingTarget(null);
+      return;
+    }
     const pressed = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
@@ -195,19 +180,17 @@ export function SettingsModal({
       pressed.add(formatKeyName(e));
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (!pressed.size) return;
       e.preventDefault();
       e.stopPropagation();
-      if (pressed.size > 0) {
-        const combo = Array.from(pressed);
-        const list = [...settings.shortcuts[capturingTarget.mode]];
-        list[capturingTarget.index] = combo;
-        onUpdateSettings({
-          shortcuts: {
-            ...settings.shortcuts,
-            [capturingTarget.mode]: list,
-          },
-        });
-      }
+      const list = [...settings.shortcuts[capturingTarget.mode]];
+      list[capturingTarget.index] = Array.from(pressed);
+      onUpdateSettings({
+        shortcuts: {
+          ...settings.shortcuts,
+          [capturingTarget.mode]: list,
+        },
+      });
       setCapturingTarget(null);
     };
     window.addEventListener('keydown', onKeyDown, true);
@@ -216,7 +199,7 @@ export function SettingsModal({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
     };
-  }, [capturingTarget, settings.shortcuts, onUpdateSettings]);
+  }, [open, activeTab, capturingTarget, settings.shortcuts, onUpdateSettings]);
 
   if (!open) return null;
 
@@ -260,6 +243,12 @@ export function SettingsModal({
   const sttProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsStt);
   const llmProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsLlm);
 
+  const providerOptionLabel = (id: ProviderId, model: 'sttModel' | 'llmModel') => {
+    const provider = providers[id];
+    const hasKey = provider.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
+    return `${provider.name} (${provider[model]})${hasKey ? '' : ' — No key'}`;
+  };
+
   const chartColors = ['#5B9BF8', '#5B9BF8', '#4DC9E6', '#8BA7F9'];
   const sectors = stats.categoryBreakdown.map((c, i) => ({
     label: c.category,
@@ -274,49 +263,14 @@ export function SettingsModal({
     'Development tools': <Code2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />,
   };
 
-  const addShortcutSlot = (mode: 'dictate' | 'translate' | 'ask') => {
-    const nextIdx = settings.shortcuts[mode].length;
-    onUpdateSettings({
-      shortcuts: {
-        ...settings.shortcuts,
-        [mode]: [...settings.shortcuts[mode], ['Alt', 'Space']],
-      },
-    });
-    setCapturingTarget({ mode, index: nextIdx });
-  };
-
   const removeShortcutSlot = (mode: 'dictate' | 'translate' | 'ask', index: number) => {
-    if (settings.shortcuts[mode].length <= 1) return;
+    if (mode === 'dictate' && settings.shortcuts.dictate.length <= 1) return;
+    setCapturingTarget(null);
     onUpdateSettings({
       shortcuts: {
         ...settings.shortcuts,
         [mode]: settings.shortcuts[mode].filter((_, i) => i !== index),
       },
-    });
-  };
-
-  const toggleTargetLanguage = (lang: string) => {
-    const exists = settings.translationTargets.includes(lang);
-    if (exists) {
-      if (settings.translationTargets.length === 1) return;
-      onUpdateSettings({
-        translationTargets: settings.translationTargets.filter((l) => l !== lang),
-      });
-    } else if (settings.translationTargets.length < 3) {
-      onUpdateSettings({
-        translationTargets: [...settings.translationTargets, lang],
-      });
-    } else {
-      onShowToast('You can select up to 3 target languages.');
-    }
-  };
-
-  const toggleVariantLanguage = (lang: string) => {
-    const exists = settings.languageVariants.includes(lang);
-    onUpdateSettings({
-      languageVariants: exists
-        ? settings.languageVariants.filter((l) => l !== lang)
-        : [...settings.languageVariants, lang],
     });
   };
 
@@ -387,52 +341,35 @@ export function SettingsModal({
                 {/* Active Defaults Selector */}
                 <div className="rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
+                    <label htmlFor="default-stt-provider" className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
                       Default Dictation (Speech-to-Text)
                     </label>
-                    <select
+                    <SelectMenu
+                      id="default-stt-provider"
+                      label="Default Dictation (Speech-to-Text)"
                       value={settings.activeSttProvider}
-                      onChange={(e) =>
-                        onUpdateSettings({ activeSttProvider: e.target.value as ProviderId })
-                      }
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[13px] font-medium text-[var(--text-primary)] focus:outline-none"
-                    >
-                      {sttProviderOptions.map((id) => {
-                        const p = providers[id];
-                        const hasKey = p.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
-                        return (
-                          <option key={id} value={id}>
-                            {p.name} ({p.sttModel}) {hasKey ? '✓' : '— No key'}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      options={sttProviderOptions.map((id) => ({
+                        value: id,
+                        label: providerOptionLabel(id, 'sttModel'),
+                      }))}
+                      onChange={(activeSttProvider) => onUpdateSettings({ activeSttProvider })}
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
+                    <label htmlFor="default-llm-provider" className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
                       Default AI (Cleanup, Translate &amp; Ask)
                     </label>
-                    <select
+                    <SelectMenu
+                      id="default-llm-provider"
+                      label="Default AI (Cleanup, Translate & Ask)"
                       value={settings.activeLlmProvider}
-                      onChange={(e) =>
-                        onUpdateSettings({
-                          activeLlmProvider: e.target.value as ProviderId | 'none',
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[13px] font-medium text-[var(--text-primary)] focus:outline-none"
-                    >
-                      {llmProviderOptions.map((id) => {
-                        const p = providers[id];
-                        const hasKey = p.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
-                        return (
-                          <option key={id} value={id}>
-                            {p.name} ({p.llmModel}) {hasKey ? '✓' : '— No key'}
-                          </option>
-                        );
-                      })}
-                      <option value="none">None (Raw Speech-to-Text only)</option>
-                    </select>
+                      options={[
+                        ...llmProviderOptions.map((id) => ({ value: id, label: providerOptionLabel(id, 'llmModel') })),
+                        { value: 'none', label: 'None (Raw Speech-to-Text only)' },
+                      ]}
+                      onChange={(activeLlmProvider) => onUpdateSettings({ activeLlmProvider })}
+                    />
                   </div>
                 </div>
 
@@ -591,12 +528,13 @@ export function SettingsModal({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {meta.supportsStt && (
                             <div>
-                              <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
+                              <label htmlFor={`sttModel-${id}`} className="block text-[11px] text-[var(--text-secondary)] mb-1">
                                 Speech model
                               </label>
                               {id === 'custom' ? (
                                 <input
                                   type="text"
+                                  id={`sttModel-${id}`}
                                   value={cfg.sttModel}
                                   onChange={(e) =>
                                     onUpdateProvider(id, { sttModel: e.target.value })
@@ -604,31 +542,26 @@ export function SettingsModal({
                                   className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
                                 />
                               ) : (
-                                <select
+                                <SelectMenu
+                                  id={`sttModel-${id}`}
+                                  label={`${cfg.name} speech model`}
                                   value={cfg.sttModel}
-                                  onChange={(e) =>
-                                    onUpdateProvider(id, { sttModel: e.target.value })
-                                  }
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                                >
-                                  {meta.sttModels.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={meta.sttModels.map((model) => ({ value: model.id, label: model.label }))}
+                                  onChange={(sttModel) => onUpdateProvider(id, { sttModel })}
+                                />
                               )}
                             </div>
                           )}
 
                           {meta.supportsLlm && (
                             <div>
-                              <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
+                              <label htmlFor={`llmModel-${id}`} className="block text-[11px] text-[var(--text-secondary)] mb-1">
                                 AI / Translation model
                               </label>
                               {id === 'custom' ? (
                                 <input
                                   type="text"
+                                  id={`llmModel-${id}`}
                                   value={cfg.llmModel}
                                   onChange={(e) =>
                                     onUpdateProvider(id, { llmModel: e.target.value })
@@ -636,19 +569,13 @@ export function SettingsModal({
                                   className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
                                 />
                               ) : (
-                                <select
+                                <SelectMenu
+                                  id={`llmModel-${id}`}
+                                  label={`${cfg.name} ai / translation model`}
                                   value={cfg.llmModel}
-                                  onChange={(e) =>
-                                    onUpdateProvider(id, { llmModel: e.target.value })
-                                  }
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                                >
-                                  {meta.llmModels.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={meta.llmModels.map((model) => ({ value: model.id, label: model.label }))}
+                                  onChange={(llmModel) => onUpdateProvider(id, { llmModel })}
+                                />
                               )}
                             </div>
                           )}
@@ -674,7 +601,7 @@ export function SettingsModal({
                     <span>Shortcuts</span>
                   </div>
 
-                  <div className="divide-y divide-[var(--border-subtle)]">
+                  <div className="yy-shortcut-list">
                     {(
                       [
                         {
@@ -693,76 +620,76 @@ export function SettingsModal({
                           desc: 'Press to start and stop asking anything.',
                         },
                       ] as const
-                    ).map((item) => (
-                      <div
-                        key={item.mode}
-                        className="py-4 flex items-start justify-between gap-4"
-                      >
-                        <div>
-                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                            {item.title}
+                    ).map((item) => {
+                      const combos = settings.shortcuts[item.mode];
+                      const adding = capturingTarget?.mode === item.mode && capturingTarget.index === combos.length;
+                      return (
+                        <div
+                          key={item.mode}
+                          className="yy-shortcut-row"
+                        >
+                          <div>
+                            <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                              {item.title}
+                            </div>
+                            <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                              {item.desc}
+                            </p>
                           </div>
-                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                            {item.desc}
-                          </p>
-                        </div>
 
-                        <div className="space-y-2 flex flex-col items-start">
-                          {settings.shortcuts[item.mode].map((combo, idx) => {
-                            const isCapturing =
-                              capturingTarget?.mode === item.mode &&
-                              capturingTarget?.index === idx;
-                            return (
-                              <div
-                                key={idx}
-                                onClick={() =>
-                                  setCapturingTarget({ mode: item.mode, index: idx })
-                                }
-                                className={`min-w-[185px] px-2.5 py-1.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-colors ${
-                                  isCapturing
-                                    ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/5'
-                                    : 'border-[var(--border-strong)] bg-[var(--bg-input)] hover:border-[var(--text-secondary)]'
-                                }`}
-                              >
-                                <div className="flex flex-wrap items-center gap-1">
-                                  {isCapturing ? (
-                                    <span className="text-[12px] text-[var(--accent-blue)] font-medium px-1">
-                                      Press keys…
-                                    </span>
-                                  ) : (
-                                    combo.map((key, ki) => (
-                                      <span key={ki} className="yy-keycap">
-                                        {key}
-                                      </span>
-                                    ))
-                                  )}
-                                </div>
-                                {settings.shortcuts[item.mode].length > 1 && (
+                          <div className="yy-shortcut-controls">
+                            {(adding ? [...combos, []] : combos).map((combo, idx) => {
+                              const isCapturing =
+                                capturingTarget?.mode === item.mode &&
+                                capturingTarget?.index === idx;
+                              const canRemove = idx < combos.length && (item.mode !== 'dictate' || combos.length > 1);
+                              return (
+                                <div key={idx} className="yy-shortcut-field" data-capturing={isCapturing}>
                                   <button
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeShortcutSlot(item.mode, idx);
-                                    }}
-                                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                    className="yy-shortcut-edit"
+                                    aria-label={`Edit ${item.title} shortcut ${idx + 1}: ${isCapturing ? 'Press keys' : combo.join(' + ')}`}
+                                    onClick={() => setCapturingTarget({ mode: item.mode, index: idx })}
                                   >
-                                    <X className="w-3.5 h-3.5" />
+                                    {isCapturing ? (
+                                      <span role="status" className="yy-shortcut-prompt">Press keys…</span>
+                                    ) : (
+                                      combo.map((key, ki) => (
+                                        <span key={ki} className="yy-keycap">
+                                          {key}
+                                        </span>
+                                      ))
+                                    )}
                                   </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                          <button
-                            type="button"
-                            onClick={() => addShortcutSlot(item.mode)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>Add another</span>
-                          </button>
+                                  {canRemove && (
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove ${item.title} shortcut ${idx + 1}`}
+                                      className="yy-shortcut-remove"
+                                      onClick={(event) => {
+                                        const controls = event.currentTarget.parentElement?.parentElement;
+                                        removeShortcutSlot(item.mode, idx);
+                                        controls?.querySelector<HTMLButtonElement>('.yy-shortcut-add')?.focus();
+                                      }}
+                                    >
+                                      <X size={16} aria-hidden="true" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              aria-label={`Add another ${item.title} shortcut`}
+                              onClick={() => setCapturingTarget({ mode: item.mode, index: combos.length })}
+                              className="yy-shortcut-add"
+                            >
+                              Add another
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -797,38 +724,17 @@ export function SettingsModal({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setEditingTargets((v) => !v)}
+                          aria-label={`Edit translation targets: ${settings.translationTargets.join(', ') || 'None selected'}`}
+                          aria-haspopup="dialog"
+                          onClick={() => setLanguageDialog('targets')}
                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
                         >
                           <span className="truncate">
-                            {settings.translationTargets.join(', ')}
+                            {settings.translationTargets.join(', ') || 'Select languages'}
                           </span>
                           <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
                         </button>
                       </div>
-
-                      {editingTargets && (
-                        <div className="mt-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex flex-wrap gap-1.5">
-                          {ALL_LANGUAGES.map((lang) => {
-                            const selected = settings.translationTargets.includes(lang);
-                            return (
-                              <button
-                                key={lang}
-                                type="button"
-                                onClick={() => toggleTargetLanguage(lang)}
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
-                                  selected
-                                    ? 'bg-[var(--accent-blue)] text-white border-transparent'
-                                    : 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
-                                }`}
-                              >
-                                {selected && <Check className="w-3 h-3" />}
-                                <span>{lang}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     <div className="py-4">
@@ -843,35 +749,13 @@ export function SettingsModal({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setEditingVariants((v) => !v)}
+                          aria-haspopup="dialog"
+                          onClick={() => setLanguageDialog('variants')}
                           className="px-3.5 py-1.5 rounded-full bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                         >
                           Select language variants
                         </button>
                       </div>
-
-                      {editingVariants && (
-                        <div className="mt-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex flex-wrap gap-1.5">
-                          {ALL_LANGUAGES.map((lang) => {
-                            const selected = settings.languageVariants.includes(lang);
-                            return (
-                              <button
-                                key={lang}
-                                type="button"
-                                onClick={() => toggleVariantLanguage(lang)}
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
-                                  selected
-                                    ? 'bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] border-transparent'
-                                    : 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
-                                }`}
-                              >
-                                {selected && <Check className="w-3 h-3" />}
-                                <span>{lang}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -893,20 +777,17 @@ export function SettingsModal({
                           Choose your preferred microphone for Yap Yap to capture your voice.
                         </p>
                       </div>
-                      <select
+                      <SelectMenu
+                        label="Microphone"
                         value={settings.microphoneId}
-                        onChange={(e) =>
-                          onUpdateSettings({ microphoneId: e.target.value })
-                        }
-                        className="max-w-[210px] px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
-                      >
-                        <option value="default">Auto-detect (System Default)</option>
-                        {microphones.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
+                        className="max-w-[230px]"
+                        placeholder="Microphone unavailable"
+                        options={[
+                          { value: 'default', label: 'Auto-detect (System Default)' },
+                          ...microphones.filter((mic) => mic.id !== 'default').map((mic) => ({ value: mic.id, label: mic.label })),
+                        ]}
+                        onChange={(microphoneId) => onUpdateSettings({ microphoneId })}
+                      />
                     </div>
 
                     <div className="py-4 flex items-center justify-between gap-4">
@@ -960,17 +841,17 @@ export function SettingsModal({
                           Choose between light and dark modes.
                         </p>
                       </div>
-                      <select
+                      <SelectMenu
+                        label="Appearance"
                         value={settings.appearance}
-                        onChange={(e) =>
-                          onUpdateSettings({ appearance: e.target.value as AppearanceMode })
-                        }
-                        className="px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
-                      >
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                        <option value="system">System</option>
-                      </select>
+                        className="w-[112px]"
+                        options={[
+                          { value: 'system', label: 'System' },
+                          { value: 'light', label: 'Light' },
+                          { value: 'dark', label: 'Dark' },
+                        ]}
+                        onChange={(appearance) => onUpdateSettings({ appearance })}
+                      />
                     </div>
 
                     <div className="py-4 flex items-center justify-between gap-4">
@@ -1214,6 +1095,20 @@ export function SettingsModal({
         <div role="status" className="fixed bottom-5 right-5 rounded-xl border border-white/10 bg-[#141416] px-4 py-2.5 text-[12.5px] font-medium text-white shadow-xl">
           {toast}
         </div>
+      )}
+      {languageDialog === 'targets' && (
+        <TranslationTargetsDialog
+          targets={settings.translationTargets}
+          onChange={(translationTargets) => onUpdateSettings({ translationTargets })}
+          onClose={() => setLanguageDialog(null)}
+        />
+      )}
+      {languageDialog === 'variants' && (
+        <LanguageVariantsDialog
+          variants={settings.languageVariants}
+          onChange={(languageVariants) => onUpdateSettings({ languageVariants })}
+          onClose={() => setLanguageDialog(null)}
+        />
       )}
     </dialog>
   );

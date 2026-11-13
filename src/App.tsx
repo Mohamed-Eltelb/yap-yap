@@ -6,6 +6,7 @@ import { HomeView } from './components/HomeView';
 import { SettingsModal } from './components/SettingsModal';
 import { ShareModal } from './components/ShareModal';
 import { Sidebar } from './components/Sidebar';
+import { getPreferredLanguageVariants } from './data/languages';
 import { PROVIDER_CATALOG } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
 import {
@@ -279,7 +280,7 @@ export function App() {
         const dictWords = appState.dictionary.map((d) => d.word);
         const rawText = await transcribeAudio(audioBlob, sttProvider, {
           dictionaryWords: dictWords,
-          languageVariants: appState.settings.languageVariants,
+          languageVariants: getPreferredLanguageVariants(appState.settings.languageVariants),
         });
 
         if (!rawText) {
@@ -1029,7 +1030,6 @@ export function App() {
         providers={appState.providers}
         onUpdateProvider={updateProvider}
         stats={stats}
-        onShowToast={showToast}
         toast={toast}
       />
 

@@ -1,3 +1,4 @@
+import { SelectMenu } from './SelectMenu';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -258,16 +259,18 @@ export function HistoryView({
                 Choose how long to keep your history on this device.
               </p>
             </div>
-            <select
+            <SelectMenu
+              label="Keep history"
               value={retention}
-              onChange={(e) => onChangeRetention(e.target.value as RetentionPolicy)}
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] focus:outline-none"
-            >
-              <option value="forever">Forever</option>
-              <option value="90d">90 days</option>
-              <option value="30d">30 days</option>
-              <option value="7d">7 days</option>
-            </select>
+              className="w-[115px]"
+              options={[
+                { value: 'forever', label: 'Forever' },
+                { value: '90d', label: '90 days' },
+                { value: '30d', label: '30 days' },
+                { value: '7d', label: '7 days' },
+              ]}
+              onChange={onChangeRetention}
+            />
           </div>
 
           <div className="px-5 py-3.5">

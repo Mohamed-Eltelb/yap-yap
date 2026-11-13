@@ -57,8 +57,8 @@ export function HomeView({
     !PROVIDER_CATALOG[settings.activeSttProvider].requiresKey;
 
   const dictateKeys = settings.shortcuts.dictate[0] ?? ['Right Alt'];
-  const translateKeys = settings.shortcuts.translate[0] ?? ['Right Alt', 'Right Shift'];
-  const askKeys = settings.shortcuts.ask[0] ?? ['Right Alt', 'Space'];
+  const translateKeys = settings.shortcuts.translate[0] ?? [];
+  const askKeys = settings.shortcuts.ask[0] ?? [];
 
   const chartColors = ['#5B9BF8', '#5B9BF8', '#4DC9E6', '#8BA7F9'];
   const sectors = stats.categoryBreakdown.map((c, i) => ({
@@ -233,6 +233,7 @@ export function HomeView({
                   className="flex flex-wrap gap-1 hover:opacity-80 transition-opacity text-left"
                   title="Click to start Translate mode"
                 >
+                  {translateKeys.length === 0 && <span className="yy-keycap">Start</span>}
                   {translateKeys.map((k, i) => (
                     <span key={i} className="yy-keycap">
                       {k}
@@ -251,6 +252,7 @@ export function HomeView({
                   className="flex flex-wrap gap-1 hover:opacity-80 transition-opacity text-left"
                   title="Click to start Ask anything mode"
                 >
+                  {askKeys.length === 0 && <span className="yy-keycap">Start</span>}
                   {askKeys.map((k, i) => (
                     <span key={i} className="yy-keycap">
                       {k}
