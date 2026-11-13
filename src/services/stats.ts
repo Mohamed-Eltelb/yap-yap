@@ -172,7 +172,8 @@ export function filterByRetention(
   now = new Date()
 ): HistoryItem[] {
   if (policy === 'forever') return items;
-  const days = policy === '90d' ? 90 : policy === '30d' ? 30 : 7;
+  if (policy === 'never') return [];
+  const days = { '1y': 365, '90d': 90, '30d': 30, '7d': 7, '24h': 1 }[policy] ?? 7;
   const cutoff = now.getTime() - days * 86_400_000;
   return items.filter((item) => new Date(item.createdAt).getTime() >= cutoff);
 }

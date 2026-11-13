@@ -445,7 +445,7 @@ export function App() {
 
             return {
               ...prev,
-              history: [newItem, ...prev.history],
+              history: filterByRetention([newItem, ...prev.history], prev.settings.historyRetention),
               dictionary:
                 newAutoEntries.length > 0
                   ? [...newAutoEntries, ...prev.dictionary]
@@ -941,6 +941,7 @@ export function App() {
             ? {
                 ...h,
                 text: trimmed,
+                answer: h.mode === 'ask' && h.answer ? trimmed : h.answer,
                 wordCount: nextWords,
                 wpm: nextWpm,
                 category: nextCategory,

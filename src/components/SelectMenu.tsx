@@ -10,10 +10,12 @@ interface Props<Value extends string> {
   id?: string;
   placeholder?: string;
   quiet?: boolean;
+  showCheckmark?: boolean;
 }
 
 export function SelectMenu<Value extends string>({
   label, value, options, onChange, className = '', id, placeholder = 'Select an option', quiet = false,
+  showCheckmark = !quiet,
 }: Props<Value>) {
   const listId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -156,7 +158,7 @@ export function SelectMenu<Value extends string>({
             onClick={() => select(index)}
           >
             <span>{option.label}</span>
-            {!quiet && index === selected && <Check size={15} className="yy-option-check" aria-hidden="true" />}
+            {showCheckmark && index === selected && <Check size={15} className="yy-option-check" aria-hidden="true" />}
           </div>
         ))}
       </div>

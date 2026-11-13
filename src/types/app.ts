@@ -13,7 +13,7 @@ export type DictationMode = 'dictate' | 'translate' | 'ask';
 
 export type AppearanceMode = 'light' | 'dark' | 'system';
 
-export type RetentionPolicy = 'forever' | '90d' | '30d' | '7d';
+export type RetentionPolicy = 'forever' | '1y' | '90d' | '30d' | '7d' | '24h' | 'never';
 
 export type PersonalizationCategory =
   | 'AI assistants'

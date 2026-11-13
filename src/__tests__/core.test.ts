@@ -172,6 +172,17 @@ describe('Stats and Heatmap Engine', () => {
     expect(filterByRetention(items, '7d', baseDate)).toHaveLength(2);
   });
 
+  it('enforces the new retention limits and preserves the legacy 90-day policy', () => {
+    const entries = [0, 1, 2, 90, 91, 365, 366].map((age) => ({
+      ...items[0],
+      createdAt: new Date(baseDate.getTime() - age * 86_400_000).toISOString(),
+    }));
+    expect(filterByRetention(entries, '24h', baseDate)).toEqual(entries.slice(0, 2));
+    expect(filterByRetention(entries, '90d', baseDate)).toEqual(entries.slice(0, 4));
+    expect(filterByRetention(entries, '1y', baseDate)).toEqual(entries.slice(0, 6));
+    expect(filterByRetention(entries, 'never', baseDate)).toEqual([]);
+  });
+
   it('builds 28-week heatmap matrix with 196 unique DST-safe calendar days', () => {
     const weeks = buildHeatmapWeeks(items, baseDate, 28);
     expect(weeks).toHaveLength(28);
