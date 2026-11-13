@@ -171,8 +171,19 @@ html.hud-mode #root {
   transition: fill 150ms;
 }
 
-.yy-personalization-chart [data-highlighted='true'] .yy-personalization-track {
+.yy-personalization-chart [data-highlighted='true'] .yy-personalization-track,
+.yy-personalization-chart-button:is(:hover, :focus-visible) .yy-personalization-track {
   fill: var(--personalization-track-active);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .yy-personalization-chart-button .yy-personalization-chart {
+    transition: transform 150ms ease-out;
+  }
+
+  .yy-personalization-chart-button:is(:hover, :focus-visible) .yy-personalization-chart {
+    transform: scale(1.05);
+  }
 }
 
 .yy-personalization-fill {

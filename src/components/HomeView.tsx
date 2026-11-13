@@ -191,7 +191,18 @@ export function HomeView({
                 </button>
               </div>
               <div className="w-[34%] max-w-[210px] shrink-0 self-center">
-                <PersonalizationChart sectors={stats.categoryBreakdown} size={210} />
+                {settings.personalizationEnabled ? (
+                  <button
+                    type="button"
+                    aria-label="Open personalization report"
+                    onClick={() => onOpenModal('personalization')}
+                    className="yy-personalization-chart-button block w-full rounded-full"
+                  >
+                    <PersonalizationChart sectors={stats.categoryBreakdown} size={210} />
+                  </button>
+                ) : (
+                  <PersonalizationChart sectors={stats.categoryBreakdown} size={210} />
+                )}
               </div>
             </div>
           </div>
