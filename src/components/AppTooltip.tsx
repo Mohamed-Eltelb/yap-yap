@@ -13,20 +13,39 @@ export function AppTooltip() {
   useEffect(() => {
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
-    const update = () => setTrigger(hovered ?? focused);
+    // A trigger that was just pressed stays quiet until the pointer leaves it.
+    let pressed: HTMLElement | null = null;
+    // While a modal opened by the pressed trigger is up, the pointer is over the
+    // modal, not elsewhere in the app, so keep the trigger quiet until it closes.
+    const modalOpen = () => document.querySelector('dialog:modal') !== null;
+    const update = () => setTrigger((hovered && hovered !== pressed ? hovered : null) ?? focused);
 
     const onPointerOver = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
-      hovered = tooltipTrigger(event.target);
+      const next = tooltipTrigger(event.target);
+      if (next === tooltipTrigger(event.relatedTarget)) return;
+      hovered = next;
+      if (pressed && pressed !== next && !modalOpen()) pressed = null;
       update();
     };
     const onPointerOut = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
-      hovered = tooltipTrigger(event.relatedTarget);
+      const next = tooltipTrigger(event.relatedTarget);
+      if (next === tooltipTrigger(event.target)) return;
+      hovered = next;
+      if (pressed && pressed !== next && !modalOpen()) pressed = null;
+      update();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      pressed = tooltipTrigger(event.target) ?? (modalOpen() ? pressed : null);
+      focused = null;
       update();
     };
     const onFocusIn = (event: FocusEvent) => {
-      focused = tooltipTrigger(event.target);
+      const next = tooltipTrigger(event.target);
+      // Only keyboard focus shows a tooltip; mouse clicks and focus restored
+      // after a modal closes should not leave one stuck on screen.
+      focused = next && next !== pressed && next.matches(':focus-visible') ? next : null;
       update();
     };
     const onFocusOut = () => {
@@ -34,7 +53,7 @@ export function AppTooltip() {
       update();
     };
     const dismiss = () => {
-      hovered = null;
+      pressed = hovered ?? (modalOpen() ? pressed : null);
       focused = null;
       update();
     };
@@ -47,15 +66,19 @@ export function AppTooltip() {
 
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
+    document.addEventListener('click', dismiss, true);
     document.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('blur', dismiss);
     return () => {
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
+      document.removeEventListener('click', dismiss, true);
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('blur', dismiss);
     };
@@ -73,7 +96,9 @@ export function AppTooltip() {
 
     const updatePosition = () => {
       const label = trigger.dataset.tooltip;
-      if (!label || !trigger.isConnected || !trigger.checkVisibility({ visibilityProperty: true })) {
+      const modal = document.querySelector('dialog:modal');
+      const coveredByModal = modal !== null && !modal.contains(trigger);
+      if (!label || coveredByModal || !trigger.isConnected || !trigger.checkVisibility({ visibilityProperty: true })) {
         tooltip.hidePopover();
         return;
       }
@@ -83,7 +108,7 @@ export function AppTooltip() {
 
       const anchor = trigger.getBoundingClientRect();
       const { width, height } = tooltip.getBoundingClientRect();
-      const gap = 6;
+      const gap = 4;
       const below = anchor.bottom + gap;
       const above = anchor.top - height - gap;
       const top = below + height <= window.innerHeight - gap ? below : above;
@@ -120,7 +145,7 @@ export function AppTooltip() {
       id={id}
       role="tooltip"
       popover="manual"
-      className="yy-personalization-tooltip pointer-events-none fixed inset-auto m-0 w-max max-w-[min(15rem,calc(100vw-12px))] rounded-lg p-2.5 text-xs leading-relaxed shadow-lg wrap-anywhere"
+      className="yy-personalization-tooltip pointer-events-none fixed inset-auto m-0 w-max max-w-[min(14rem,calc(100vw-8px))] rounded-md px-2 py-1 text-xs leading-snug shadow-md wrap-anywhere"
     />,
     trigger.closest('dialog[open]') ?? document.body,
   );

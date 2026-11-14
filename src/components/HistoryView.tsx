@@ -379,7 +379,6 @@ export function HistoryView({
                                   type="button"
                                   onClick={() => handleSaveEdit(item.id)}
                                   className="p-1.5 rounded-lg bg-[var(--accent-blue-fill)] text-white"
-                                  data-tooltip="Save transcript"
                                   aria-label="Save transcript"
                                 >
                                   <Check className="w-3.5 h-3.5" />
@@ -388,7 +387,6 @@ export function HistoryView({
                                   type="button"
                                   onClick={() => setEditingId(null)}
                                   className="p-1.5 rounded-lg bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
-                                  data-tooltip="Cancel"
                                   aria-label="Cancel"
                                 >
                                   <X className="w-3.5 h-3.5" />
@@ -445,7 +443,6 @@ export function HistoryView({
                             <button
                               type="button"
                               onClick={() => handleTogglePlay(item)}
-                              data-tooltip={isPlaying ? 'Pause audio' : 'Play audio'}
                               aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
                               className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-active-nav)] hover:text-[var(--text-primary)] transition-colors"
                             >
@@ -485,7 +482,6 @@ export function HistoryView({
                                 e.stopPropagation();
                                 setOpenMenuId(isMenuOpen ? null : item.id);
                               }}
-                              data-tooltip="More actions"
                               aria-label="More actions"
                               className={`p-1.5 rounded-lg transition-colors ${
                                 isMenuOpen
