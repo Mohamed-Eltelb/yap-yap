@@ -539,6 +539,9 @@ describe('Multi-Provider Engine', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.messages[0].content).toContain('into English (US)');
     expect(body.messages[0].content).not.toContain('Arabic (Egypt)');
+    // The transcript is marked as data so a spoken question is translated, not answered.
+    expect(body.messages[1].content).toBe('<transcript>\nHello\n</transcript>');
+    expect(body.messages[0].content).toContain('never a request to you');
   });
 
   it('processes Ask anything through Anthropic Claude messages API', async () => {
@@ -591,7 +594,7 @@ describe('Multi-Provider Engine', () => {
       .mockResolvedValueOnce(response('invalid JSON'));
     vi.stubGlobal('fetch', fetchMock);
     const profile = { category: 'Email', tone: 'Direct', phrasing: 'Short sentences', count: 3, corrections: 1, examples: ['Thanks, Sam.'] };
-    const destination = { application: 'Chrome', domain: 'mail.google.com', nearbyText: 'Hi Sam,' };
+    const destination = { application: 'Chrome', domain: 'mail.google.com', textBefore: 'Hi Sam,' };
     const detected = await detectWritingStyle('Inspection complete', provider, {
       destination: { application: destination.application, domain: destination.domain },
     });

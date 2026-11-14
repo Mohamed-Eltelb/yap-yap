@@ -391,9 +391,10 @@ export function App() {
 
         // App and site always set the tone. Text near the caret stays on the device unless
         // context awareness is on.
-        const destination = mode === 'dictate' ? await destinationProbe : undefined;
+        const destination = mode === 'dictate' || mode === 'translate' ? await destinationProbe : undefined;
         const location = destination && { application: destination.application, domain: destination.domain };
-        const source = appState.settings.personalizationEnabled ? destinationKey(location) : undefined;
+        // Style learning covers dictation only.
+        const source = mode === 'dictate' && appState.settings.personalizationEnabled ? destinationKey(location) : undefined;
         const shareText = appState.settings.contextAwareness;
 
         let finalText = rawText;
@@ -453,9 +454,11 @@ export function App() {
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
                 writingStyles,
+                // Before and after stay separate so the model knows where the caret is.
                 destination: location && {
                   ...location,
-                  nearbyText: shareText ? `${destination.textBefore ?? ''}${destination.textAfter ?? ''}`.trim() || undefined : undefined,
+                  textBefore: shareText ? destination.textBefore || undefined : undefined,
+                  textAfter: shareText ? destination.textAfter || undefined : undefined,
                 },
               }
             );
@@ -627,7 +630,7 @@ export function App() {
     restoreAudioMute();
     const { mode: currentMode, targetLanguage } = hudRef.current;
     const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
-    const destinationProbe = currentMode === 'dictate'
+    const destinationProbe = currentMode === 'dictate' || currentMode === 'translate'
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
     setHud((current) => ({ ...current, status: 'processing' }));
     try {
@@ -715,7 +718,7 @@ export function App() {
       setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
       return;
     }
-    audio[8] = audio[2] === 'dictate' ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
+    audio[8] = audio[2] === 'dictate' || audio[2] === 'translate' ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
     await processAudioPipeline(...audio);
   }, [processAudioPipeline]);
 
