@@ -445,7 +445,7 @@ function ModelField({ id, label, help, value, options, onChange }: {
   const showInput = manual || !options.length;
   const choices = options.map((model) => ({
     value: model.id,
-    label: model.label.includes(model.id) ? model.label : `${model.label} · ${model.id}`,
+    label: model.label?.trim() || model.id,
   }));
   if (value && !choices.some((option) => option.value === value)) choices.unshift({ value, label: value });
 
