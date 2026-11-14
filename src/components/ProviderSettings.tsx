@@ -59,32 +59,46 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
   const heading = useRef<HTMLHeadingElement>(null);
   const configured = PROVIDER_ORDER.filter((id) => isProviderConfigured(providers[id]));
   const available = PROVIDER_ORDER.filter((id) => !configured.includes(id));
-  const showingCatalog = view.type === 'catalog' || view.type === 'add';
 
   useLayoutEffect(() => {
     heading.current?.focus();
     heading.current?.scrollIntoView({ block: 'start' });
-  }, [showingCatalog]);
+  }, [view.type]);
 
-  const editorDialog = 'id' in view && (
-    <ProviderForm
-      key={view.id}
-      provider={providers[view.id]}
-      adding={view.type === 'add'}
-      onCancel={() => navigate({ type: view.type === 'add' ? 'catalog' : 'list' })}
-      onRefresh={(discoveredModels) => onUpdateProvider(view.id, { discoveredModels })}
-      onRemove={view.type === 'manage' ? () => {
-        onRemoveProvider(view.id);
-        navigate({ type: 'list' });
-      } : undefined}
-      onSave={(patch) => {
-        onUpdateProvider(view.id, patch);
-        navigate({ type: 'list' });
-      }}
-    />
-  );
+  if ('id' in view) {
+    const { id } = view;
+    const adding = view.type === 'add';
+    const name = PROVIDER_CATALOG[id].name;
+    const back = () => navigate({ type: adding ? 'catalog' : 'list' });
+    return (
+      <div className="provider-settings">
+        <BackButton onClick={back}>{adding ? 'Choose a provider' : 'Providers & API Keys'}</BackButton>
+        <header className="provider-heading provider-form-heading">
+          <ProviderIcon id={id} />
+          <h2 ref={heading} tabIndex={-1}>
+            {adding ? `Connect ${name}` : `Manage ${name}`}
+          </h2>
+        </header>
+        <ProviderForm
+          key={id}
+          provider={providers[id]}
+          adding={adding}
+          onCancel={back}
+          onRefresh={(discoveredModels) => onUpdateProvider(id, { discoveredModels })}
+          onRemove={adding ? undefined : () => {
+            onRemoveProvider(id);
+            navigate({ type: 'list' });
+          }}
+          onSave={(patch) => {
+            onUpdateProvider(id, patch);
+            navigate({ type: 'list' });
+          }}
+        />
+      </div>
+    );
+  }
 
-  if (showingCatalog) {
+  if (view.type === 'catalog') {
     return (
       <div className="provider-settings">
         <BackButton onClick={() => navigate({ type: 'list' })}>Providers &amp; API Keys</BackButton>
@@ -108,7 +122,6 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
             );
           })}
         </ul>
-        {editorDialog}
       </div>
     );
   }
@@ -200,7 +213,6 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
       )}
 
       <p className="provider-privacy">API keys are stored on this device and sent directly to your provider.</p>
-      {editorDialog}
     </div>
   );
 }
@@ -222,18 +234,6 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
   onRemove?: () => void;
   onSave: (patch: Partial<ProviderConfig>) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  useLayoutEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    const opener = document.activeElement;
-    element.showModal();
-    return () => {
-      element.close();
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-    };
-  }, []);
   const meta = PROVIDER_CATALOG[provider.id];
   const custom = provider.id === 'custom';
   const [apiKey, setApiKey] = useState(adding ? '' : provider.apiKey);
@@ -337,24 +337,7 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
   }
 
   return (
-    <dialog
-      ref={dialog}
-      className="yy-language-dialog provider-dialog"
-      aria-labelledby={titleId}
-      onCancel={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onCancel();
-      }}
-    >
-      <button type="button" className="yy-language-close" aria-label="Close provider editor" onClick={onCancel}>
-        <X size={18} />
-      </button>
-      <header className="provider-form-heading">
-        <ProviderIcon id={provider.id} />
-        <h2 id={titleId}>{adding ? `Connect ${meta.name}` : meta.name}</h2>
-      </header>
-
+    <>
       <form onSubmit={submit} className="provider-form">
         <fieldset disabled={busy} aria-busy={busy}>
           {custom && (
@@ -371,7 +354,6 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
             <div className="provider-key-input">
               <input
                 id="provider-api-key"
-                autoFocus={adding}
                 type={showKey ? 'text' : 'password'}
                 placeholder={meta.keyPlaceholder}
                 autoComplete="off"
@@ -466,7 +448,7 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
           </div>
         </dialog>
       )}
-    </dialog>
+    </>
   );
 }
 

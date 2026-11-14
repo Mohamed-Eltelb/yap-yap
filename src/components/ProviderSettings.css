@@ -29,14 +29,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.provider-dialog {
-  width: min(475px, calc(100% - 32px));
-}
-
-.provider-dialog::backdrop {
-  background: rgb(0 0 0 / 28%);
+  padding-right: 28px;
 }
 
 .provider-primary,
@@ -65,8 +58,7 @@
   background: color-mix(in srgb, var(--btn-dark-bg) 90%, var(--btn-dark-text));
 }
 
-.provider-settings button:disabled,
-.provider-dialog button:disabled {
+.provider-settings button:disabled {
   cursor: default;
 }
 
@@ -237,7 +229,7 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
 }
 
 .provider-form {
-  padding: 4px 22px 18px;
+  width: min(100%, 475px);
 }
 
 @container (width < 390px) {
@@ -473,7 +465,7 @@ html.dark .provider-error {
   color: #ffadad;
 }
 
-:is(.provider-settings, .provider-dialog) :is(button, input, a):focus-visible {
+.provider-settings :is(button, input, a):focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
