@@ -271,31 +271,6 @@ export function HomeView({
               </div>
             </div>
 
-            {/* Popular use cases pill card */}
-            <button
-              type="button"
-              onClick={() => onOpenModal('personalization')}
-              className="w-full yy-card p-3 text-left hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <div className="text-[12px] font-medium text-[var(--text-primary)] mb-2">
-                Popular use cases
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-bold">
-                  AI
-                </span>
-                <span className="w-5 h-5 rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center text-[10px] font-bold">
-                  💬
-                </span>
-                <span className="w-5 h-5 rounded-md bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center text-[10px] font-bold">
-                  &lt;/&gt;
-                </span>
-                <span className="w-5 h-5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center text-[10px] font-bold">
-                  ✉
-                </span>
-              </div>
-            </button>
-
             {/* Active Provider Card (matching the featured card slot) */}
             {!settings.dismissedPromoCard && (
               <div className="yy-card p-3.5 relative group">

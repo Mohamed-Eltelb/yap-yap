@@ -27,7 +27,10 @@ export interface HeatmapCell {
   words: number;
   sessions: number;
   level: 0 | 1 | 2 | 3 | 4;
+  /** Before the first recorded dictation: we have no data for this day. */
   hatched: boolean;
+  /** After today: shown as an empty slot, not as a day without activity. */
+  future: boolean;
   label: string;
   usageLabel: string;
 }
@@ -269,8 +272,10 @@ export function computeInsights(
 export function buildHeatmapWeeks(
   items: HistoryItem[],
   endDate: Date,
-  weeksCount = 28
+  weeksCount = 28,
+  today: Date = new Date()
 ): HeatmapWeek[] {
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   const dayStats = new Map<string, { words: number; sessions: number }>();
   let earliestTime: number | null = null;
 
@@ -333,7 +338,10 @@ export function buildHeatmapWeeks(
           ? cellDate.getTime() < earliestTime
           : false;
 
-      let usageLabel = 'No activity';
+      const future = cellDate.getTime() > todayStart;
+      const noData = hatched && words === 0;
+
+      let usageLabel = noData ? 'No data available' : 'No activity';
       if (level === 4) usageLabel = `Power usage · ${words} words`;
       else if (level === 3) usageLabel = `Heavy usage · ${words} words`;
       else if (level === 2) usageLabel = `Steady usage · ${words} words`;
@@ -345,7 +353,8 @@ export function buildHeatmapWeeks(
         words,
         sessions,
         level,
-        hatched: hatched && words === 0,
+        hatched: noData && !future,
+        future,
         label: `${fullMonths[cellDate.getMonth()]} ${cellDate.getDate()}, ${cellDate.getFullYear()}`,
         usageLabel,
       });

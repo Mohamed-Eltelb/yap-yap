@@ -217,6 +217,19 @@ describe('Stats and Heatmap Engine', () => {
     expect(activeCells.length).toBe(3);
   });
 
+  it('marks days after today as future and days before the first dictation as no data', () => {
+    const allCells = buildHeatmapWeeks(items, baseDate, 28, baseDate).flatMap((w) => w.days);
+    // baseDate is a Thursday, so the last week still has Friday and Saturday ahead.
+    const future = allCells.filter((c) => c.future);
+    expect(future.map((c) => c.dateKey)).toEqual(['2026-11-13', '2026-11-14']);
+    expect(future.every((c) => !c.hatched)).toBe(true);
+
+    const beforeFirst = allCells.find((c) => c.dateKey === '2026-09-30');
+    expect(beforeFirst).toMatchObject({ hatched: true, usageLabel: 'No data available' });
+    const quietDay = allCells.find((c) => c.dateKey === '2026-10-02');
+    expect(quietDay).toMatchObject({ hatched: false, future: false, usageLabel: 'No activity' });
+  });
+
   it('starts with 100% clean zero-fake state and 0% personalization when empty', () => {
     const init = getInitialState();
     expect(init.history).toEqual([]);

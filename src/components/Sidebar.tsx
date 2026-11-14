@@ -67,7 +67,7 @@ export function Sidebar({
 
   const progressPct = hasActiveKey
     ? Math.min(100, Math.max(12, Math.round((totalWords / 2000) * 100)))
-    : 6;
+    : 12;
 
   return (
     <aside className="yy-side-surface w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
@@ -152,7 +152,7 @@ export function Sidebar({
               <Info className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="w-full h-[3px] rounded-full bg-[var(--bg-subtle)] mt-2 mb-3 overflow-hidden">
+          <div className="w-full h-[4px] rounded-full bg-[var(--border-strong)] mt-2 mb-3 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
                 hasActiveKey ? 'bg-[var(--text-primary)]' : 'bg-amber-500'

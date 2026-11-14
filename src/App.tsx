@@ -151,7 +151,15 @@ export function App() {
 
     const applyTheme = () => {
       const isDark = mode === 'dark' || (mode === 'system' && Boolean(mql?.matches));
-      document.documentElement.classList.toggle('dark', isDark);
+      const root = document.documentElement;
+      if (root.classList.contains('dark') === isDark) return;
+      // Pause color transitions so the whole UI switches in one frame
+      // instead of each element fading on its own timing.
+      root.classList.add('theme-switching');
+      root.classList.toggle('dark', isDark);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => root.classList.remove('theme-switching'));
+      });
     };
 
     applyTheme();

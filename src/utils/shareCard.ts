@@ -166,7 +166,11 @@ export function renderShareCardToCanvas(
         const cx = gridX + wi * (cell + cellGap);
         const cy = gridY + di * (cell + cellGap);
         drawRoundedRect(ctx, cx, cy, cell, cell, 6);
-        ctx.fillStyle = day.hatched ? '#f4f4f5' : levelColors[day.level];
+        ctx.fillStyle = day.future
+          ? 'rgba(255, 255, 255, 0.55)'
+          : day.hatched
+            ? '#f4f4f5'
+            : levelColors[day.level];
         ctx.fill();
       });
     });

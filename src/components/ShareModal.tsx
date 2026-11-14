@@ -207,7 +207,9 @@ export function ShareModal({ open, onClose, stats, history, onShowToast }: Props
                         <span
                           key={day.dateKey}
                           style={{
-                            backgroundColor: day.hatched
+                            backgroundColor: day.future
+                              ? 'rgba(255, 255, 255, 0.55)'
+                              : day.hatched
                               ? '#f4f4f5'
                               : levelBg[day.level],
                           }}

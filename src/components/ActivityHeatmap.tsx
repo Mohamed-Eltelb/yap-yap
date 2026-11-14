@@ -120,7 +120,14 @@ export function ActivityHeatmap({
             <div className="grid grid-flow-col auto-cols-fr gap-[4.5px] min-w-[490px]">
               {weeks.map((week, wi) => (
                 <div key={wi} className="flex flex-col gap-[5px]">
-                  {week.days.map((cell) => (
+                  {week.days.map((cell) => cell.future ? (
+                    // Days after today: an empty slot that can't be hovered or focused.
+                    <span
+                      key={cell.dateKey}
+                      aria-hidden="true"
+                      className="w-[13px] h-[13px] rounded-[3.5px] border border-[var(--border-strong)]"
+                    />
+                  ) : (
                     <button
                       key={cell.dateKey}
                       type="button"
