@@ -51,6 +51,7 @@
   "build": {
     "appId": "com.yapyap.desktop",
     "productName": "Yap Yap",
+    "icon": "public/icons/app.png",
     "npmRebuild": false,
     "asarUnpack": ["node_modules/loudness/impl/windows/*.exe"],
     "directories": {

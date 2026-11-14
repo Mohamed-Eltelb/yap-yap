@@ -5,7 +5,6 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
-  nativeImage,
   nativeTheme,
   screen,
   shell,
@@ -34,6 +33,8 @@ let quitAfterAudioRestore = false;
 let shortcutEditorOpen = false;
 
 const isDev = !app.isPackaged;
+const iconsPath = path.join(__dirname, isDev ? '../public/icons' : '../dist/icons');
+const appIconPath = path.join(iconsPath, 'app.png');
 
 function getStorePath(): string {
   return path.join(app.getPath('userData'), 'yapyap-store.json');
@@ -98,6 +99,7 @@ function createMainWindow(): void {
     height: 820,
     minWidth: 940,
     minHeight: 620,
+    icon: appIconPath,
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     backgroundColor: nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG,
@@ -242,11 +244,10 @@ function updateHudWindow(): void {
 }
 
 function createTray(): void {
+  const trayIcon = process.platform === 'win32' ? 'tray.ico' : 'tray.png';
+
   try {
-    const emptyPng =
-      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAWElEQVQ4T2NkoBAwUqifAW8AmqH4DcBpwH88BrAgGwDmwMUBiO0F4iYgdqRmAFwQ6wYgNkI2AK4JbAAzEPsCMQeRGYAWwL+Q4wAYG5nGgGYA3K+4xQEA1i4OE1h3/xAAAAAASUVORK5CYII=';
-    const icon = nativeImage.createFromDataURL(`data:image/png;base64,${emptyPng}`);
-    tray = new Tray(icon);
+    tray = new Tray(path.join(iconsPath, trayIcon));
     tray.setToolTip('Yap Yap — Speak, don’t type');
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -283,8 +284,8 @@ function createTray(): void {
       mainWindow?.show();
       mainWindow?.focus();
     });
-  } catch {
-    // Tray may not be available in headless Linux
+  } catch (error) {
+    console.warn('Yap Yap could not create the system tray', error);
   }
 }
 
@@ -352,6 +353,7 @@ function pasteIntoFocusedField(): Promise<boolean> {
 }
 
 app.whenReady().then(() => {
+  if (isDev) app.dock?.setIcon(appIconPath);
   warmDictationContext();
   createMainWindow();
   createHudWindow();
