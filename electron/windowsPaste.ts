@@ -5,15 +5,20 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 const verifyPaste = String.raw`
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$automation = [Windows.Automation.AutomationElement]
+$types = [Windows.Automation.ControlType]
+# Chromium and Electron apps answer the first UI Automation query with an empty
+# placeholder and expose the real focused element about half a second later.
+# Asking once now, while the dictation is still being transcribed, wakes them up.
+try { $null = $automation::FocusedElement } catch {}
 # The helper is started early so this wait hides the PowerShell startup time.
 if ($null -eq [Console]::ReadLine()) { exit 1 }
 
-# Chromium and Electron apps only expose the real focused element shortly after
-# the first UI Automation query, so a missing text pattern is retried.
+# A Chromium placeholder is retried in case the early query came too late.
 $read = $null
-for ($attempt = 0; $attempt -lt 6 -and !$read; $attempt++) {
+for ($attempt = 0; $attempt -lt 12 -and !$read; $attempt++) {
   if ($attempt) { Start-Sleep -Milliseconds 80 }
-  $element = [Windows.Automation.AutomationElement]::FocusedElement
+  $element = $automation::FocusedElement
   if (!$element -or !$element.Current.IsEnabled -or $element.Current.IsPassword) { exit 1 }
   $value = $null
   $text = $null
@@ -24,24 +29,44 @@ for ($attempt = 0; $attempt -lt 6 -and !$read; $attempt++) {
     $readOnly = $text.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute)
     if ($readOnly -is [bool] -and $readOnly) { exit 1 }
     $read = { $text.DocumentRange.GetText(-1) }
-  } elseif ($element.Current.FrameworkId -ne 'Chrome') {
+  } elseif ($element.Current.FrameworkId -ne 'Chrome' -or $element.Current.ControlType -ne $types::Pane) {
     break
   }
 }
 
-if (!$read) {
-  # Many apps (terminals, code editors, some native text boxes) take a paste
-  # without exposing their text, and show up here as a bare pane. Only controls
-  # that are clearly not text inputs, such as buttons and lists, are skipped.
-  $types = [Windows.Automation.ControlType]
-  $inputLike = $types::Edit, $types::Document, $types::ComboBox, $types::Custom, $types::Group, $types::Pane, $types::Text
-  $type = $element.Current.ControlType
-  # Apps that draw their own UI (Zed, GPU terminals, games) expose nothing but
-  # an empty window, so the text field inside it cannot be seen. Paste anyway.
-  $children = [Windows.Automation.TreeScope]::Children
-  $opaque = $type -eq $types::Window -and
-    !$element.FindFirst($children, [Windows.Automation.Condition]::TrueCondition)
-  if (!$opaque -and $inputLike -notcontains $type) { exit 1 }
+$type = $element.Current.ControlType
+# Rows, tabs and buttons can carry a value without being a place to type.
+$never = $types::ListItem, $types::TreeItem, $types::TabItem, $types::MenuItem, $types::Button,
+  $types::CheckBox, $types::RadioButton, $types::Hyperlink, $types::Slider, $types::Image
+if ($never -contains $type) { exit 1 }
+# Windows drops simulated keys sent to an app that runs as administrator, and
+# such an app cannot be opened from a normal one.
+$handle = $null
+try { $handle = [Diagnostics.Process]::GetProcessById($element.Current.ProcessId).Handle } catch {}
+if (!$handle) { exit 1 }
+
+$fields = $types::Edit, $types::Document, $types::ComboBox, $types::Text
+$shells = $types::Window, $types::Pane, $types::Custom, $types::Group
+# Browsers and Electron apps report a changed field anywhere from a tenth of a
+# second to several seconds after the paste, and their code editors and terminals
+# never report it, so they are judged by the kind of control alone.
+$web = 'Chrome', 'Gecko' -contains $element.Current.FrameworkId
+if ($web -and $read) {
+  if ($fields + $shells + $types::Spinner -notcontains $type) { exit 1 }
+  # A drop-down list is a combo box without text of its own.
+  $isList = $type -eq $types::ComboBox -and
+    !$element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$text)
+  if ($isList) { exit 1 }
+  $read = $null
+} elseif (!$read -and $shells -contains $type) {
+  # Terminals, some native text boxes, apps that draw their own UI (Zed, games)
+  # and Electron apps with accessibility switched off take a paste but show up
+  # as a bare pane or window. It is treated as a text field unless something
+  # inside it can take focus, which makes it a container instead.
+  $focusable = New-Object Windows.Automation.PropertyCondition($automation::IsKeyboardFocusableProperty, $true)
+  if ($element.FindFirst([Windows.Automation.TreeScope]::Descendants, $focusable)) { exit 1 }
+} elseif (!$read -and $fields -notcontains $type) {
+  exit 1
 }
 
 $before = if ($read) { & $read } else { $null }
@@ -53,6 +78,9 @@ for ($attempt = 0; $attempt -lt 10; $attempt++) {
   Start-Sleep -Milliseconds 75
   if ((& $read) -cne $before) { exit 0 }
 }
+# A field that was empty and is still empty may be a hidden stand-in for the
+# real editor, so it says nothing about whether the paste arrived.
+if ([string]::IsNullOrWhiteSpace($before) -and $fields -contains $type) { exit 0 }
 exit 1
 `;
 
