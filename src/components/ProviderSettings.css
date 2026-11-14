@@ -379,6 +379,10 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   margin-top: 16px;
 }
 
+.provider-form-actions > button {
+  border-radius: 999px;
+}
+
 .provider-error + .provider-form-actions,
 .provider-form fieldset:has([role="status"]:not(:empty)) + .provider-form-actions {
   margin-top: 0;
