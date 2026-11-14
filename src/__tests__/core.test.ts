@@ -679,6 +679,8 @@ describe('Corrections made in the destination after a paste', () => {
     )).toEqual(['Supabase', 'Vercel']);
     expect(extractCorrections('push it to github today', 'push it to github today', 'push it to GitHub today')).toEqual(['GitHub']);
     expect(extractCorrections('the build passed', 'the build passed', 'The build passed')).toEqual([]);
+    // Joining a split word is learned even though only the space changed.
+    expect(extractCorrections('check its end point today', 'check its end point today', 'check its endpoint today')).toEqual(['endpoint']);
     expect(extractCorrections(pasted, pasted, `${pasted} One more thing about billing.`)).toEqual([]);
   });
 

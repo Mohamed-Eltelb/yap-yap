@@ -74,8 +74,11 @@ export function extractCorrections(pastedText: string, textAtPaste: string, text
     const from = removed.map(key).join('');
     const to = word.toLowerCase();
     // A case-only change is learned only when the casing is distinctive (GitHub, API), so a
-    // capitalized sentence start is not mistaken for a name.
-    const distinctive = from === to ? /^.+\p{Lu}/u.test(word) : editDistance(from, to) <= Math.max(from.length, to.length) / 2;
+    // capitalized sentence start is not mistaken for a name. Joining two words into one
+    // ("end point" → "endpoint") is always a real correction.
+    const distinctive = from === to
+      ? removed.length > 1 || /^.+\p{Lu}/u.test(word)
+      : editDistance(from, to) <= Math.max(from.length, to.length) / 2;
     if (distinctive && word.length >= 3 && word.length <= 40 && /\p{L}/u.test(word) && !learned.includes(word)) learned.push(word);
   }
   const rewrite = before.length >= 5 ? changed > before.length * 0.4 : replacements > 1;
