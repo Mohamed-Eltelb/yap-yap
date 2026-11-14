@@ -94,7 +94,7 @@ export async function startAudioRecording(
   return {
     stop: () =>
       new Promise((resolve, reject) => {
-        recorder.onstop = async () => {
+        const finish = async () => {
           cleanup();
           const durationMs = Math.max(400, Date.now() - startTime);
           const actualMime = recorder.mimeType || mimeType || 'audio/webm';
@@ -110,11 +110,11 @@ export async function startAudioRecording(
           cleanup();
           reject(new Error('Audio recording failed'));
         };
-        if (recorder.state !== 'inactive') {
-          recorder.stop();
-        } else {
-          cleanup();
-        }
+        recorder.onstop = finish;
+        // A recorder that already stopped on its own (the microphone went away) never fires
+        // onstop again, so hand back what was captured instead of waiting forever.
+        if (recorder.state !== 'inactive') recorder.stop();
+        else void finish();
       }),
     cancel: () => {
       try {

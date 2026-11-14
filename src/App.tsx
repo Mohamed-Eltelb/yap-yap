@@ -636,6 +636,7 @@ export function App() {
   // A cancelled recording is kept: it gets a History entry and can be brought back with Undo.
   const cancelledRef = useRef<Promise<Parameters<typeof processAudioPipeline> | null> | null>(null);
   const cancelTimerRef = useRef<number | undefined>(undefined);
+  const recordingSinceRef = useRef(0);
 
   const cancelRecording = useCallback(() => {
     retryAudioRef.current = null;
@@ -644,7 +645,9 @@ export function App() {
     recorderRef.current = null;
     restoreAudioMute();
     const { mode, targetLanguage } = hudRef.current;
-    if (!session) {
+    // A recording cancelled within a second is a slip, not something worth keeping.
+    if (!session || Date.now() - recordingSinceRef.current < 1000) {
+      session?.cancel();
       setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
       return;
     }
@@ -789,6 +792,7 @@ export function App() {
           return;
         }
         recorderRef.current = session;
+        recordingSinceRef.current = Date.now();
       } catch (err) {
         if (recorderStartRef.current !== start) return;
         restoreAudioMute();
