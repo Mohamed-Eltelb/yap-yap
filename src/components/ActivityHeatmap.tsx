@@ -196,12 +196,12 @@ export function ActivityHeatmap({
             top: hovered.y - 10,
             transform: 'translate(-50%, -100%)',
           }}
-          className="pointer-events-none absolute z-30 bg-[#141416] text-white rounded-xl px-3.5 py-2.5 shadow-xl min-w-[140px] border border-white/10"
+          className="pointer-events-none absolute z-30 bg-[#141416] text-white rounded-xl px-3 py-2.5 shadow-xl min-w-[140px]"
         >
-          <div className="text-[12px] text-zinc-400 font-medium leading-snug">
+          <div className="text-[12px] text-zinc-400 font-medium leading-snug whitespace-nowrap">
             {hovered.cell.label}
           </div>
-          <div className="text-[12.5px] text-white font-semibold mt-1 leading-snug">
+          <div className="text-[11.5px] text-white font-semibold mt-1 leading-snug">
             {hovered.cell.usageLabel}
           </div>
           <div className="w-2.5 h-2.5 bg-[#141416] rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1 border-r border-b border-white/10" />
