@@ -193,7 +193,7 @@ export function HistoryView({
       <div className="yy-history mx-auto w-full max-w-[1400px] px-5 pb-10 pt-1 sm:px-7">
         {/* Title + Top-right Controls */}
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-[clamp(28px,4vw,36px)] font-bold tracking-tight text-[var(--text-primary)]">
+          <h1 className="yy-page-title text-[clamp(28px,4vw,36px)] font-bold tracking-tight text-[var(--text-primary)]">
             History
           </h1>
 

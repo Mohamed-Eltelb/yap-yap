@@ -70,7 +70,7 @@ export function HomeView({
       </div>
 
       <div className="px-8 pb-8 pt-1 max-w-[1060px] w-full mx-auto">
-        <h1 className="text-[34px] font-bold tracking-[-0.025em] text-[var(--text-primary)] mb-5">
+        <h1 className="yy-page-title text-[34px] font-bold tracking-[-0.025em] text-[var(--text-primary)] mb-5">
           Speak, don&apos;t type
         </h1>
 
@@ -78,7 +78,7 @@ export function HomeView({
           {/* Center Insights Column */}
           <div className="yy-home-insights flex-1 min-w-0 w-full space-y-3.5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[19px] font-semibold text-[var(--text-primary)]">
+              <h2 className="yy-page-title text-[19px] font-bold text-[var(--text-primary)]">
                 Insights
               </h2>
               <button

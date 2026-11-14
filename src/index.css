@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-grotesque-bold-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+.yy-page-title {
+  font-family: 'Bricolage Grotesque', 'Inter', sans-serif;
+}
+
 :root {
   --bg-main: #ffffff;
   --bg-sidebar: #f7f7f8;

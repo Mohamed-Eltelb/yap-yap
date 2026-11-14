@@ -130,7 +130,7 @@ export function DictionaryView({
         }}
       >
         <header className="flex items-center justify-between gap-3 mb-5">
-          <h1 className="text-[clamp(28px,4vw,36px)] font-bold tracking-tight">Dictionary</h1>
+          <h1 className="yy-page-title text-[clamp(28px,4vw,36px)] font-bold tracking-tight">Dictionary</h1>
           <button
             type="button"
             onClick={() => openWordForm('add')}
