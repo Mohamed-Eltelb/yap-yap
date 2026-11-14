@@ -254,7 +254,7 @@ export function HistoryView({
                         clearDialog.current?.showModal();
                         setHeaderMenuOpen(false);
                       }}
-                      className="w-full px-3.5 py-2 text-left text-red-500 hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                      className="w-full px-3.5 py-2 text-left text-red-600 dark:text-red-400 hover:bg-[var(--bg-hover)] flex items-center gap-2"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Clear all history</span>
@@ -434,7 +434,7 @@ export function HistoryView({
                             </button>
                           )}
                           {needsRetry && item.audioDataUrl && (
-                            <button type="button" onClick={() => onRetryItem(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5 text-sm hover:bg-[var(--bg-hover)]">
+                            <button type="button" onClick={() => onRetryItem(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5 text-sm hover:bg-[var(--bg-subtle-hover)]">
                               <RotateCcw className="size-3.5" />
                               Retry
                             </button>
@@ -548,7 +548,7 @@ export function HistoryView({
                                     onDeleteItem(item.id);
                                     setOpenMenuId(null);
                                   }}
-                                  className="w-full px-3.5 py-2 text-left text-red-500 hover:bg-[var(--bg-hover)] flex items-center gap-2.5"
+                                  className="w-full px-3.5 py-2 text-left text-red-600 dark:text-red-400 hover:bg-[var(--bg-hover)] flex items-center gap-2.5"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                   <span>Delete transcript</span>

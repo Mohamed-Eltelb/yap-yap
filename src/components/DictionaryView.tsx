@@ -213,7 +213,7 @@ export function DictionaryView({
                   type="button"
                   onClick={() => { setSearchOpen(true); setMenuId(null); }}
                   aria-label="Search dictionary"
-                  className="ml-auto size-8 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  className="ml-auto size-8 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-subtle-hover)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   <Search size={14} />
                 </button>

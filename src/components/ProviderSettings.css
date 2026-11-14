@@ -428,14 +428,22 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   color: #aa252c;
 }
 
+/* Quiet destructive button: outlined like Cancel, red only in text.
+   The solid red is saved for the confirm step. */
 .provider-remove {
-  background: #9c2525;
-  color: #fff;
-  font-weight: 600;
+  --provider-danger: #b42318;
+  border: 1px solid color-mix(in srgb, var(--provider-danger) 35%, transparent);
+  background: transparent;
+  color: var(--provider-danger);
+}
+
+html.dark .provider-remove {
+  --provider-danger: #ff8f8f;
 }
 
 .provider-remove:not(:disabled):hover {
-  background: #a33131;
+  background: color-mix(in srgb, var(--provider-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--provider-danger) 55%, transparent);
 }
 
 .provider-remove-confirm-button {

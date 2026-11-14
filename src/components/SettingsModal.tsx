@@ -285,7 +285,7 @@ export function SettingsModal({
         className="w-full max-w-[860px] h-[610px] max-h-[90vh] rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-[var(--shadow-modal)] flex overflow-hidden"
       >
         {/* Modal Left Nav matching Images 7, 8, 10, 11, 14 */}
-        <div className="w-[194px] shrink-0 bg-[var(--bg-modal-sidebar)] p-3 space-y-1">
+        <div className="yy-side-surface w-[194px] shrink-0 bg-[var(--bg-modal-sidebar)] p-3 space-y-1">
           {navItems.map((item) => {
             const active = activeTab === item.id;
             return (
@@ -882,7 +882,7 @@ export function SettingsModal({
         </div>
       </div>
       {toast && (
-        <div role="status" className="fixed bottom-5 right-5 rounded-xl border border-white/10 bg-[#141416] px-4 py-2.5 text-[12.5px] font-medium text-white shadow-xl">
+        <div role="status" className="yy-toast fixed bottom-5 right-5 rounded-xl px-4 py-2.5 text-[12.5px] font-medium shadow-xl">
           {toast}
         </div>
       )}

@@ -1367,7 +1367,7 @@ export function App() {
       )}
 
       {toast && !modalOpen && (
-        <div role="status" className="fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#141416] text-white text-[12.5px] font-medium shadow-xl border border-white/10">
+        <div role="status" className="yy-toast fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl text-[12.5px] font-medium shadow-xl">
           {toast}
         </div>
       )}

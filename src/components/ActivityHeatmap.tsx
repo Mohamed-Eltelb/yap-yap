@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { HeatmapCell, buildHeatmapWeeks } from '../services/stats';
 import { HistoryItem } from '../types/app';
@@ -24,6 +25,14 @@ export function ActivityHeatmap({
     x: number;
     y: number;
   } | null>(null);
+
+  // The tooltip is fixed to the viewport, so hide it when anything scrolls.
+  useEffect(() => {
+    if (!hovered) return;
+    const hide = () => setHovered(null);
+    window.addEventListener('scroll', hide, true);
+    return () => window.removeEventListener('scroll', hide, true);
+  }, [hovered]);
 
   const anchorDate = useMemo(() => {
     const d = new Date();
@@ -118,14 +127,10 @@ export function ActivityHeatmap({
                       aria-label={`${cell.label}: ${cell.usageLabel}`}
                       onMouseEnter={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect();
-                        const parentRect =
-                          e.currentTarget
-                            .closest('.yy-card')
-                            ?.getBoundingClientRect() ?? rect;
                         setHovered({
                           cell,
-                          x: rect.left - parentRect.left + rect.width / 2,
-                          y: rect.top - parentRect.top,
+                          x: rect.left + rect.width / 2,
+                          y: rect.top,
                         });
                       }}
                       onMouseLeave={() => setHovered(null)}
@@ -188,24 +193,25 @@ export function ActivityHeatmap({
         </div>
       </div>
 
-      {/* Black Floating Tooltip matching Image 2 */}
-      {hovered && (
+      {/* Rendered at the page root so neighbouring cards can't cover it. */}
+      {hovered && createPortal(
         <div
           style={{
             left: hovered.x,
             top: hovered.y - 10,
             transform: 'translate(-50%, -100%)',
           }}
-          className="pointer-events-none absolute z-30 bg-[#141416] text-white rounded-xl px-3 py-2.5 shadow-xl min-w-[140px]"
+          className="yy-personalization-tooltip pointer-events-none fixed z-[70] rounded-xl px-3 py-2.5 shadow-xl min-w-[140px]"
         >
           <div className="text-[12px] text-zinc-400 font-medium leading-snug whitespace-nowrap">
             {hovered.cell.label}
           </div>
-          <div className="text-[11.5px] text-white font-semibold mt-1 leading-snug">
+          <div className="text-[11.5px] font-semibold mt-1 leading-snug">
             {hovered.cell.usageLabel}
           </div>
-          <div className="w-2.5 h-2.5 bg-[#141416] rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1 border-r border-b border-white/10" />
-        </div>
+          <div className="yy-personalization-tooltip w-2.5 h-2.5 rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1" />
+        </div>,
+        document.body,
       )}
     </div>
   );

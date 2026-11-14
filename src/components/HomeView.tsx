@@ -78,7 +78,7 @@ export function HomeView({
           {/* Center Insights Column */}
           <div className="yy-home-insights flex-1 min-w-0 w-full space-y-3.5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="yy-page-title text-[19px] font-bold text-[var(--text-primary)]">
+              <h2 className="yy-page-title text-[20px] font-bold text-[var(--text-primary)]">
                 Insights
               </h2>
               <button
@@ -102,7 +102,7 @@ export function HomeView({
                     {wordsFmt.unit}
                   </span>
                 </div>
-                <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+                <p className="text-[13px] text-[var(--text-secondary)] mt-1">
                   Words dictated
                 </p>
               </div>
@@ -122,7 +122,7 @@ export function HomeView({
                     {saved.secondUnit}
                   </span>
                 </div>
-                <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+                <p className="text-[13px] text-[var(--text-secondary)] mt-1">
                   Time saved
                 </p>
               </div>
@@ -136,7 +136,7 @@ export function HomeView({
                     WPM
                   </span>
                 </div>
-                <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+                <p className="text-[13px] text-[var(--text-secondary)] mt-1">
                   Average dictation speed
                 </p>
               </div>
@@ -156,7 +156,7 @@ export function HomeView({
                     {totalTime.secondUnit}
                   </span>
                 </div>
-                <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+                <p className="text-[13px] text-[var(--text-secondary)] mt-1">
                   Total dictation time
                 </p>
               </div>
@@ -185,7 +185,7 @@ export function HomeView({
                 <button
                   type="button"
                   onClick={settings.personalizationEnabled ? () => onOpenModal('personalization') : onEnablePersonalization}
-                  className="yy-personalization-action mt-4 px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
+                  className="yy-personalization-action mt-4 px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-subtle-hover)] text-[12px] font-medium text-[var(--text-primary)] transition-colors"
                 >
                   {settings.personalizationEnabled ? 'View report' : 'Enable'}
                 </button>
@@ -290,7 +290,7 @@ export function HomeView({
                 <span className="w-5 h-5 rounded-md bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center text-[10px] font-bold">
                   &lt;/&gt;
                 </span>
-                <span className="w-5 h-5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center text-[10px] font-bold">
+                <span className="w-5 h-5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center text-[10px] font-bold">
                   ✉
                 </span>
               </div>

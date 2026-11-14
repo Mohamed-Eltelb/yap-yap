@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Follow the app's chosen theme (html.dark), not the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @font-face {
   font-family: 'Bricolage Grotesque';
   src: url('/fonts/bricolage-grotesque-bold-latin.woff2') format('woff2');
@@ -25,13 +28,14 @@
   --bg-modal-backdrop: rgb(0 0 0 / 45%);
   --bg-input: #ffffff;
   --bg-subtle: #f4f4f6;
+  --bg-subtle-hover: #e7e7eb;
   --bg-keycap: #ffffff;
   --bg-switch-off: var(--color-zinc-300);
   --border-subtle: rgba(0, 0, 0, 0.065);
   --border-strong: rgba(0, 0, 0, 0.12);
   --text-primary: #141416;
   --text-secondary: #71717a;
-  --text-muted: #9ca3af;
+  --text-muted: #85858e;
   --accent-blue: #1d64f2;
   --accent-blue-fill: var(--accent-blue);
   --accent-blue-hover: #1556d8;
@@ -62,6 +66,7 @@ html.dark {
   --bg-modal-backdrop: rgb(0 0 0 / 50%);
   --bg-input: #3c3b3b;
   --bg-subtle: #454444;
+  --bg-subtle-hover: #535252;
   --bg-keycap: #3c3b3b;
   --bg-switch-off: #595858;
   --border-subtle: rgb(242 241 240 / 6%);
@@ -84,6 +89,11 @@ html.dark {
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
   --mesh-bg: radial-gradient(ellipse 60% 60% at 42% 43%, #000 35%, transparent 88%);
+}
+
+/* Sidebars sit on a tinted surface, so the default light hover is too faint there. */
+html:not(.dark) .yy-side-surface {
+  --bg-hover: #ececef;
 }
 
 html.dark .yy-home-rail {
@@ -169,6 +179,8 @@ html.dark .yy-home-insights {
 
 .yy-personalization-panel {
   background: var(--bg-subtle);
+  /* The panel is already tinted, so the default hover would vanish on it. */
+  --bg-hover: #e3e3e8;
 }
 
 .yy-personalization-chart {
@@ -263,6 +275,12 @@ html.dark .yy-home-insights {
 .yy-personalization-tooltip {
   background: var(--btn-dark-bg);
   color: var(--btn-dark-text);
+}
+
+.yy-toast {
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+  border: 1px solid var(--border-strong);
 }
 
 .dark .yy-personalization-tooltip {

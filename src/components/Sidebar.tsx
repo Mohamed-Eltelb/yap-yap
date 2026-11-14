@@ -70,7 +70,7 @@ export function Sidebar({
     : 6;
 
   return (
-    <aside className="w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
+    <aside className="yy-side-surface w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
       {/* Top Brand + Nav */}
       <div>
         <div className="px-4 pt-4 pb-3.5 flex items-center gap-2 app-drag">

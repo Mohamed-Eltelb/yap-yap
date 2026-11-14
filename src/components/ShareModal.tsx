@@ -82,14 +82,14 @@ export function ShareModal({ open, onClose, stats, history, onShowToast }: Props
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 w-7 h-7 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] flex items-center justify-center"
+          className="absolute top-4 right-4 z-20 w-7 h-7 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-subtle-hover)] text-[var(--text-secondary)] flex items-center justify-center"
           aria-label="Close share modal"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Left Template Picker matching Image 12 */}
-        <div className="w-[186px] shrink-0 bg-[var(--bg-modal-sidebar)] border-r border-[var(--border-subtle)] p-4 space-y-4 overflow-y-auto">
+        <div className="yy-side-surface w-[186px] shrink-0 bg-[var(--bg-modal-sidebar)] border-r border-[var(--border-subtle)] p-4 space-y-4 overflow-y-auto">
           {templates.map((t) => {
             const active = template === t.id;
             return (
@@ -243,7 +243,7 @@ export function ShareModal({ open, onClose, stats, history, onShowToast }: Props
             <button
               type="button"
               onClick={() => setDropdownOpen((v) => !v)}
-              className="inline-flex items-center gap-1 px-3.5 py-2.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] transition-colors"
+              className="inline-flex items-center gap-1 px-3.5 py-2.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-subtle-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] transition-colors"
               aria-label="More share options"
             >
               <Download className="w-4 h-4" />
