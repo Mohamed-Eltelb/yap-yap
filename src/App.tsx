@@ -440,8 +440,9 @@ export function App() {
             // The category comes from the app or domain when known, so cleanup needs no
             // classification round trip. Otherwise the cleanup model picks among all profiles.
             let writingStyles: typeof stats.categoryBreakdown | undefined;
+            let knownCategory: string | undefined;
             if (mode === 'dictate' && appState.settings.personalizationEnabled) {
-              const knownCategory = categoryForDestination(location) ?? (source ? learnedSources.get(source) : undefined);
+              knownCategory = categoryForDestination(location) ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
                 ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
                 : stats.categoryBreakdown;
@@ -462,6 +463,11 @@ export function App() {
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
                 writingStyles,
+                writingPreferences: mode === 'dictate' && appState.settings.personalizationEnabled
+                  ? appState.settings.writingPreferences
+                  : undefined,
+                // Rules saved for one kind of place apply only when the destination is that kind.
+                destinationCategory: knownCategory,
                 // Before and after stay separate so the model knows where the caret is.
                 destination: location && {
                   ...location,
@@ -1016,6 +1022,11 @@ export function App() {
             .map((entry) => entry.word),
           smartCleanup: appState.settings.smartCleanup,
           writingStyles,
+          writingPreferences: item.mode === 'dictate' && appState.settings.personalizationEnabled
+            ? appState.settings.writingPreferences
+            : undefined,
+          // The category learned for this dictation stands in for its destination.
+          destinationCategory: item.writingSample?.category,
         }
       );
       const nextText = processed.finalText || item.text;

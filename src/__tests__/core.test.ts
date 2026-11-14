@@ -1,4 +1,4 @@
-import { buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingSample, personalizationScore } from '../services/personalization';
+import { buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -18,6 +18,7 @@ import {
   detectWritingStyle,
   listProviderModels,
   processTranscriptWithLlm,
+  proposeWritingPreferences,
   testProviderConnection,
   transcribeAudio,
 } from '../services/providers/engine';
@@ -591,6 +592,86 @@ describe('Multi-Provider Engine', () => {
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('claude-haiku-5-5');
     expect(body.system).toContain('safeStorage');
+  });
+
+  it('proposes updated writing rules without sending corrected excerpts', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const reply = (content: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content } }] }),
+    });
+    const fetchMock = vi.fn()
+      // Reasoning text, a code fence, and list markers around the JSON are tolerated.
+      .mockResolvedValueOnce(reply('<think>plan</think>```json\n{"rules":["Use straight quotes.","- Avoid em dashes.","avoid em dashes."]}\n```'))
+      .mockResolvedValueOnce(reply('{"rules":[{"text":"Use straight quotes.","where":"everywhere"},{"text":"No final period.","where":"messaging"}]}'))
+      .mockResolvedValueOnce(reply('{"rules":[]}'))
+      .mockResolvedValueOnce(reply('{"rules":null}'))
+      .mockResolvedValueOnce(reply('Sure, done!'))
+      .mockResolvedValueOnce(reply(JSON.stringify({ rules: Array.from({ length: 21 }, (_, index) => `Rule ${index}.`) })));
+    vi.stubGlobal('fetch', fetchMock);
+    const profiles = [{
+      category: 'Email', tone: 'Formal', phrasing: 'Sentence case',
+      count: 3, corrections: 1, examples: ['Private client email'],
+    }];
+    const current = { rules: ['Use straight quotes.'], profiles };
+
+    await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes'))
+      .resolves.toEqual(['Use straight quotes.', 'Avoid em dashes.']);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(JSON.parse(body.messages[1].content)).toEqual({
+      rules: [{ text: 'Use straight quotes.', where: 'everywhere' }],
+      learnedStyles: [{ category: 'Email', tone: 'Formal', phrasing: 'Sentence case' }],
+      request: 'Avoid em dashes',
+    });
+    await expect(proposeWritingPreferences(provider, current, 'No period in chats'))
+      .resolves.toEqual(['Use straight quotes.', '[Messaging] No final period.']);
+    await expect(proposeWritingPreferences(provider, current, 'Remove everything')).resolves.toEqual([]);
+    await expect(proposeWritingPreferences(provider, current, 'Translate to French')).rejects.toThrow('not something a writing rule can do');
+    await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes')).rejects.toThrow('could not be read');
+    await expect(proposeWritingPreferences(provider, current, 'Add many')).rejects.toThrow('limit of 20 rules');
+  });
+
+  it('keeps saved writing rules clean, unique, and within limits', () => {
+    expect(parseWritingPreferences(' Use straight quotes. \n\n1. Avoid  em dashes.\nuse straight quotes.')).toEqual(['Use straight quotes.', 'Avoid em dashes.']);
+    expect(parseWritingPreferences(Array.from({ length: 30 }, (_, index) => `Rule ${index}`))).toHaveLength(20);
+    expect(parseWritingPreferences(undefined)).toEqual([]);
+    // A rule can be limited to one kind of place. An unknown place name is kept as plain text.
+    const scoped = '[messaging] No final period.\nWrite numbers as digits.\n[Nowhere] Odd rule.';
+    expect(parseWritingPreferences(scoped)).toEqual(['[Messaging] No final period.', 'Write numbers as digits.', '[Nowhere] Odd rule.']);
+    expect(writingRulesFor(scoped, 'Messaging')).toEqual(['No final period.', 'Write numbers as digits.', '[Nowhere] Odd rule.']);
+    expect(writingRulesFor(scoped, 'Email')).toEqual(['Write numbers as digits.', '[Nowhere] Odd rule.']);
+    expect(writingRulesFor(scoped, undefined)).toEqual(['Write numbers as digits.', '[Nowhere] Odd rule.']);
+    const saved = getInitialState();
+    const restored = sanitizeLoadedState({ ...saved, settings: { ...saved.settings, writingPreferences: 42 as unknown as string } });
+    expect(restored.settings.writingPreferences).toBe('');
+  });
+
+  it('loads saved personalization preferences and applies them only to dictation cleanup', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content: 'Clean text.' } }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const saved = getInitialState();
+    const preferences = 'Avoid em dashes.';
+    const restored = sanitizeLoadedState({ ...saved, settings: { ...saved.settings, writingPreferences: preferences } });
+    expect(restored.settings.writingPreferences).toBe(preferences);
+    expect(saved.settings.writingPreferences).toBe('');
+    const options = {
+      targetLanguages: [], dictionaryWords: [], smartCleanup: true,
+      writingPreferences: restored.settings.writingPreferences,
+    };
+
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, options);
+    await processTranscriptWithLlm('Clean text', 'translate', provider, options);
+    const [dictation, translation] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
+    expect(dictation).toContain(preferences);
+    expect(translation).not.toContain(preferences);
   });
 
   it('detects a category and supplies its learned style to dictation cleanup', async () => {

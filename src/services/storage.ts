@@ -6,6 +6,7 @@ import {
 } from '../data/seedData';
 import { createDefaultProviders, PROVIDER_CATALOG } from './providers/catalog';
 import { assignHistoryIds } from './historyImport';
+import { parseWritingPreferences } from './personalization';
 import {
   DictionaryEntry,
   HistoryItem,
@@ -238,6 +239,7 @@ export function sanitizeLoadedState(
     settings: {
       ...DEFAULT_SETTINGS,
       ...(raw.settings ?? {}),
+      writingPreferences: parseWritingPreferences(raw.settings?.writingPreferences).join('\n'),
       shortcuts: removeDuplicateShortcuts({
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),

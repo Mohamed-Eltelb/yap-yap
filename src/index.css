@@ -818,6 +818,316 @@ textarea,
   box-shadow: 0 2px 3px rgb(0 0 0 / 24%), var(--shadow-modal);
 }
 
+.yy-language-dialog[data-wide] {
+  width: min(540px, calc(100% - 32px));
+}
+
+/* Writing preferences editor */
+.yy-pref-editor {
+  --pref-added: #15803d;
+  --pref-added-bg: rgb(34 197 94 / 11%);
+  --pref-removed: #b91c1c;
+  display: grid;
+  gap: 10px;
+  padding: 4px 22px 20px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.dark .yy-pref-editor {
+  --pref-added: #86efac;
+  --pref-added-bg: rgb(74 222 128 / 12%);
+  --pref-removed: #fca5a5;
+}
+
+.yy-pref-rules {
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+
+.yy-pref-rules li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 8px 9px 14px;
+}
+
+.yy-pref-rules li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.yy-pref-rules li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Where a rule applies, when it is not everywhere. */
+.yy-pref-scope {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle-hover);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 18px;
+  text-decoration: none;
+  vertical-align: 1px;
+}
+
+.yy-pref-rules li > button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -2px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.yy-pref-rules li > button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.yy-pref-mark {
+  flex: none;
+  margin-top: 3.5px;
+}
+
+.yy-pref-rules li[data-change] {
+  padding-right: 14px;
+}
+
+/* While a change is reviewed, unchanged rules line up with the marked ones. */
+.yy-pref-rules[data-review] li:not([data-change]) {
+  padding-left: 36px;
+}
+
+.yy-pref-rules li[data-change='added'] {
+  background: var(--pref-added-bg);
+}
+
+.yy-pref-rules li[data-change='added'] .yy-pref-mark {
+  color: var(--pref-added);
+}
+
+.yy-pref-rules li[data-change='removed'] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.yy-pref-rules li[data-change='removed'] .yy-pref-mark {
+  color: var(--pref-removed);
+}
+
+.yy-pref-empty {
+  padding: 18px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.yy-pref-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yy-pref-actions > span {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-pref-button {
+  flex: none;
+  padding: 7px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.yy-pref-button:hover {
+  background: var(--bg-hover);
+}
+
+.yy-pref-button[data-primary] {
+  border-color: transparent;
+  background: var(--accent-blue-fill);
+  color: #fff;
+}
+
+.yy-pref-button[data-primary]:hover {
+  background: var(--accent-blue-hover);
+}
+
+.yy-pref-status {
+  display: flex;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-pref-status:empty {
+  display: none;
+}
+
+.yy-pref-status button {
+  color: var(--accent-blue);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.yy-pref-status button:hover {
+  text-decoration: underline;
+}
+
+.yy-pref-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--bg-subtle);
+}
+
+.yy-pref-composer:focus-within {
+  border-color: var(--accent-blue);
+}
+
+.yy-pref-composer textarea {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  resize: none;
+  field-sizing: content;
+  max-height: 120px;
+}
+
+.yy-pref-composer textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.yy-pref-composer button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent-blue-fill);
+  color: #fff;
+  cursor: pointer;
+}
+
+.yy-pref-composer button:hover:not(:disabled) {
+  background: var(--accent-blue-hover);
+}
+
+.yy-pref-composer button:disabled {
+  background: var(--bg-subtle-hover);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.yy-pref-error {
+  color: var(--pref-removed);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.yy-pref-note {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-pref-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.yy-pref-suggestions button {
+  padding: 4px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.yy-pref-suggestions button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.yy-pref-learned {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.yy-pref-learned summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.yy-pref-learned summary:hover {
+  color: var(--text-primary);
+}
+
+.yy-pref-learned ul {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.yy-pref-learned li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.yy-pref-learned li > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.yy-pref-learned li div {
+  display: grid;
+  min-width: 0;
+}
+
+.yy-pref-learned li span {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.yy-pref-editor :is(button, summary):focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
 .yy-language-dialog::backdrop {
   background: rgb(0 0 0 / 45%);
 }

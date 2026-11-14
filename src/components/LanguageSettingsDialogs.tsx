@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, GripVertical, Trash2, X } from 'lucide-react';
 import {
   getLanguageVariant,
@@ -7,6 +7,7 @@ import {
   TRANSLATION_LANGUAGES,
 } from '../data/languages';
 import { SelectMenu } from './SelectMenu';
+import { SettingsSubdialog } from './SettingsSubdialog';
 
 const previewWaveHeights = [3.2, 4.1, 4.7, 5.8, 6.4, 7.6, 6.2, 5.1, 4.2, 3.8, 3.1];
 
@@ -38,56 +39,6 @@ function TranslationHudPreview({ targets }: { targets: string[] }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function LanguageDialog({ title, description, children, onClose }: {
-  title: string;
-  description: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useLayoutEffect(() => {
-    const element = dialog.current!;
-    const opener = document.activeElement;
-    element.showModal();
-    return () => {
-      element.close();
-      if (opener instanceof HTMLElement) opener.focus();
-    };
-  }, []);
-
-  return (
-    <dialog
-      ref={dialog}
-      className="yy-language-dialog"
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
-      onCancel={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-      }}
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < rect.left || event.clientX > rect.right ||
-            event.clientY < rect.top || event.clientY > rect.bottom) onClose();
-      }}
-    >
-      <button type="button" autoFocus aria-label={`Close ${title.toLowerCase()}`} className="yy-language-close" onClick={onClose}>
-        <X size={18} />
-      </button>
-      <header>
-        <h2 id={titleId}>{title}</h2>
-        <p id={descriptionId}>{description}</p>
-      </header>
-      {children}
-    </dialog>
   );
 }
 
@@ -154,7 +105,7 @@ export function TranslationTargetsDialog({ targets, onChange, onClose }: {
   };
 
   return (
-    <LanguageDialog
+    <SettingsSubdialog
       title="Translation targets"
       description="Choose up to 3 target languages for your dictation in translation mode."
       onClose={onClose}
@@ -289,7 +240,7 @@ export function TranslationTargetsDialog({ targets, onChange, onClose }: {
           </div>
         )}
       </div>
-    </LanguageDialog>
+    </SettingsSubdialog>
   );
 }
 
@@ -302,7 +253,7 @@ export function LanguageVariantsDialog({ variants, onChange, onClose }: {
   const [showHelp, setShowHelp] = useState(false);
 
   return (
-    <LanguageDialog
+    <SettingsSubdialog
       title="Language variants"
       description="Choose your preferred variant for each language you use in dictation (e.g., US English or UK English)."
       onClose={onClose}
@@ -335,6 +286,6 @@ export function LanguageVariantsDialog({ variants, onChange, onClose }: {
           </div>
         </div>
       </div>
-    </LanguageDialog>
+    </SettingsSubdialog>
   );
 }

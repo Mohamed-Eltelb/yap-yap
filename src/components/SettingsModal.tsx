@@ -15,6 +15,8 @@ import {
   X,
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
+import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
+import { parseWritingPreferences, readWritingRule } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -26,6 +28,7 @@ import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
 import { ProviderSettings } from './ProviderSettings';
+import { PersonalizationEditor } from './PersonalizationEditor';
 
 interface Props {
   open: boolean;
@@ -136,6 +139,12 @@ export function SettingsModal({
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
+  const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
+  const writingRules = parseWritingPreferences(settings.writingPreferences);
+  const activeLlm = settings.activeLlmProvider;
+  const editorProvider = activeLlm !== 'none' && PROVIDER_CATALOG[activeLlm].supportsLlm && isProviderConfigured(providers[activeLlm])
+    ? providers[activeLlm]
+    : undefined;
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   const shortcutEditorOpen = open && activeTab === 'settings';
@@ -150,6 +159,7 @@ export function SettingsModal({
     const dialog = dialogRef.current;
     if (!open || !dialog) {
       setLanguageDialog(null);
+      setPreferencesEditorOpen(false);
       return;
     }
     const opener = document.activeElement;
@@ -667,6 +677,32 @@ export function SettingsModal({
                   <Toggle label="Context awareness" checked={settings.contextAwareness} onChange={(contextAwareness) => onUpdateSettings({ contextAwareness })} />
                 </div>
 
+                {settings.personalizationEnabled && (
+                  <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-medium">Writing preferences</h3>
+                      {writingRules.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-secondary)]">
+                          {writingRules.slice(0, 2).map((rule) => <li key={rule} className="truncate">{readWritingRule(rule).text}</li>)}
+                          {writingRules.length > 2 && <li>and {writingRules.length - 2} more</li>}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          Tell Yap Yap how you want your text written, such as no period at the end of chat messages.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setPreferencesEditorOpen(true)}
+                      className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--border-strong)] px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                      {writingRules.length > 0 ? 'Edit rules' : 'Add a rule'}
+                    </button>
+                  </div>
+                )}
+
                 <div data-personalization-disabled={!settings.personalizationEnabled} className="yy-personalization-panel rounded-[18px] p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-[var(--text-secondary)]">
@@ -898,6 +934,20 @@ export function SettingsModal({
           variants={settings.languageVariants}
           onChange={(languageVariants) => onUpdateSettings({ languageVariants })}
           onClose={() => setLanguageDialog(null)}
+        />
+      )}
+      {open && activeTab === 'personalization' && preferencesEditorOpen && (
+        <PersonalizationEditor
+          preferences={settings.writingPreferences}
+          profiles={stats.categoryBreakdown}
+          provider={editorProvider}
+          cleanupEnabled={settings.smartCleanup}
+          onSave={(writingPreferences) => onUpdateSettings({ writingPreferences })}
+          onClose={() => setPreferencesEditorOpen(false)}
+          onOpenProviders={() => {
+            setPreferencesEditorOpen(false);
+            onChangeTab('providers');
+          }}
         />
       )}
     </dialog>

@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   autoPaste: true,
   smartCleanup: true,
   personalizationEnabled: true,
+  writingPreferences: '',
   contextAwareness: true,
   floatingHud: true,
   historyRetention: 'forever',

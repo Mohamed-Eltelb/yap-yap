@@ -97,6 +97,7 @@ export interface SettingsState {
   autoPaste: boolean;
   smartCleanup: boolean;
   personalizationEnabled: boolean;
+  writingPreferences: string;
   contextAwareness: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;

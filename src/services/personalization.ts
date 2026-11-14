@@ -109,6 +109,60 @@ export interface WritingProfile extends WritingSample {
   examples: string[];
 }
 
+export const MAX_WRITING_PREFERENCES_LENGTH = 2000;
+export const MAX_WRITING_PREFERENCE_RULES = 20;
+
+/** One rule as plain text. Models sometimes add list markers even when asked for plain strings. */
+export function cleanWritingRule(line: string): string {
+  return line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/u, '').replace(/\s+/gu, ' ').trim().slice(0, 240).trim();
+}
+
+/**
+ * A saved rule applies everywhere, or in one kind of place when it is stored as
+ * "[Messaging] Leave out the final period." The app decides where a rule applies, because
+ * cleanup models do not reliably skip a rule that is meant for another kind of place.
+ */
+export function readWritingRule(rule: string): { text: string; category?: WritingCategory } {
+  const match = rule.match(/^\[([^\]]+)\]\s*(\S.*)$/u);
+  const category = match ? WRITING_CATEGORIES.find((name) => writingCategoryKey(name) === writingCategoryKey(match[1])) : undefined;
+  return match && category ? { text: match[2], category } : { text: rule };
+}
+
+export function writeWritingRule(text: string, category?: WritingCategory): string {
+  return category ? `[${category}] ${text}` : text;
+}
+
+/** The rules to follow for a dictation going to the given kind of place. */
+export function writingRulesFor(preferences: unknown, category: string | undefined): string[] {
+  return parseWritingPreferences(preferences)
+    .map(readWritingRule)
+    .filter((rule) => !rule.category || rule.category === category)
+    .map((rule) => rule.text);
+}
+
+/**
+ * Saved writing preferences are one rule per line. Accepts stored text or a model's list and
+ * returns clean, unique rules within the size limits.
+ */
+export function parseWritingPreferences(value: unknown): string[] {
+  const lines: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\r?\n/) : [];
+  const seen = new Set<string>();
+  const rules: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    if (typeof line !== 'string') continue;
+    const { text, category } = readWritingRule(cleanWritingRule(line));
+    const rule = writeWritingRule(text, category);
+    const key = rule.toLowerCase();
+    if (!rule || seen.has(key)) continue;
+    if (rules.length >= MAX_WRITING_PREFERENCE_RULES || length + rule.length + 1 > MAX_WRITING_PREFERENCES_LENGTH) break;
+    seen.add(key);
+    rules.push(rule);
+    length += rule.length + 1;
+  }
+  return rules;
+}
+
 export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingProfile[] {
   const groups = new Map<string, { sample: WritingSample; corrected: boolean; text?: string }[]>();
   for (const item of items) {
