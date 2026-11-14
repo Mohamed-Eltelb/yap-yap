@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('yapyap', {
     headers: Record<string, string>;
     bodyBase64?: string;
     bodyText?: string;
+    timeoutMs?: number;
   }) => ipcRenderer.invoke('api:request', req),
   apiMultipart: (req: {
     url: string;

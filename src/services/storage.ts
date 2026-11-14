@@ -4,7 +4,7 @@ import {
   INITIAL_DICTIONARY,
   createInitialHistory,
 } from '../data/seedData';
-import { createDefaultProviders } from './providers/catalog';
+import { createDefaultProviders, PROVIDER_CATALOG } from './providers/catalog';
 import { assignHistoryIds } from './historyImport';
 import {
   DictionaryEntry,
@@ -198,16 +198,16 @@ export function sanitizeLoadedState(
           ...defaultProviders[id],
           ...stored,
           sttModel: migrateModelId(
-            DEPRECATED_STT_MIGRATIONS[id],
+            stored.modelsSelected ? undefined : DEPRECATED_STT_MIGRATIONS[id],
             stored.sttModel,
             defaultProviders[id].sttModel
           ),
           llmModel: migrateModelId(
-            DEPRECATED_LLM_MIGRATIONS[id],
+            stored.modelsSelected ? undefined : DEPRECATED_LLM_MIGRATIONS[id],
             stored.llmModel,
             defaultProviders[id].llmModel
           ),
-          status: stored.apiKey
+          status: stored.status !== 'testing' && (stored.apiKey?.trim() || !PROVIDER_CATALOG[id].requiresKey)
             ? stored.status ?? 'idle'
             : 'idle',
         };

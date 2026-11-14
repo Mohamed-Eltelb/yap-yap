@@ -21,6 +21,16 @@ export type PersonalizationCategory =
   | 'Social platforms'
   | 'Development tools';
 
+export interface ProviderModel {
+  id: string;
+  label: string;
+}
+
+export interface ProviderModels {
+  speech: ProviderModel[];
+  ai: ProviderModel[];
+}
+
 export interface ProviderConfig {
   id: ProviderId;
   name: string;
@@ -31,6 +41,8 @@ export interface ProviderConfig {
   status: 'idle' | 'testing' | 'connected' | 'error';
   statusMessage?: string;
   lastTestedAt?: string;
+  discoveredModels?: ProviderModels;
+  modelsSelected?: boolean;
 }
 
 export interface HistoryItem {

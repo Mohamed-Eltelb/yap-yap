@@ -60,6 +60,24 @@ describe('Saved shortcuts', () => {
   });
 });
 
+describe('Saved provider connections', () => {
+  it('preserves explicitly selected model IDs even when they match a legacy migration', () => {
+    const { providers } = getInitialState();
+    providers.groq = { ...providers.groq, modelsSelected: true, llmModel: 'llama-3.3-70b-versatile' };
+
+    expect(sanitizeLoadedState({ providers }).providers.groq.llmModel).toBe('llama-3.3-70b-versatile');
+  });
+
+  it('keeps a verified keyless connection at the default local endpoint after reload', () => {
+    const { providers } = getInitialState();
+    providers.custom.status = 'connected';
+
+    const { providers: restored } = sanitizeLoadedState({ providers });
+
+    expect(isProviderConfigured(restored.custom)).toBe(true);
+  });
+});
+
 describe('Windows AltGr shortcuts', () => {
   const dictate = { keys: [[Key.AltRight]] };
   const translate = { keys: [[Key.AltRight], [Key.ShiftRight]] };
@@ -323,6 +341,68 @@ describe('Multi-Provider Engine', () => {
     const res = await testProviderConnection(providers.openai);
     expect(res.ok).toBe(false);
     expect(res.message).toMatch(/API key is required/i);
+  });
+
+  it('discovers compatible Groq models from the verification response without a second request', async () => {
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test-key' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: [
+        { id: 'whisper-large-v3-turbo', active: true },
+        { id: 'llama-new-chat', active: true },
+        { id: 'llama-retired', active: false },
+        { id: 'canopylabs/orpheus-tts', active: true },
+        { id: 'llama-new-chat', active: true },
+      ],
+    })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await testProviderConnection(provider)).toMatchObject({
+      ok: true,
+      models: {
+        speech: [{ id: 'whisper-large-v3-turbo', label: 'whisper-large-v3-turbo' }],
+        ai: [{ id: 'llama-new-chat', label: 'llama-new-chat' }],
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads later Gemini catalog pages and ignores models without generateContent', async () => {
+    const provider = { ...createDefaultProviders().gemini, apiKey: 'test-key' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        nextPageToken: 'next+/=',
+        models: [{ name: 'models/gemini-live', supportedGenerationMethods: ['bidiGenerateContent'] }],
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        models: [{ name: 'models/gemini-new-flash', displayName: 'Gemini New Flash', supportedGenerationMethods: ['generateContent'] }],
+      })));
+    vi.stubGlobal('fetch', fetchMock);
+    const expected = [{ id: 'gemini-new-flash', label: 'Gemini New Flash' }];
+
+    expect(await testProviderConnection(provider)).toMatchObject({ ok: true, models: { speech: expected, ai: expected } });
+    expect(fetchMock.mock.calls[1][0]).toContain('pageToken=next%2B%2F%3D');
+  });
+
+  it('checks Deepgram credentials before reading the public catalog and offers batch speech models', async () => {
+    const provider = { ...createDefaultProviders().deepgram, apiKey: 'test-key' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"projects":[]}'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        stt: [
+          { canonical_name: 'nova-new', batch: true },
+          { canonical_name: 'flux-streaming', batch: false },
+        ],
+        tts: [{ canonical_name: 'aura-example' }],
+      })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await testProviderConnection(provider)).toMatchObject({
+      ok: true,
+      models: { speech: [{ id: 'nova-new', label: 'nova-new' }], ai: [] },
+    });
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/projects$/);
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ Authorization: 'Token test-key' });
+    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('Authorization');
   });
 
   it('calls Groq OpenAI-compatible transcription endpoint with dictionary hints', async () => {

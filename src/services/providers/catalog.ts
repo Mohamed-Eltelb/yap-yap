@@ -19,7 +19,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   openai: {
     id: 'openai',
     name: 'OpenAI',
-    tagline: 'GPT-Transcribe Speech-to-Text + GPT-6 intelligence',
+    tagline: 'Dictation, cleanup, translation, and Ask Anything',
     supportsStt: true,
     supportsLlm: true,
     requiresKey: true,
@@ -40,7 +40,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   groq: {
     id: 'groq',
     name: 'Groq',
-    tagline: 'Ultra-low-latency Whisper v3 Turbo & GPT-OSS / Qwen 3.8 inference',
+    tagline: 'Fast speech recognition and AI text processing',
     supportsStt: true,
     supportsLlm: true,
     requiresKey: true,
@@ -61,7 +61,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   gemini: {
     id: 'gemini',
     name: 'Google Gemini',
-    tagline: 'Gemini 3.8 / 3.5 Flash-Lite & Gemini 4 audio, translation & reasoning',
+    tagline: 'Audio transcription, translation, and AI text processing',
     supportsStt: true,
     supportsLlm: true,
     supportsDirectAudioLlm: true,
@@ -85,7 +85,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   anthropic: {
     id: 'anthropic',
     name: 'Anthropic Claude',
-    tagline: 'Claude 5.5 text polishing, translation & Ask anything',
+    tagline: 'Text cleanup, translation, and Ask Anything',
     supportsStt: false,
     supportsLlm: true,
     requiresKey: true,
@@ -103,7 +103,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   deepgram: {
     id: 'deepgram',
     name: 'Deepgram',
-    tagline: 'Nova-3 multilingual speech recognition with smart formatting',
+    tagline: 'Multilingual speech recognition with smart formatting',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,
@@ -120,7 +120,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   elevenlabs: {
     id: 'elevenlabs',
     name: 'ElevenLabs',
-    tagline: 'Scribe v3 speech-to-text across 100+ languages',
+    tagline: 'Multilingual speech recognition',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,

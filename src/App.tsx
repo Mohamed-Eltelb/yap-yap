@@ -8,7 +8,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { ShareModal } from './components/ShareModal';
 import { Sidebar } from './components/Sidebar';
 import { getPreferredLanguageVariants } from './data/languages';
-import { PROVIDER_CATALOG, isProviderConfigured } from './services/providers/catalog';
+import { DEFAULT_SETTINGS } from './data/seedData';
+import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
 import { buildSourceCategories, categoryForDestination, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
@@ -242,24 +243,20 @@ export function App() {
         };
 
         let nextSettings = prev.settings;
-        if (patch.apiKey && patch.apiKey.trim().length > 0) {
+        if (patch.status === 'connected') {
           const meta = PROVIDER_CATALOG[id];
           const currStt = prev.settings.activeSttProvider;
-          const currSttNeedsKey =
-            PROVIDER_CATALOG[currStt].requiresKey &&
-            !prev.providers[currStt].apiKey.trim();
+          const currSttNeedsSetup = !isProviderConfigured(prev.providers[currStt]);
           const currLlm = prev.settings.activeLlmProvider;
-          const currLlmNeedsKey =
-            currLlm !== 'none' &&
-            PROVIDER_CATALOG[currLlm].requiresKey &&
-            !prev.providers[currLlm].apiKey.trim();
+          const currLlmNeedsSetup =
+            currLlm !== 'none' && !isProviderConfigured(prev.providers[currLlm]);
 
           nextSettings = {
             ...prev.settings,
             activeSttProvider:
-              meta.supportsStt && currSttNeedsKey ? id : prev.settings.activeSttProvider,
+              meta.supportsStt && currSttNeedsSetup ? id : prev.settings.activeSttProvider,
             activeLlmProvider:
-              meta.supportsLlm && currLlmNeedsKey ? id : prev.settings.activeLlmProvider,
+              meta.supportsLlm && currLlmNeedsSetup ? id : prev.settings.activeLlmProvider,
           };
         }
 
@@ -272,6 +269,24 @@ export function App() {
     },
     []
   );
+
+  const removeProvider = useCallback((id: ProviderId) => {
+    setAppState((prev) => {
+      const providers = { ...prev.providers, [id]: createDefaultProviders()[id] };
+      const settings = { ...prev.settings };
+      const remaining = PROVIDER_ORDER.filter((candidate) => isProviderConfigured(providers[candidate]));
+      if (settings.activeSttProvider === id) {
+        settings.activeSttProvider = remaining.find((candidate) => PROVIDER_CATALOG[candidate].supportsStt)
+          ?? DEFAULT_SETTINGS.activeSttProvider;
+      }
+      if (settings.activeLlmProvider === id) {
+        settings.activeLlmProvider = remaining.find((candidate) => PROVIDER_CATALOG[candidate].supportsLlm)
+          ?? DEFAULT_SETTINGS.activeLlmProvider;
+      }
+
+      return { ...prev, providers, settings };
+    });
+  }, []);
 
   // Silent and cancelled recordings stay in History but never count as dictation.
   const completedHistory = useMemo(() => appState.history.filter((item) => !item.outcome), [appState.history]);
@@ -1321,6 +1336,7 @@ export function App() {
         onUpdateSettings={updateSettings}
         providers={appState.providers}
         onUpdateProvider={updateProvider}
+        onRemoveProvider={removeProvider}
         stats={stats}
         toast={toast}
       />

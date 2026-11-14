@@ -532,6 +532,7 @@ app.whenReady().then(() => {
         headers: Record<string, string>;
         bodyBase64?: string;
         bodyText?: string;
+        timeoutMs?: number;
       }
     ) => {
       let body: BodyInit | undefined;
@@ -545,6 +546,7 @@ app.whenReady().then(() => {
         method: req.method,
         headers: req.headers,
         body,
+        signal: req.timeoutMs ? AbortSignal.timeout(req.timeoutMs) : undefined,
       });
       const text = await res.text();
       return { ok: res.ok, status: res.status, text };

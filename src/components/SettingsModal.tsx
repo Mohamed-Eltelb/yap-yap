@@ -2,17 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
 import { findShortcutConflict, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
-  AlertCircle,
-  CheckCircle2,
-  ExternalLink,
-  Eye,
-  EyeOff,
   Globe,
   HelpCircle,
   Info,
   KeyRound,
   Keyboard,
-  Loader2,
   Mic,
   Monitor,
   MoreHorizontal,
@@ -20,11 +14,6 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import {
-  PROVIDER_CATALOG,
-  PROVIDER_ORDER,
-} from '../services/providers/catalog';
-import { testProviderConnection } from '../services/providers/engine';
 import { InsightsStats } from '../services/stats';
 import {
   ProviderConfig,
@@ -36,6 +25,7 @@ import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
+import { ProviderSettings } from './ProviderSettings';
 
 interface Props {
   open: boolean;
@@ -48,6 +38,7 @@ interface Props {
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
   providers: Record<ProviderId, ProviderConfig>;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
+  onRemoveProvider: (id: ProviderId) => void;
   stats: InsightsStats;
   toast: string | null;
 }
@@ -134,6 +125,7 @@ export function SettingsModal({
   onUpdateSettings,
   providers,
   onUpdateProvider,
+  onRemoveProvider,
   stats,
   toast,
 }: Props) {
@@ -141,7 +133,6 @@ export function SettingsModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
-  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
@@ -259,44 +250,6 @@ export function SettingsModal({
     { id: 'help', label: 'Help', icon: <HelpCircle className="w-4 h-4" strokeWidth={1.8} /> },
   ];
 
-  const handleTestProvider = async (id: ProviderId) => {
-    const provider = providers[id];
-    onUpdateProvider(id, { status: 'testing', statusMessage: 'Testing connection...' });
-    const res = await testProviderConnection(provider);
-    onUpdateProvider(id, {
-      status: res.ok ? 'connected' : 'error',
-      statusMessage: res.message,
-      lastTestedAt: new Date().toISOString(),
-    });
-    if (res.ok) {
-      const meta = PROVIDER_CATALOG[id];
-      const patch: Partial<SettingsState> = {};
-      const currStt = providers[settings.activeSttProvider];
-      if (meta.supportsStt && !currStt.apiKey.trim()) {
-        patch.activeSttProvider = id;
-      }
-      if (
-        meta.supportsLlm &&
-        settings.activeLlmProvider !== 'none' &&
-        !providers[settings.activeLlmProvider].apiKey.trim()
-      ) {
-        patch.activeLlmProvider = id;
-      }
-      if (Object.keys(patch).length > 0) {
-        onUpdateSettings(patch);
-      }
-    }
-  };
-
-  const sttProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsStt);
-  const llmProviderOptions = PROVIDER_ORDER.filter((id) => PROVIDER_CATALOG[id].supportsLlm);
-
-  const providerOptionLabel = (id: ProviderId, model: 'sttModel' | 'llmModel') => {
-    const provider = providers[id];
-    const hasKey = provider.apiKey.trim().length > 0 || !PROVIDER_CATALOG[id].requiresKey;
-    return `${provider.name} (${provider[model]})${hasKey ? '' : ' — No key'}`;
-  };
-
   const startShortcutCapture = (target: ShortcutSlot) => {
     setShortcutError(null);
     setCapturingTarget(target);
@@ -366,266 +319,14 @@ export function SettingsModal({
           </button>
 
           <div className="flex-1 overflow-y-auto px-8 py-7">
-            {/* TAB 1: PROVIDERS & API KEYS */}
             {activeTab === 'providers' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-[21px] font-semibold text-[var(--text-primary)]">
-                    Providers &amp; API Keys
-                  </h2>
-                  <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
-                    Provide your own API keys. Keys stay stored locally on this device and are sent directly to your chosen provider.
-                  </p>
-                </div>
-
-                {/* Active Defaults Selector */}
-                <div className="rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="default-stt-provider" className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
-                      Default Dictation (Speech-to-Text)
-                    </label>
-                    <SelectMenu
-                      id="default-stt-provider"
-                      label="Default Dictation (Speech-to-Text)"
-                      value={settings.activeSttProvider}
-                      options={sttProviderOptions.map((id) => ({
-                        value: id,
-                        label: providerOptionLabel(id, 'sttModel'),
-                      }))}
-                      onChange={(activeSttProvider) => onUpdateSettings({ activeSttProvider })}
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="default-llm-provider" className="block text-[11.5px] font-medium text-[var(--text-secondary)] mb-1.5">
-                      Default AI (Cleanup, Translate &amp; Ask)
-                    </label>
-                    <SelectMenu
-                      id="default-llm-provider"
-                      label="Default AI (Cleanup, Translate & Ask)"
-                      value={settings.activeLlmProvider}
-                      options={[
-                        ...llmProviderOptions.map((id) => ({ value: id, label: providerOptionLabel(id, 'llmModel') })),
-                        { value: 'none', label: 'None (Raw Speech-to-Text only)' },
-                      ]}
-                      onChange={(activeLlmProvider) => onUpdateSettings({ activeLlmProvider })}
-                    />
-                  </div>
-                </div>
-
-                {/* Provider List */}
-                <div className="space-y-3">
-                  {PROVIDER_ORDER.map((id) => {
-                    const meta = PROVIDER_CATALOG[id];
-                    const cfg = providers[id];
-                    const isSttActive = settings.activeSttProvider === id;
-                    const isLlmActive = settings.activeLlmProvider === id;
-                    const revealed = Boolean(revealedKeys[id]);
-
-                    return (
-                      <div
-                        key={id}
-                        className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-4 space-y-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[14px] font-semibold text-[var(--text-primary)]">
-                                {meta.name}
-                              </span>
-                              {isSttActive ? (
-                                <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]">
-                                  Active STT
-                                </span>
-                              ) : (
-                                meta.supportsStt && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onUpdateSettings({ activeSttProvider: id })
-                                    }
-                                    className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                                  >
-                                    Use for STT
-                                  </button>
-                                )
-                              )}
-                              {isLlmActive ? (
-                                <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                                  Active AI
-                                </span>
-                              ) : (
-                                meta.supportsLlm && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onUpdateSettings({ activeLlmProvider: id })
-                                    }
-                                    className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                                  >
-                                    Use for AI
-                                  </button>
-                                )
-                              )}
-                              {cfg.status === 'connected' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>Verified</span>
-                                </span>
-                              )}
-                              {cfg.status === 'error' && (
-                                <span
-                                  data-tooltip={cfg.statusMessage}
-                                  tabIndex={cfg.statusMessage ? 0 : undefined}
-                                  className="inline-flex items-center gap-1 text-[11px] text-red-500"
-                                >
-                                  <AlertCircle className="w-3.5 h-3.5" />
-                                  <span className="truncate max-w-[200px]">
-                                    {cfg.statusMessage || 'Error'}
-                                  </span>
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                              {meta.tagline}
-                            </p>
-                          </div>
-
-                          <a
-                            href={meta.docsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11.5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
-                          >
-                            <span>Get key</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-
-                        {/* API Key + Test Button */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <input
-                              type={revealed ? 'text' : 'password'}
-                              value={cfg.apiKey}
-                              onChange={(e) =>
-                                onUpdateProvider(id, {
-                                  apiKey: e.target.value,
-                                  status: 'idle',
-                                  statusMessage: undefined,
-                                })
-                              }
-                              placeholder={meta.keyPlaceholder}
-                              className="w-full pl-3 pr-9 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-blue)]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setRevealedKeys((prev) => ({ ...prev, [id]: !prev[id] }))
-                              }
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                              aria-label={revealed ? 'Hide API key' : 'Show API key'}
-                            >
-                              {revealed ? (
-                                <EyeOff className="w-3.5 h-3.5" />
-                              ) : (
-                                <Eye className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={cfg.status === 'testing'}
-                            onClick={() => handleTestProvider(id)}
-                            className="px-3.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] text-[12px] font-medium text-[var(--text-primary)] inline-flex items-center gap-1.5 disabled:opacity-60 transition-colors"
-                          >
-                            {cfg.status === 'testing' && (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            )}
-                            <span>Test</span>
-                          </button>
-                        </div>
-
-                        {/* Custom Base URL (shown for Custom or editable if needed) */}
-                        {id === 'custom' && (
-                          <div>
-                            <label className="block text-[11px] text-[var(--text-secondary)] mb-1">
-                              OpenAI-Compatible Base URL
-                            </label>
-                            <input
-                              type="text"
-                              value={cfg.baseUrl ?? ''}
-                              onChange={(e) =>
-                                onUpdateProvider(id, { baseUrl: e.target.value, status: 'idle' })
-                              }
-                              placeholder="http://localhost:11434/v1"
-                              className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                            />
-                          </div>
-                        )}
-
-                        {/* Model Selectors */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {meta.supportsStt && (
-                            <div>
-                              <label htmlFor={`sttModel-${id}`} className="block text-[11px] text-[var(--text-secondary)] mb-1">
-                                Speech model
-                              </label>
-                              {id === 'custom' ? (
-                                <input
-                                  type="text"
-                                  id={`sttModel-${id}`}
-                                  value={cfg.sttModel}
-                                  onChange={(e) =>
-                                    onUpdateProvider(id, { sttModel: e.target.value })
-                                  }
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                                />
-                              ) : (
-                                <SelectMenu
-                                  id={`sttModel-${id}`}
-                                  label={`${cfg.name} speech model`}
-                                  value={cfg.sttModel}
-                                  options={meta.sttModels.map((model) => ({ value: model.id, label: model.label }))}
-                                  onChange={(sttModel) => onUpdateProvider(id, { sttModel })}
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          {meta.supportsLlm && (
-                            <div>
-                              <label htmlFor={`llmModel-${id}`} className="block text-[11px] text-[var(--text-secondary)] mb-1">
-                                AI / Translation model
-                              </label>
-                              {id === 'custom' ? (
-                                <input
-                                  type="text"
-                                  id={`llmModel-${id}`}
-                                  value={cfg.llmModel}
-                                  onChange={(e) =>
-                                    onUpdateProvider(id, { llmModel: e.target.value })
-                                  }
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)] focus:outline-none"
-                                />
-                              ) : (
-                                <SelectMenu
-                                  id={`llmModel-${id}`}
-                                  label={`${cfg.name} ai / translation model`}
-                                  value={cfg.llmModel}
-                                  options={meta.llmModels.map((model) => ({ value: model.id, label: model.label }))}
-                                  onChange={(llmModel) => onUpdateProvider(id, { llmModel })}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <ProviderSettings
+                providers={providers}
+                settings={settings}
+                onUpdateProvider={onUpdateProvider}
+                onRemoveProvider={onRemoveProvider}
+                onUpdateSettings={onUpdateSettings}
+              />
             )}
 
             {/* TAB 2: SETTINGS (Exact match to Images 8, 9, 14) */}

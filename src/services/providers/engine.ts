@@ -1,8 +1,9 @@
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
-import { DictationMode, ProviderConfig, WritingSample } from '../../types/app';
+import { DictationMode, ProviderConfig, ProviderModels, WritingSample } from '../../types/app';
 import { parseWritingSample, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
 import { PROVIDER_CATALOG } from './catalog';
+import { modelsFromPages, type ModelPage } from './models';
 
 export interface HttpResponsePayload {
   ok: boolean;
@@ -51,6 +52,7 @@ declare global {
         headers: Record<string, string>;
         bodyBase64?: string;
         bodyText?: string;
+        timeoutMs?: number;
       }) => Promise<HttpResponsePayload>;
       apiMultipart: (req: {
         url: string;
@@ -70,6 +72,7 @@ async function performRequest(
     method?: string;
     headers?: Record<string, string>;
     body?: FormData | Blob | string;
+    timeoutMs?: number;
   }
 ): Promise<HttpResponsePayload> {
   const method = options.method ?? 'GET';
@@ -89,13 +92,14 @@ async function performRequest(
     } else if (typeof options.body === 'string') {
       bodyText = options.body;
     }
-    return window.yapyap.apiRequest({ url, method, headers, bodyBase64, bodyText });
+    return window.yapyap.apiRequest({ url, method, headers, bodyBase64, bodyText, timeoutMs: options.timeoutMs });
   }
 
   const res = await fetch(url, {
     method,
     headers,
     body: options.body,
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   });
   const text = await res.text();
   return { ok: res.ok, status: res.status, text };
@@ -163,78 +167,119 @@ function extensionFromMime(mime: string): string {
   return 'webm';
 }
 
-export async function testProviderConnection(
-  provider: ProviderConfig
-): Promise<{ ok: boolean; message: string }> {
-  const meta = PROVIDER_CATALOG[provider.id];
-  const key = provider.apiKey.trim();
+interface ProviderConnectionResult {
+  ok: boolean;
+  message: string;
+  models?: ProviderModels;
+}
 
-  if (meta.requiresKey && !key) {
+const providerCheckTimeout = 8_000;
+
+async function requestProviderModels(provider: ProviderConfig): Promise<ProviderConnectionResult> {
+  const { id } = provider;
+  const meta = PROVIDER_CATALOG[id];
+  const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? '');
+  const key = provider.apiKey.trim();
+  const headers: Record<string, string> = {};
+  if (id === 'gemini') headers['x-goog-api-key'] = key;
+  else if (id === 'anthropic') {
+    headers['x-api-key'] = key;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  } else if (id === 'elevenlabs') headers['xi-api-key'] = key;
+  else if (key && id !== 'deepgram') headers.Authorization = `Bearer ${key}`;
+
+  const pages: ModelPage[] = [];
+  const seen = new Set<string>();
+  const deadline = Date.now() + providerCheckTimeout;
+  let next = '';
+  for (let count = 0; count < 10; count++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const query = new URLSearchParams();
+    if (id === 'gemini') {
+      query.set('pageSize', '100');
+      if (next) query.set('pageToken', next);
+    } else if (id === 'anthropic') {
+      query.set('limit', '100');
+      if (next) query.set('after_id', next);
+    }
+
+    const res = await performRequest(`${base}/models${query.size ? `?${query}` : ''}`, {
+      headers,
+      timeoutMs: remaining,
+    }).catch((err: unknown) => {
+      if (!pages.length) throw err;
+      return undefined;
+    });
+    if (!res) break;
+    if (!res.ok) {
+      if (pages.length) break;
+      return { ok: false, message: extractErrorMessage(res.text, res.status) };
+    }
+
+    let page: ModelPage;
+    try {
+      page = JSON.parse(res.text) as ModelPage;
+    } catch {
+      break;
+    }
+    if (!page || typeof page !== 'object') break;
+    pages.push(page);
+
+    const cursor = id === 'gemini' ? page.nextPageToken : id === 'anthropic' && page.has_more ? page.last_id : undefined;
+    if (typeof cursor !== 'string' || !cursor || seen.has(cursor)) break;
+    seen.add(cursor);
+    next = cursor;
+  }
+
+  const models = modelsFromPages(id, pages);
+  return { ok: true, message: 'Connected & verified', models };
+}
+
+export async function listProviderModels(provider: ProviderConfig): Promise<ProviderConnectionResult> {
+  if (PROVIDER_CATALOG[provider.id].requiresKey && !provider.apiKey.trim()) {
     return { ok: false, message: 'API key is required' };
   }
 
   try {
-    if (provider.id === 'openai' || provider.id === 'groq' || provider.id === 'custom') {
-      const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? 'https://api.openai.com/v1');
-      const headers: Record<string, string> = {};
-      if (key) headers.Authorization = `Bearer ${key}`;
-      const res = await performRequest(`${base}/models`, { method: 'GET', headers });
-      if (res.ok) return { ok: true, message: 'Connected & verified' };
-      return { ok: false, message: extractErrorMessage(res.text, res.status) };
-    }
-
-    if (provider.id === 'gemini') {
-      const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-      const res = await performRequest(
-        `${base}/models?key=${encodeURIComponent(key)}`,
-        { method: 'GET' }
-      );
-      if (res.ok) return { ok: true, message: 'Gemini API key verified' };
-      return { ok: false, message: extractErrorMessage(res.text, res.status) };
-    }
-
-    if (provider.id === 'anthropic') {
-      const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-      const res = await performRequest(`${base}/models`, {
-        method: 'GET',
-        headers: {
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-      });
-      if (res.ok) return { ok: true, message: 'Anthropic key verified' };
-      return { ok: false, message: extractErrorMessage(res.text, res.status) };
-    }
-
-    if (provider.id === 'deepgram') {
-      const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-      const res = await performRequest(`${base}/projects`, {
-        method: 'GET',
-        headers: { Authorization: `Token ${key}` },
-      });
-      if (res.ok) return { ok: true, message: 'Deepgram key verified' };
-      return { ok: false, message: extractErrorMessage(res.text, res.status) };
-    }
-
-    if (provider.id === 'elevenlabs') {
-      const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-      const res = await performRequest(`${base}/user`, {
-        method: 'GET',
-        headers: { 'xi-api-key': key },
-      });
-      if (res.ok || res.text.includes('missing_permissions') || res.text.includes('user_read')) {
-        return { ok: true, message: 'ElevenLabs key verified' };
-      }
-      return { ok: false, message: extractErrorMessage(res.text, res.status) };
-    }
-
-    return { ok: false, message: 'Unsupported provider' };
+    return await requestProviderModels(provider);
   } catch (err) {
-    return {
-      ok: false,
-      message: err instanceof Error ? err.message : 'Network error',
-    };
+    return { ok: false, message: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function testProviderConnection(provider: ProviderConfig): Promise<ProviderConnectionResult> {
+  const meta = PROVIDER_CATALOG[provider.id];
+  const key = provider.apiKey.trim();
+
+  if (meta.requiresKey && !key) return { ok: false, message: 'API key is required' };
+
+  if (provider.id !== 'deepgram' && provider.id !== 'elevenlabs') return listProviderModels(provider);
+
+  try {
+    const deepgram = provider.id === 'deepgram';
+    const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? '');
+    // The models endpoints can return public metadata without authenticating a key.
+    const res = await performRequest(`${base}/${deepgram ? 'projects' : 'user'}`, {
+      headers: deepgram ? { Authorization: `Token ${key}` } : { 'xi-api-key': key },
+      timeoutMs: providerCheckTimeout,
+    });
+    let restrictedKey = false;
+    if (!deepgram && !res.ok && (res.status === 401 || res.status === 403)) {
+      try {
+        restrictedKey = JSON.parse(res.text)?.detail?.status === 'missing_permissions';
+      } catch {
+        // A malformed error body cannot establish that the key was accepted.
+      }
+    }
+    if (!res.ok && !restrictedKey) {
+      return { ok: false, message: extractErrorMessage(res.text, res.status) };
+    }
+    const catalog = await listProviderModels(provider);
+    return { ok: true, message: 'Connected & verified', models: catalog.models };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Network error' };
   }
 }
 
