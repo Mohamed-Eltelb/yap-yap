@@ -6,20 +6,30 @@ import {
   Home,
   Info,
   KeyRound,
-  Mail,
   Mic,
+  Monitor,
+  Moon,
   Settings,
+  Sun,
   X,
 } from 'lucide-react';
-import { ActiveNav, DictationMode, ProviderConfig, ProviderId, SettingsModalTab } from '../types/app';
+import { ActiveNav, AppearanceMode, DictationMode, ProviderConfig, ProviderId, SettingsModalTab } from '../types/app';
 import { PROVIDER_CATALOG } from '../services/providers/catalog';
 import { YapLogo } from './YapLogo';
+
+const appearanceModes = {
+  light: { label: 'Light', Icon: Sun, next: 'dark' },
+  dark: { label: 'Dark', Icon: Moon, next: 'system' },
+  system: { label: 'System', Icon: Monitor, next: 'light' },
+} as const;
 
 interface Props {
   activeNav: ActiveNav;
   onSelectNav: (nav: ActiveNav) => void;
   onOpenModal: (tab: SettingsModalTab) => void;
   onStartDictation: (mode: DictationMode) => void;
+  appearance: AppearanceMode;
+  onChangeAppearance: (appearance: AppearanceMode) => void;
   providers: Record<ProviderId, ProviderConfig>;
   activeSttProvider: ProviderId;
   totalWords: number;
@@ -33,6 +43,8 @@ export function Sidebar({
   onSelectNav,
   onOpenModal,
   onStartDictation,
+  appearance,
+  onChangeAppearance,
   providers,
   activeSttProvider,
   totalWords,
@@ -40,6 +52,8 @@ export function Sidebar({
   onDismissQuickCard,
   isRecording,
 }: Props) {
+  const { label, Icon: AppearanceIcon, next } = appearanceModes[appearance];
+  const appearanceLabel = `${label} theme. Switch to ${appearanceModes[next].label.toLowerCase()} theme`;
   const navItems: { id: ActiveNav; label: string; icon: React.ReactNode }[] = [
     { id: 'home', label: 'Home', icon: <Home className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
     { id: 'history', label: 'History', icon: <History className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
@@ -155,7 +169,7 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* Bottom 4 utility icons */}
+        {/* Appearance and utilities */}
         <div className="flex items-center justify-between px-2 pt-1 text-[var(--text-secondary)]">
           <button
             type="button"
@@ -168,12 +182,12 @@ export function Sidebar({
           </button>
           <button
             type="button"
-            onClick={() => onStartDictation('ask')}
-            data-tooltip="Ask anything with voice"
-            aria-label="Ask anything with voice"
+            onClick={() => onChangeAppearance(next)}
+            data-tooltip={appearanceLabel}
+            aria-label={appearanceLabel}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
-            <Mail className="w-[15px] h-[15px]" strokeWidth={1.8} />
+            <AppearanceIcon size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
           <button
             type="button"

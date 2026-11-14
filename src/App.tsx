@@ -1230,6 +1230,8 @@ export function App() {
           setModalOpen(true);
         }}
         onStartDictation={(mode) => void triggerDictationMode(mode)}
+        appearance={appState.settings.appearance}
+        onChangeAppearance={(appearance) => updateSettings({ appearance })}
         providers={appState.providers}
         activeSttProvider={appState.settings.activeSttProvider}
         dismissedQuickCard={appState.settings.dismissedQuickCard}
