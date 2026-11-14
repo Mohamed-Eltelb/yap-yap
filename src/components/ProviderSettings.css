@@ -13,8 +13,7 @@
   scroll-margin-top: 24px;
 }
 
-.provider-overview,
-.provider-form-heading {
+.provider-overview {
   padding-right: 28px;
 }
 
@@ -32,10 +31,19 @@
   gap: 10px;
 }
 
+.provider-dialog {
+  width: min(475px, calc(100% - 32px));
+}
+
+.provider-dialog::backdrop {
+  background: rgb(0 0 0 / 28%);
+}
+
 .provider-primary,
 .provider-secondary,
 .provider-back,
-.provider-remove {
+.provider-remove,
+.provider-remove-confirm-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -57,7 +65,8 @@
   background: color-mix(in srgb, var(--btn-dark-bg) 90%, var(--btn-dark-text));
 }
 
-.provider-settings button:disabled {
+.provider-settings button:disabled,
+.provider-dialog button:disabled {
   cursor: default;
 }
 
@@ -82,22 +91,6 @@
   margin: -4px 0 -10px -8px;
   padding: 4px 8px;
   color: var(--text-secondary);
-}
-
-.provider-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.provider-section-heading button {
-  color: var(--text-primary);
 }
 
 .provider-list {
@@ -244,9 +237,7 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
 }
 
 .provider-form {
-  padding: 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 11px;
+  padding: 4px 22px 18px;
 }
 
 @container (width < 390px) {
@@ -261,14 +252,59 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   gap: 14px;
 }
 
+.provider-model-header h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .provider-model-header {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.provider-refresh {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.provider-refresh:not(:disabled):hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.provider-refresh:disabled {
+  opacity: 0.55;
 }
 
 .provider-models {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+}
+
+.provider-model-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.provider-model-help {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: help;
+}
+
+.provider-model-help:focus-visible {
+  outline: 2px solid var(--accent-blue);
 }
 
 .provider-field {
@@ -352,30 +388,79 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
 }
 
 .provider-form-actions {
-  margin-top: 20px;
+  margin-top: 16px;
+}
+
+.provider-error + .provider-form-actions,
+.provider-form fieldset:has([role="status"]:not(:empty)) + .provider-form-actions {
+  margin-top: 0;
+  padding-top: 15px;
 }
 
 .provider-form-actions .provider-remove {
   margin-right: auto;
 }
 
-.provider-remove-confirm p {
-  width: 100%;
+.provider-removal-dialog {
+  width: min(450px, calc(100% - 32px));
+  border-radius: 17px;
+}
+
+.provider-removal-dialog header {
+  padding: 22px 24px 0;
+}
+
+.provider-removal-dialog h2 {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.provider-removal-dialog header p {
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+.provider-removal-dialog .yy-language-close {
+  top: 14px;
+  right: 14px;
+}
+
+.provider-remove-confirm {
+  padding: 25px 24px 24px;
+}
+
+.provider-remove-confirm button {
+  min-height: 30px;
+  padding-inline: 12px;
+  border-radius: 999px;
   font-size: 13px;
 }
 
-.provider-remove,
 .provider-error {
   color: #aa252c;
 }
 
+.provider-remove {
+  background: #9c2525;
+  color: #fff;
+  font-weight: 600;
+}
+
 .provider-remove:not(:disabled):hover {
-  background: var(--bg-hover);
+  background: #a33131;
+}
+
+.provider-remove-confirm-button {
+  background: #c82742;
+  color: #fff;
+}
+
+.provider-remove-confirm-button:hover {
+  background: #ae2036;
 }
 
 .provider-error {
@@ -384,12 +469,11 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   overflow-wrap: anywhere;
 }
 
-html.dark .provider-error,
-html.dark .provider-remove {
+html.dark .provider-error {
   color: #ffadad;
 }
 
-.provider-settings :is(button, input, a):focus-visible {
+:is(.provider-settings, .provider-dialog) :is(button, input, a):focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }

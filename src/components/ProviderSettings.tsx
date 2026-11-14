@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -6,12 +6,14 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Info,
   KeyRound,
   Loader2,
   Plus,
   RefreshCw,
   Settings2,
   Sparkles,
+  X,
 } from 'lucide-react';
 import claudeLogo from '../assets/providers/claude.svg';
 import deepgramLogo from '../assets/providers/deepgram.svg';
@@ -57,13 +59,32 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
   const heading = useRef<HTMLHeadingElement>(null);
   const configured = PROVIDER_ORDER.filter((id) => isProviderConfigured(providers[id]));
   const available = PROVIDER_ORDER.filter((id) => !configured.includes(id));
+  const showingCatalog = view.type === 'catalog' || view.type === 'add';
 
   useLayoutEffect(() => {
     heading.current?.focus();
     heading.current?.scrollIntoView({ block: 'start' });
-  }, [view]);
+  }, [showingCatalog]);
 
-  if (view.type === 'catalog') {
+  const editorDialog = 'id' in view && (
+    <ProviderForm
+      key={view.id}
+      provider={providers[view.id]}
+      adding={view.type === 'add'}
+      onCancel={() => navigate({ type: view.type === 'add' ? 'catalog' : 'list' })}
+      onRefresh={(discoveredModels) => onUpdateProvider(view.id, { discoveredModels })}
+      onRemove={view.type === 'manage' ? () => {
+        onRemoveProvider(view.id);
+        navigate({ type: 'list' });
+      } : undefined}
+      onSave={(patch) => {
+        onUpdateProvider(view.id, patch);
+        navigate({ type: 'list' });
+      }}
+    />
+  );
+
+  if (showingCatalog) {
     return (
       <div className="provider-settings">
         <BackButton onClick={() => navigate({ type: 'list' })}>Providers &amp; API Keys</BackButton>
@@ -87,33 +108,7 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
             );
           })}
         </ul>
-      </div>
-    );
-  }
-
-  if ('id' in view) {
-    const { id, type } = view;
-    const adding = type === 'add';
-    const back = () => navigate({ type: adding ? 'catalog' : 'list' });
-
-    return (
-      <div className="provider-settings">
-        <BackButton onClick={back}>{adding ? 'Choose a provider' : 'Providers & API Keys'}</BackButton>
-        <ProviderForm
-          provider={providers[id]}
-          adding={adding}
-          headingRef={heading}
-          onCancel={back}
-          onRefresh={(discoveredModels) => onUpdateProvider(id, { discoveredModels })}
-          onRemove={adding ? undefined : () => {
-            onRemoveProvider(id);
-            navigate({ type: 'list' });
-          }}
-          onSave={(patch) => {
-            onUpdateProvider(id, patch);
-            navigate({ type: 'list' });
-          }}
-        />
+        {editorDialog}
       </div>
     );
   }
@@ -205,6 +200,7 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
       )}
 
       <p className="provider-privacy">API keys are stored on this device and sent directly to your provider.</p>
+      {editorDialog}
     </div>
   );
 }
@@ -218,15 +214,26 @@ function BackButton({ onClick, children }: { onClick: () => void; children: stri
   );
 }
 
-function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRemove, onSave }: {
+function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave }: {
   provider: ProviderConfig;
   adding: boolean;
-  headingRef: RefObject<HTMLHeadingElement | null>;
   onCancel: () => void;
   onRefresh: (models: NonNullable<ProviderConfig['discoveredModels']>) => void;
   onRemove?: () => void;
   onSave: (patch: Partial<ProviderConfig>) => void;
 }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useLayoutEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    const opener = document.activeElement;
+    element.showModal();
+    return () => {
+      element.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
   const meta = PROVIDER_CATALOG[provider.id];
   const custom = provider.id === 'custom';
   const [apiKey, setApiKey] = useState(adding ? '' : provider.apiKey);
@@ -238,7 +245,10 @@ function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRem
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState('');
   const [error, setError] = useState('');
-  const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const removalDialog = useRef<HTMLDialogElement>(null);
+  const keepProviderButton = useRef<HTMLButtonElement>(null);
+  const removalTitleId = useId();
+  const removalDescriptionId = useId();
   const pending = useRef<symbol | null>(null);
   const key = apiKey.trim();
   const endpoint = baseUrl.trim().replace(/\/+$/, '');
@@ -327,16 +337,26 @@ function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRem
   }
 
   return (
-    <>
-      <header className="provider-heading provider-form-heading">
+    <dialog
+      ref={dialog}
+      className="yy-language-dialog provider-dialog"
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+      }}
+    >
+      <button type="button" className="yy-language-close" aria-label="Close provider editor" onClick={onCancel}>
+        <X size={18} />
+      </button>
+      <header className="provider-form-heading">
         <ProviderIcon id={provider.id} />
-        <div>
-          <h2 ref={headingRef} tabIndex={-1}>{adding ? `Connect ${meta.name}` : `Manage ${meta.name}`}</h2>
-        </div>
+        <h2 id={titleId}>{adding ? `Connect ${meta.name}` : meta.name}</h2>
       </header>
 
       <form onSubmit={submit} className="provider-form">
-        <fieldset disabled={busy || confirmRemoval} aria-busy={busy}>
+        <fieldset disabled={busy} aria-busy={busy}>
           {custom && (
             <div className="provider-field">
               <label htmlFor="provider-endpoint">Base URL</label>
@@ -351,6 +371,7 @@ function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRem
             <div className="provider-key-input">
               <input
                 id="provider-api-key"
+                autoFocus={adding}
                 type={showKey ? 'text' : 'password'}
                 placeholder={meta.keyPlaceholder}
                 autoComplete="off"
@@ -366,19 +387,25 @@ function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRem
 
           {!adding && (
             <>
-              <div className="provider-section-heading provider-model-header">
+              <div className="provider-model-header">
                 <h3>Models</h3>
-                <button type="button" className="provider-secondary" disabled={connectionChanged} onClick={refreshModels}>
+                <button
+                  type="button"
+                  className="provider-refresh"
+                  aria-label={refreshing ? 'Refreshing models' : 'Refresh models'}
+                  title="Refresh models"
+                  disabled={busy || connectionChanged}
+                  onClick={refreshModels}
+                >
                   <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
-                  {refreshing ? 'Refreshing…' : 'Refresh models'}
                 </button>
               </div>
               <div className="provider-models">
                 {meta.supportsStt && (
-                  <ModelField id="provider-speech-model" label="Speech model" value={sttModel} options={discovered?.speech.length ? discovered.speech : custom ? [] : meta.sttModels} onChange={setSttModel} />
+                  <ModelField id="provider-speech-model" label="Speech model" help="Turns your recorded speech into text." value={sttModel} options={discovered?.speech.length ? discovered.speech : custom ? [] : meta.sttModels} onChange={setSttModel} />
                 )}
                 {meta.supportsLlm && (
-                  <ModelField id="provider-ai-model" label="AI model" value={llmModel} options={discovered?.ai.length ? discovered.ai : custom ? [] : meta.llmModels} onChange={setLlmModel} />
+                  <ModelField id="provider-ai-model" label="AI model" help="Cleans up transcripts when Smart Cleanup is enabled, translates text, and answers Ask Anything requests." value={llmModel} options={discovered?.ai.length ? discovered.ai : custom ? [] : meta.llmModels} onChange={setLlmModel} />
                 )}
               </div>
               {connectionChanged && <p className="provider-model-note">Save the connection to load models for the new credentials.</p>}
@@ -389,26 +416,57 @@ function ProviderForm({ provider, adding, headingRef, onCancel, onRefresh, onRem
 
         {error && <p className="provider-error" role="alert">{error}</p>}
         <div className="provider-form-actions">
-          {onRemove && !confirmRemoval && (
-            <button type="button" className="provider-remove" disabled={busy} onClick={() => setConfirmRemoval(true)}>
+          {onRemove && (
+            <button
+              type="button"
+              className="provider-remove"
+              disabled={busy}
+              onClick={() => {
+                removalDialog.current?.showModal();
+                keepProviderButton.current?.focus();
+              }}
+            >
               Remove provider
             </button>
           )}
           <button type="button" className="provider-secondary" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="provider-primary" disabled={busy || confirmRemoval}>
+          <button type="submit" className="provider-primary" disabled={busy}>
             {checking && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
             {checking ? 'Verifying…' : adding ? 'Verify & add' : 'Save changes'}
           </button>
         </div>
       </form>
-      {onRemove && confirmRemoval && (
-        <div className="provider-remove-confirm">
-          <p>Remove {meta.name} and delete its saved API key from this device?</p>
-          <button type="button" className="provider-secondary" autoFocus onClick={() => setConfirmRemoval(false)}>Keep provider</button>
-          <button type="button" className="provider-remove" onClick={onRemove}>Confirm removal</button>
-        </div>
+      {onRemove && (
+        <dialog
+          ref={removalDialog}
+          className="yy-language-dialog provider-removal-dialog"
+          aria-labelledby={removalTitleId}
+          aria-describedby={removalDescriptionId}
+          onCancel={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="yy-language-close"
+            aria-label="Close removal confirmation"
+            onClick={() => removalDialog.current?.close()}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+          <header>
+            <h2 id={removalTitleId}>Remove {meta.name}?</h2>
+            <p id={removalDescriptionId}>This deletes the saved connection and API key from this device.</p>
+          </header>
+          <div className="provider-remove-confirm">
+            <button ref={keepProviderButton} type="button" className="provider-secondary" onClick={() => removalDialog.current?.close()}>
+              Cancel
+            </button>
+            <button type="button" className="provider-remove-confirm-button" onClick={onRemove}>
+              Remove
+            </button>
+          </div>
+        </dialog>
       )}
-    </>
+    </dialog>
   );
 }
 
@@ -416,9 +474,10 @@ function initialModel(preferred: string, options?: ProviderModel[]): string {
   return options?.length && !options.some((model) => model.id === preferred) ? options[0].id : preferred;
 }
 
-function ModelField({ id, label, value, options, onChange }: {
+function ModelField({ id, label, help, value, options, onChange }: {
   id: string;
   label: string;
+  help: string;
   value: string;
   options: ProviderModel[];
   onChange: (value: string) => void;
@@ -434,7 +493,12 @@ function ModelField({ id, label, value, options, onChange }: {
   return (
     <div className="provider-field">
       <div className="provider-field-label">
-        <label htmlFor={id}>{label}</label>
+        <div className="provider-model-label">
+          <label htmlFor={id}>{label}</label>
+          <span className="provider-model-help" tabIndex={0} aria-label={`${label}. ${help}`} data-tooltip={help}>
+            <Info size={14} aria-hidden="true" />
+          </span>
+        </div>
         {options.length > 0 && (
           <button type="button" className="provider-model-mode" onClick={() => setManual(!manual)}>
             {manual ? 'Choose model' : 'Enter ID'}
