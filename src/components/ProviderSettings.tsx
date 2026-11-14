@@ -7,9 +7,7 @@ import {
   Eye,
   EyeOff,
   Info,
-  KeyRound,
   Loader2,
-  Plus,
   RefreshCw,
   Settings2,
   Sparkles,
@@ -35,7 +33,7 @@ interface Props {
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
 }
 
-type View = { type: 'list' | 'catalog' } | { type: 'add' | 'manage'; id: ProviderId };
+type View = { type: 'list' } | { type: 'add' | 'manage'; id: ProviderId };
 
 const providerLogos: Record<Exclude<ProviderId, 'custom'>, string> = {
   anthropic: claudeLogo,
@@ -69,10 +67,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
     const { id } = view;
     const adding = view.type === 'add';
     const name = PROVIDER_CATALOG[id].name;
-    const back = () => navigate({ type: adding ? 'catalog' : 'list' });
+    const back = () => navigate({ type: 'list' });
     return (
       <div className="provider-settings">
-        <BackButton onClick={back}>{adding ? 'Choose a provider' : 'Providers & API Keys'}</BackButton>
+        <BackButton onClick={back}>Providers &amp; API Keys</BackButton>
         <header className="provider-heading provider-form-heading">
           <ProviderIcon id={id} />
           <h2 ref={heading} tabIndex={-1}>
@@ -98,34 +96,6 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
     );
   }
 
-  if (view.type === 'catalog') {
-    return (
-      <div className="provider-settings">
-        <BackButton onClick={() => navigate({ type: 'list' })}>Providers &amp; API Keys</BackButton>
-        <header className="provider-heading">
-          <h2 ref={heading} tabIndex={-1}>Add a provider</h2>
-        </header>
-        <ul className="provider-list">
-          {available.map((id) => {
-            const meta = PROVIDER_CATALOG[id];
-            return (
-              <li key={id}>
-                <button type="button" className="provider-row provider-choice" onClick={() => navigate({ type: 'add', id })}>
-                  <ProviderIcon id={id} />
-                  <span className="provider-row-content">
-                    <strong>{meta.name}</strong>
-                    <span>{meta.tagline}</span>
-                  </span>
-                  <ChevronRight size={16} className="provider-chevron" aria-hidden="true" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    );
-  }
-
   const speechOptions = configured
     .filter((id) => PROVIDER_CATALOG[id].supportsStt)
     .map((id) => ({ value: id, label: providers[id].name }));
@@ -133,21 +103,13 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
     .filter((id) => PROVIDER_CATALOG[id].supportsLlm)
     .map((id) => ({ value: id, label: providers[id].name }));
 
-  const add = () => navigate({ type: 'catalog' });
-
   return (
     <div className="provider-settings">
       <header className="provider-heading provider-overview">
         <h2 ref={heading} tabIndex={-1}>Providers &amp; API Keys</h2>
-        {available.length > 0 && configured.length > 0 && (
-          <button type="button" className="provider-primary" onClick={add}>
-            <Plus size={15} aria-hidden="true" />
-            Add provider
-          </button>
-        )}
       </header>
 
-      {configured.length > 0 ? (
+      {configured.length > 0 && (
         <>
           <section className="provider-defaults" aria-label="Default providers">
             <div className="provider-default">
@@ -198,18 +160,31 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
             </ul>
           </section>
         </>
-      ) : (
-        <div className="provider-empty">
-          <KeyRound size={21} aria-hidden="true" />
-          <div>
-            <h3>No providers connected</h3>
-            <p>Add a provider to use dictation or AI features.</p>
-          </div>
-          <button type="button" className="provider-primary" onClick={add}>
-            <Plus size={15} aria-hidden="true" />
-            Add provider
-          </button>
-        </div>
+      )}
+
+      {available.length > 0 && (
+        <section aria-labelledby="available-providers-heading">
+          <h3 className="provider-list-heading" id="available-providers-heading">
+            Available providers
+          </h3>
+          <ul id="available-providers" className="provider-list">
+            {available.map((id) => {
+              const meta = PROVIDER_CATALOG[id];
+              return (
+                <li key={id}>
+                  <button type="button" className="provider-row provider-choice" onClick={() => navigate({ type: 'add', id })}>
+                    <ProviderIcon id={id} />
+                    <span className="provider-row-content">
+                      <strong>{meta.name}</strong>
+                      <span>{meta.tagline}</span>
+                    </span>
+                    <ChevronRight size={16} className="provider-chevron" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       <p className="provider-privacy">API keys are stored on this device and sent directly to your provider.</p>

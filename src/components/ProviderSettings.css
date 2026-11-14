@@ -140,38 +140,11 @@
 }
 
 .provider-row-content > span,
-.provider-empty p,
 .provider-privacy,
 .provider-model-note,
 .provider-manage-label {
   color: var(--text-secondary);
   font-size: 12px;
-}
-
-.provider-empty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 15px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 11px;
-  background: var(--bg-modal-sidebar);
-}
-
-.provider-empty > div {
-  flex: 1;
-  min-width: 145px;
-}
-
-.provider-empty h3 {
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.provider-empty > svg {
-  flex-shrink: 0;
-  color: var(--text-secondary);
 }
 
 .provider-icon {
