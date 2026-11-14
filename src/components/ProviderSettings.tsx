@@ -231,7 +231,9 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
   const endpoint = baseUrl.trim().replace(/\/+$/, '');
   const originalEndpoint = (provider.baseUrl?.trim() || meta.defaultBaseUrl)?.replace(/\/+$/, '');
   const connectionChanged = key !== provider.apiKey.trim() || (custom && endpoint !== originalEndpoint);
-  const discovered = !adding && !connectionChanged ? provider.discoveredModels : undefined;
+  // ElevenLabs has no endpoint that lists speech-to-text models, so its list is built in.
+  const canRefresh = provider.id !== 'elevenlabs';
+  const discovered = canRefresh && !adding && !connectionChanged ? provider.discoveredModels : undefined;
   const busy = checking || refreshing;
 
   useLayoutEffect(() => () => { pending.current = null; }, []);
@@ -348,16 +350,18 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
             <>
               <div className="provider-model-header">
                 <h3>Models</h3>
-                <button
-                  type="button"
-                  className="provider-refresh"
-                  aria-label={refreshing ? 'Refreshing models' : 'Refresh models'}
-                  title="Refresh models"
-                  disabled={busy || connectionChanged}
-                  onClick={refreshModels}
-                >
-                  <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
-                </button>
+                {canRefresh && (
+                  <button
+                    type="button"
+                    className="provider-refresh"
+                    aria-label={refreshing ? 'Refreshing models' : 'Refresh models'}
+                    title="Refresh models"
+                    disabled={busy || connectionChanged}
+                    onClick={refreshModels}
+                  >
+                    <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+                  </button>
+                )}
               </div>
               <div className="provider-models">
                 {meta.supportsStt && (
@@ -367,7 +371,7 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
                   <ModelField id="provider-ai-model" label="AI model" help="Cleans up transcripts when Smart Cleanup is enabled, translates text, and answers Ask Anything requests." value={llmModel} options={discovered?.ai.length ? discovered.ai : custom ? [] : meta.llmModels} onChange={setLlmModel} />
                 )}
               </div>
-              {connectionChanged && <p className="provider-model-note">Save the connection to load models for the new credentials.</p>}
+              {canRefresh && connectionChanged && <p className="provider-model-note">Save the connection to load models for the new credentials.</p>}
               <p className="provider-model-note" role="status">{refreshMessage}</p>
             </>
           )}

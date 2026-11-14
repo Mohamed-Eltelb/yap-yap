@@ -242,11 +242,17 @@ export async function listProviderModels(provider: ProviderConfig): Promise<Prov
     return { ok: false, message: 'API key is required' };
   }
 
+  let result: ProviderConnectionResult;
   try {
-    return await requestProviderModels(provider);
+    result = await requestProviderModels(provider);
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : 'Network error' };
+    result = { ok: false, message: err instanceof Error ? err.message : 'Network error' };
   }
+  // ElevenLabs /models only lists text-to-speech models, so Scribe models come from the built-in list.
+  if (provider.id === 'elevenlabs' && !result.models?.speech.length) {
+    return { ok: true, message: 'Using built-in models', models: { speech: PROVIDER_CATALOG.elevenlabs.sttModels, ai: [] } };
+  }
+  return result;
 }
 
 export async function testProviderConnection(provider: ProviderConfig): Promise<ProviderConnectionResult> {

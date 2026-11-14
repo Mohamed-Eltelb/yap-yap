@@ -128,9 +128,9 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     docsUrl: 'https://elevenlabs.io/app/settings/api-keys',
     keyPlaceholder: 'sk_...',
     sttModels: [
-      { id: 'scribe_v3', label: 'scribe_v3 (Latest · Recommended)' },
-      { id: 'scribe_v2', label: 'scribe_v2' },
-      { id: 'scribe_v2_medical', label: 'scribe_v2_medical (Clinical)' },
+      { id: 'scribe_v3', label: 'Scribe v3' },
+      { id: 'scribe_v2', label: 'Scribe v2' },
+      { id: 'scribe_v2_medical', label: 'Scribe v2 Medical (Clinical)' },
     ],
     llmModels: [],
   },

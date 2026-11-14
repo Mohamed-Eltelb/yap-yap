@@ -16,6 +16,7 @@ import { getInitialState, sanitizeLoadedState } from '../services/storage';
 import { createDefaultProviders, PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import {
   detectWritingStyle,
+  listProviderModels,
   processTranscriptWithLlm,
   testProviderConnection,
   transcribeAudio,
@@ -403,6 +404,26 @@ describe('Multi-Provider Engine', () => {
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/projects$/);
     expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ Authorization: 'Token test-key' });
     expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('Authorization');
+  });
+
+  it('lists built-in ElevenLabs speech models because /models only returns text-to-speech models', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().elevenlabs, apiKey: 'el-key' };
+    const speech = PROVIDER_CATALOG.elevenlabs.sttModels;
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ model_id: 'eleven_v3', name: 'Eleven v3', can_do_text_to_speech: true }]),
+    }));
+    expect(await listProviderModels(provider)).toMatchObject({ ok: true, models: { speech, ai: [] } });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ detail: { status: 'missing_permissions' } }),
+    }));
+    expect(await listProviderModels(provider)).toMatchObject({ ok: true, models: { speech, ai: [] } });
   });
 
   it('calls Groq OpenAI-compatible transcription endpoint with dictionary hints', async () => {
