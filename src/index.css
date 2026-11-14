@@ -127,6 +127,27 @@ html.hud-mode #root {
   background-image: var(--mesh-bg);
 }
 
+.yy-home-insights {
+  --home-dot-color: rgb(20 20 22 / 12%);
+  position: relative;
+  isolation: isolate;
+}
+
+html.dark .yy-home-insights {
+  --home-dot-color: rgb(242 241 240 / 10%);
+}
+
+.yy-home-insights::before {
+  content: '';
+  position: absolute;
+  inset: -10px -12px;
+  z-index: -1;
+  border-radius: 18px;
+  background-image: radial-gradient(circle, var(--home-dot-color) 1px, transparent 1.4px);
+  background-size: 10px 10px;
+  pointer-events: none;
+}
+
 .yy-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
