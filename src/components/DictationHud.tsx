@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, ChevronsUpDown, Copy, Mic, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
+import { AnswerMarkdown } from './AnswerMarkdown';
 import { YapLogo } from './YapLogo';
 
 export interface HudState {
@@ -155,7 +156,7 @@ export function DictationHud({
             <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
               {resultText && <button type="button" className="yy-hud-icon" aria-label="Copy answer" onClick={() => onCopyResult(resultText)}><Copy size={15} /></button>}
             </header>
-            <p dir="auto">{resultText}</p>
+            <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
           </div>
         </section>
       )}

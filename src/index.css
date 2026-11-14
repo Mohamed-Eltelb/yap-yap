@@ -1360,17 +1360,55 @@ textarea,
   margin-left: auto;
 }
 
-.yy-hud-answer-card p,
 .yy-hud-message p {
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.yy-hud-answer-card p {
+.yy-hud-answer-content {
+  min-height: 0;
+  overflow: auto;
   padding: 12px 13px;
   font-size: 14px;
   line-height: 1.55;
+}
+
+.yy-answer-markdown {
+  overflow-wrap: anywhere;
+}
+
+.yy-answer-markdown > * + * {
+  margin-block-start: 0.75em;
+}
+
+.yy-answer-markdown p {
+  white-space: pre-line;
+}
+
+.yy-answer-markdown :is(ul, ol) {
+  padding-inline-start: 1.5em;
+}
+
+.yy-answer-markdown ul {
+  list-style: disc;
+}
+
+.yy-answer-markdown ol {
+  list-style: decimal;
+}
+
+.yy-answer-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 650;
+}
+
+.yy-answer-markdown blockquote {
+  border-inline-start: 2px solid var(--border-subtle);
+  padding-inline-start: 0.75em;
+}
+
+.yy-answer-markdown pre {
+  overflow-x: auto;
 }
 
 .yy-hud-icon {

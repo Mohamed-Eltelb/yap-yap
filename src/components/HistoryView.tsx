@@ -1,4 +1,5 @@
 import { SelectMenu } from './SelectMenu';
+import { AnswerMarkdown } from './AnswerMarkdown';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -594,7 +595,7 @@ export function HistoryView({
               <h3 className="flex-1 font-semibold">Answer</h3>
               {answer && <button type="button" aria-label="Copy answer" onClick={() => onCopyText(answer)} className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>}
             </header>
-            <p dir="auto" className="whitespace-pre-wrap px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] select-text">{answer}</p>
+            <AnswerMarkdown text={answer ?? undefined} className="px-4 py-3 text-sm leading-relaxed select-text" />
           </section>
         </div>
       </dialog>
