@@ -2,7 +2,6 @@ import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
-  AudioLines,
   ChevronRight,
   Eye,
   EyeOff,
@@ -10,7 +9,6 @@ import {
   Loader2,
   RefreshCw,
   Settings2,
-  Sparkles,
   X,
 } from 'lucide-react';
 import claudeLogo from '../assets/providers/claude.svg';
@@ -98,10 +96,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
 
   const speechOptions = configured
     .filter((id) => PROVIDER_CATALOG[id].supportsStt)
-    .map((id) => ({ value: id, label: providers[id].name }));
+    .map((id) => ({ value: id, label: providers[id].name, icon: <ProviderIcon id={id} /> }));
   const aiOptions = configured
     .filter((id) => PROVIDER_CATALOG[id].supportsLlm)
-    .map((id) => ({ value: id, label: providers[id].name }));
+    .map((id) => ({ value: id, label: providers[id].name, icon: <ProviderIcon id={id} /> }));
 
   return (
     <div className="provider-settings">
@@ -111,9 +109,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
 
       {configured.length > 0 && (
         <>
-          <section className="provider-defaults" aria-label="Default providers">
+          <section className="provider-defaults" aria-labelledby="default-providers-heading">
+            <h3 className="provider-list-heading" id="default-providers-heading">Default providers</h3>
             <div className="provider-default">
-              <label htmlFor="default-stt-provider"><AudioLines size={15} aria-hidden="true" /> Dictation</label>
+              <span className="provider-default-label">Dictation</span>
               <SelectMenu
                 id="default-stt-provider"
                 label="Default dictation provider"
@@ -124,7 +123,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
               />
             </div>
             <div className="provider-default">
-              <label htmlFor="default-llm-provider"><Sparkles size={15} aria-hidden="true" /> Cleanup, translation &amp; Ask</label>
+              <div className="provider-default-role">
+                <span className="provider-default-label">AI</span>
+                <span className="provider-default-description">Cleanup, translation &amp; Ask Anything</span>
+              </div>
               <SelectMenu
                 id="default-llm-provider"
                 label="Default AI provider"

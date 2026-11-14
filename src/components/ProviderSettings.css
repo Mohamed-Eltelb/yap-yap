@@ -134,7 +134,7 @@
 }
 
 .provider-row-content strong,
-.provider-default label {
+.provider-default-label {
   font-size: 13.5px;
   font-weight: 500;
 }
@@ -173,32 +173,51 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   color: var(--text-secondary);
 }
 
-.provider-defaults {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
-  gap: 10px 14px;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 11px;
-  background: var(--bg-modal-sidebar);
-}
-
 .provider-default {
   display: grid;
-  min-width: 0;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 220px);
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 0;
 }
 
-.provider-default label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.provider-default + .provider-default {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.provider-default-role {
+  display: grid;
+  gap: 2px;
+}
+
+.provider-default-description {
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
-.provider-default label svg {
-  flex-shrink: 0;
-  color: var(--text-secondary);
+.provider-default .yy-select-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.provider-default .provider-icon {
+  flex-basis: 20px;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+}
+
+.provider-default .provider-icon img {
+  width: 16px;
+  height: 16px;
+}
+
+@container (width < 390px) {
+  .provider-default {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .provider-form {

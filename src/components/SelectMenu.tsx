@@ -1,10 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
 interface Props<Value extends string> {
   label: string;
   value: Value;
-  options: readonly { value: Value; label: string }[];
+  options: readonly { value: Value; label: string; icon?: ReactNode }[];
   onChange: (value: Value) => void;
   className?: string;
   id?: string;
@@ -141,7 +141,10 @@ export function SelectMenu<Value extends string>({
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
       >
-        <span>{options[selected]?.label ?? placeholder}</span>
+        <span className="yy-select-value">
+          {options[selected]?.icon}
+          <span>{options[selected]?.label ?? placeholder}</span>
+        </span>
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       <div ref={menu} id={listId} popover="manual" role="listbox" aria-label={label} className="yy-option-menu">
@@ -157,7 +160,10 @@ export function SelectMenu<Value extends string>({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => select(index)}
           >
-            <span>{option.label}</span>
+            <span className="yy-select-value">
+              {option.icon}
+              <span>{option.label}</span>
+            </span>
             {showCheckmark && index === selected && <Check size={15} className="yy-option-check" aria-hidden="true" />}
           </div>
         ))}
