@@ -39,9 +39,18 @@ export interface WritingDestination {
 }
 
 /** Stable name for where a dictation went: the site in a browser, otherwise the app. */
+/** Browsers host every kind of site, so without a domain the browser alone says nothing. */
+const BROWSER_APPS = /^(?:google chrome|chromium|chrome|microsoft edge|msedge|edge|(?:mozilla )?firefox|brave(?: browser)?|vivaldi|opera(?: gx)?|arc|comet|zen(?: browser)?|safari)$/i;
+
 export function destinationKey(destination?: Partial<WritingDestination>): string | undefined {
-  return (destination?.domain ?? destination?.application)?.trim().toLowerCase().replace(/^www\./, '').slice(0, 100) || undefined;
+  const domain = destination?.domain?.trim();
+  const application = destination?.application?.trim();
+  if (!domain && application && BROWSER_APPS.test(application)) return undefined;
+  return (domain || application)?.toLowerCase().replace(/^www\./, '').slice(0, 100) || undefined;
 }
+
+/** Samples a destination needs, mostly agreeing, before its category is trusted without asking the model. */
+const SOURCE_MIN_SAMPLES = 3;
 
 /** Categories the model already chose for destinations the built-in rules do not know. */
 export function buildSourceCategories(items: readonly Pick<HistoryItem, 'writingSample' | 'writingSource'>[]): Map<string, string> {
@@ -53,7 +62,13 @@ export function buildSourceCategories(items: readonly Pick<HistoryItem, 'writing
     tally.set(category, (tally.get(category) ?? 0) + 1);
     votes.set(item.writingSource, tally);
   }
-  return new Map([...votes].map(([source, tally]) => [source, [...tally].sort((a, b) => b[1] - a[1])[0][0]]));
+  // One early guess must not decide a destination forever: trust it only after several
+  // samples, two thirds of them agreeing.
+  return new Map([...votes].flatMap(([source, tally]) => {
+    const [[category, top]] = [...tally].sort((a, b) => b[1] - a[1]);
+    const total = [...tally.values()].reduce((sum, count) => sum + count, 0);
+    return total >= SOURCE_MIN_SAMPLES && top * 3 >= total * 2 ? [[source, category] as const] : [];
+  }));
 }
 
 /**

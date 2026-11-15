@@ -978,6 +978,12 @@ it('remembers the category the model chose for an unrecognized destination', () 
     { writingSample: sample('Email') },
   ]);
   expect([...learned]).toEqual([['example.com', 'Project management']]);
+  // A browser without a domain could be any site, and one or two guesses are not trusted yet.
+  expect(destinationKey({ application: 'Google Chrome' })).toBeUndefined();
+  expect([...buildSourceCategories([
+    { writingSource: 'new.app', writingSample: sample('Email') },
+    { writingSource: 'new.app', writingSample: sample('Email') },
+  ])]).toEqual([]);
 });
 describe('Corrections made in the destination after a paste', () => {
   const pasted = 'We moved auth to super base and the edge functions run on versel now.';

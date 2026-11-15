@@ -429,7 +429,11 @@ export function App() {
         const destination = mode === 'dictate' || mode === 'translate' ? await destinationProbe : undefined;
         const location = destination && { application: destination.application, domain: destination.domain };
         // Style learning covers dictation only.
-        const source = mode === 'dictate' && appState.settings.personalizationEnabled ? destinationKey(location) : undefined;
+        // A retry has no live destination, so it keeps the one the dictation went to.
+        const retried = existingItemId ? appState.history.find((item) => item.id === existingItemId) : undefined;
+        const source = mode === 'dictate' && appState.settings.personalizationEnabled
+          ? destinationKey(location) ?? retried?.writingSource
+          : undefined;
         const shareText = appState.settings.contextAwareness;
 
         let finalText = rawText;
@@ -469,13 +473,16 @@ export function App() {
             let writingStyles: typeof stats.categoryBreakdown | undefined;
             let knownCategory: string | undefined;
             if (mode === 'dictate' && appState.settings.personalizationEnabled) {
-              knownCategory = categoryForDestination(location) ?? (source ? learnedSources.get(source) : undefined);
+              // Only the built-in app and site rules (or the retried item's own category) override the
+              // model when learning; a learned guess must stay open to correction.
+              const fixedCategory = categoryForDestination(location) ?? retried?.writingSample?.category;
+              knownCategory = fixedCategory ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
                 ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
                 : stats.categoryBreakdown;
               const styleProvider = llmProvider;
               learnStyle = () => detectWritingStyle(rawText, styleProvider, {
-                category: knownCategory,
+                category: fixedCategory,
                 destination: location,
                 existingWriting: shareText ? destination?.textBefore?.trim() || undefined : undefined,
               });
@@ -663,7 +670,7 @@ export function App() {
         });
       }
     },
-    [appState.dictionary, appState.providers, appState.settings, learnedSources, stats.categoryBreakdown]
+    [appState.dictionary, appState.history, appState.providers, appState.settings, learnedSources, stats.categoryBreakdown]
   );
 
   const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
