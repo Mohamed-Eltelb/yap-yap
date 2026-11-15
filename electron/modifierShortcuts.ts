@@ -1,3 +1,4 @@
+import { appendFile } from 'node:fs';
 import { UiohookKey, uIOhook } from 'uiohook-napi';
 import { isMenuKey, matchShortcut, needsMenuMask } from './shortcutMatch';
 
@@ -68,19 +69,37 @@ export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger:
 
 let menuHeld = false;
 
+// The last key events, kept in memory so a menu that opened can be traced back
+// to the keys around it without writing anything while keys are pressed.
+const history: string[] = [];
+function remember(line: string) {
+  history.push(`${Date.now()} ${line}`);
+  if (history.length > 200) history.shift();
+}
+
+export function saveKeyHistory(file: string, reason: string) {
+  const text = `--- ${new Date().toISOString()} ${reason}\n${history.join('\n')}\n`;
+  appendFile(file, text, () => undefined);
+}
+
 function maskMenu() {
   uIOhook.keyTap(maskKey);
+  remember('mask');
   // A mask sent the instant Alt goes down can be read by the app before the Alt
   // itself, so a second one follows while Alt is still held.
   setTimeout(() => {
-    if (menuHeld && maskMenus) uIOhook.keyTap(maskKey);
+    if (menuHeld && maskMenus) {
+      uIOhook.keyTap(maskKey);
+      remember('mask again');
+    }
   }, 15);
 }
 
 uIOhook.on('keydown', ({ keycode, time }) => {
-  if (keycode === maskKey) return;
   // Holding a key repeats its key-down, and a repeated Alt re-arms the app's menu.
   const repeat = pressed.has(keycode);
+  remember(`down ${keycode} t=${time}${repeat ? ' repeat' : ''} masking=${maskMenus}`);
+  if (keycode === maskKey) return;
   if (!repeat) {
     pressed.set(keycode, time);
     pending = matchShortcut(bindings, pressed, process.platform === 'win32');
@@ -92,7 +111,8 @@ uIOhook.on('keydown', ({ keycode, time }) => {
   }
 });
 
-uIOhook.on('keyup', ({ keycode }) => {
+uIOhook.on('keyup', ({ keycode, time }) => {
+  remember(`up ${keycode} t=${time}`);
   if (keycode === maskKey || !pressed.delete(keycode)) return;
   menuHeld = needsMenuMask(pressed);
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.

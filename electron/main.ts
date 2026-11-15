@@ -13,7 +13,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts } from './modifierShortcuts';
+import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, saveKeyHistory, setMenuMasking, stopModifierShortcuts } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
@@ -272,6 +272,10 @@ function createTray(): void {
       },
       { type: 'separator' },
       {
+        label: 'Save key history',
+        click: () => saveKeyHistory(keyHistoryFile(), 'saved from tray'),
+      },
+      {
         label: 'Quit Yap Yap',
         click: () => {
           isQuitting = true;
@@ -334,8 +338,16 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   }
 }
 
+const keyHistoryFile = () => path.join(app.getPath('userData'), 'key-history.log');
+
 function pasteIntoFocusedField(): Promise<boolean> {
-  if (process.platform === 'win32') return pasteIntoWindowsField(pasteWithKeyboard);
+  if (process.platform === 'win32') {
+    return pasteIntoWindowsField(pasteWithKeyboard).then((pasted) => {
+      // A menu that took focus on the shortcut's Alt release makes the paste fail.
+      if (!pasted) saveKeyHistory(keyHistoryFile(), 'paste failed');
+      return pasted;
+    });
+  }
 
   // These commands can send the shortcut but cannot confirm insertion, so a
   // shortcut that was sent counts as pasted.
