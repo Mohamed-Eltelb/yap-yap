@@ -485,14 +485,18 @@ app.whenReady().then(() => {
       const audioDir = path.join(userDataDir, 'audio');
       fs.mkdirSync(audioDir, { recursive: true });
 
-      const clone = JSON.parse(JSON.stringify(data)) as {
-        history?: Array<{ id: string; audioDataUrl?: string }>;
+      // IPC already hands over a copy, so it can be changed in place.
+      const clone = data as {
+        history?: Array<{ id: string; audioDataUrl?: string; audioSaved?: boolean }>;
         [k: string]: unknown;
       };
 
       const activeAudioIds = new Set<string>();
       if (Array.isArray(clone.history)) {
         for (const item of clone.history) {
+          // Audio already on disk arrives as a marker instead of the recording.
+          if (item.id && item.audioSaved) activeAudioIds.add(`${item.id}.txt`);
+          delete item.audioSaved;
           if (item.id && item.audioDataUrl) {
             activeAudioIds.add(`${item.id}.txt`);
             const audioFile = path.join(audioDir, `${item.id}.txt`);
@@ -519,8 +523,10 @@ app.whenReady().then(() => {
         }
       }
 
+      return true;
     } catch {
       // Ignore write error
+      return false;
     }
   });
 

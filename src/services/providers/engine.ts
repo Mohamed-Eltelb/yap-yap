@@ -45,7 +45,7 @@ declare global {
         cb: (action: HudAction) => void
       ) => () => void;
       loadStore: () => Promise<Record<string, unknown> | null>;
-      saveStore: (data: Record<string, unknown>) => Promise<void>;
+      saveStore: (data: Record<string, unknown>) => Promise<boolean | undefined>;
       apiRequest: (req: {
         url: string;
         method: string;

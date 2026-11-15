@@ -10,6 +10,10 @@ export function needsMenuMask(pressed: ReadonlyMap<number, number>): boolean {
   return menuKeys.some((key) => pressed.has(key));
 }
 
+export function isMenuKey(keycode: number): boolean {
+  return menuKeys.includes(keycode);
+}
+
 export function matchShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,

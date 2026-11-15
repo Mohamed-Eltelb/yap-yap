@@ -1,5 +1,5 @@
 import { UiohookKey, uIOhook } from 'uiohook-napi';
-import { matchShortcut, needsMenuMask } from './shortcutMatch';
+import { isMenuKey, matchShortcut, needsMenuMask } from './shortcutMatch';
 
 const modifierKeys: Record<string, number[]> = {
   'Right Alt': [UiohookKey.AltRight],
@@ -66,11 +66,15 @@ export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger:
 }
 
 uIOhook.on('keydown', ({ keycode, time }) => {
-  if (keycode === maskKey || pressed.has(keycode)) return;
-  pressed.set(keycode, time);
-  pending = matchShortcut(bindings, pressed, process.platform === 'win32');
+  if (keycode === maskKey) return;
+  // Holding a key repeats its key-down, and a repeated Alt re-arms the app's menu.
+  const repeat = pressed.has(keycode);
+  if (!repeat) {
+    pressed.set(keycode, time);
+    pending = matchShortcut(bindings, pressed, process.platform === 'win32');
+  }
   // The hook cannot block keys, so stop the focused app from also acting on the shortcut.
-  if (pending && maskMenus && process.platform === 'win32' && needsMenuMask(pressed)) {
+  if (pending && maskMenus && process.platform === 'win32' && needsMenuMask(pressed) && (!repeat || isMenuKey(keycode))) {
     uIOhook.keyTap(maskKey);
   }
 });

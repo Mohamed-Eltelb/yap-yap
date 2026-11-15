@@ -26,7 +26,7 @@ import {
 import { parseDictionaryImportText } from '../components/DictionaryView';
 import { HistoryItem } from '../types/app';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from '../services/historyImport';
-import { matchShortcut, needsMenuMask } from '../../electron/shortcutMatch';
+import { isMenuKey, matchShortcut, needsMenuMask } from '../../electron/shortcutMatch';
 import { UiohookKey as Key } from 'uiohook-napi';
 
 describe('Saved shortcuts', () => {
@@ -99,6 +99,9 @@ describe('Windows AltGr shortcuts', () => {
     expect(needsMenuMask(new Map([[Key.AltRight, 1]]))).toBe(true);
     expect(needsMenuMask(new Map([[Key.Meta, 1], [Key.Ctrl, 2]]))).toBe(true);
     expect(needsMenuMask(new Map([[Key.Ctrl, 1], [Key.Shift, 2]]))).toBe(false);
+    // A held Alt repeats, and each repeat needs masking again; a held Ctrl does not.
+    expect(isMenuKey(Key.AltRight)).toBe(true);
+    expect(isMenuKey(Key.Ctrl)).toBe(false);
   });
 
   it('preserves a deliberate Ctrl hold and prefers explicitly configured Ctrl chords', () => {

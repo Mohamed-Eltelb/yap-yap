@@ -264,12 +264,39 @@ function stampStyleCorrections(corrections: StyleCorrections): StyleCorrections 
   return Object.fromEntries(Object.entries(corrections).map(([category, correction]) => [category, { since: now, ...correction }]));
 }
 
+// Audio the desktop store already has on disk, by dictation id.
+const audioOnDisk = new Map<string, string>();
+
+function rememberAudioOnDisk(history: unknown) {
+  if (!Array.isArray(history)) return;
+  for (const item of history as Array<{ id?: unknown; audioDataUrl?: unknown }>) {
+    if (typeof item?.id === 'string' && typeof item.audioDataUrl === 'string') audioOnDisk.set(item.id, item.audioDataUrl);
+  }
+}
+
+/**
+ * Sending every recording on each save froze the desktop app's main process for a
+ * quarter of a second, long enough for a lone Alt press to reach the focused app
+ * and open its menu. Audio already on disk is sent as a marker instead.
+ */
+export function withoutSavedAudio(state: PersistedAppState): PersistedAppState {
+  return {
+    ...state,
+    history: state.history.map((item) =>
+      item.audioDataUrl && audioOnDisk.get(item.id) === item.audioDataUrl
+        ? { ...item, audioDataUrl: undefined, audioSaved: true }
+        : item,
+    ),
+  };
+}
+
 export async function loadPersistedState(): Promise<PersistedAppState> {
   try {
     let raw: Partial<PersistedAppState> | null = null;
 
     if (typeof window !== 'undefined' && window.yapyap?.loadStore) {
       raw = (await window.yapyap.loadStore()) as Partial<PersistedAppState> | null;
+      rememberAudioOnDisk(raw?.history);
     }
 
     if (!raw) {
@@ -319,7 +346,8 @@ export async function savePersistedState(state: PersistedAppState): Promise<void
   // 3. Save to Electron userData filesystem store when running as desktop app
   if (typeof window !== 'undefined' && window.yapyap?.saveStore) {
     try {
-      await window.yapyap.saveStore(state as unknown as Record<string, unknown>);
+      const saved = await window.yapyap.saveStore(withoutSavedAudio(state) as unknown as Record<string, unknown>);
+      if (saved !== false) rememberAudioOnDisk(state.history);
     } catch {
       // ignore
     }
