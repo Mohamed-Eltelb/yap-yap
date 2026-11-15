@@ -59,10 +59,22 @@ export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger:
   }
   pending = undefined;
   pressed.clear();
+  menuHeld = false;
   if (!running) {
     uIOhook.start();
     running = true;
   }
+}
+
+let menuHeld = false;
+
+function maskMenu() {
+  uIOhook.keyTap(maskKey);
+  // A mask sent the instant Alt goes down can be read by the app before the Alt
+  // itself, so a second one follows while Alt is still held.
+  setTimeout(() => {
+    if (menuHeld && maskMenus) uIOhook.keyTap(maskKey);
+  }, 15);
 }
 
 uIOhook.on('keydown', ({ keycode, time }) => {
@@ -74,13 +86,15 @@ uIOhook.on('keydown', ({ keycode, time }) => {
     pending = matchShortcut(bindings, pressed, process.platform === 'win32');
   }
   // The hook cannot block keys, so stop the focused app from also acting on the shortcut.
-  if (pending && maskMenus && process.platform === 'win32' && needsMenuMask(pressed) && (!repeat || isMenuKey(keycode))) {
-    uIOhook.keyTap(maskKey);
+  menuHeld = needsMenuMask(pressed);
+  if (pending && maskMenus && process.platform === 'win32' && menuHeld && (!repeat || isMenuKey(keycode))) {
+    maskMenu();
   }
 });
 
 uIOhook.on('keyup', ({ keycode }) => {
   if (keycode === maskKey || !pressed.delete(keycode)) return;
+  menuHeld = needsMenuMask(pressed);
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.
   if (pressed.size > 0) return;
   const binding = pending;
@@ -93,6 +107,7 @@ export function stopModifierShortcuts() {
   running = false;
   pending = undefined;
   pressed.clear();
+  menuHeld = false;
 }
 
 export function pasteWithKeyboard(): void {
