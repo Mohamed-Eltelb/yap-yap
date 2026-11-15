@@ -1,4 +1,4 @@
-import { applyStyleCorrections, readyStyles, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -795,6 +795,15 @@ describe('Multi-Provider Engine', () => {
       { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points', fromUserText: true } },
     ]);
     expect(profile.phrasing).toBe('Sentence case, no exclamation points; Full punctuation');
+  });
+
+  it('tells the same habit worded differently from opposite habits', () => {
+    expect(sameHabit('all lowercase, no punctuation', 'lowercase, no punctuation')).toBe(true);
+    expect(sameHabit('lowercase, no punctuation', 'lowercase, no periods')).toBe(true);
+    expect(sameHabit('Capitalized first word, comma after greeting, period at end', 'Capitalized greeting, comma after team, period at end')).toBe(true);
+    expect(sameHabit('lowercase, no punctuation', 'lowercase, full punctuation')).toBe(false);
+    expect(sameHabit('standard capitalization, periods', 'no capitalization, no periods')).toBe(false);
+    expect(sameHabit('all lowercase, no periods', 'Capitalized sentences, no periods')).toBe(false);
   });
 
   it('applies a learned style only after enough dictations, a correction, or a user-set style', () => {

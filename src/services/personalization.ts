@@ -367,17 +367,34 @@ export function parseWritingPreferences(value: unknown): string[] {
   return rules;
 }
 
-function habitWords(phrasing: string): Set<string> {
-  return new Set(phrasing.toLowerCase().match(/\p{L}+/gu) ?? []);
+const NEGATIONS = new Set(['no', 'not', 'without', 'never', 'avoid', 'avoids', 'minimal', 'omit', 'omits', 'omitted']);
+const CAPITALS = /^(?:capital\p{L}*|uppercase|sentence|standard|proper)$/u;
+
+/** A phrasing's words, plus the ones it says are used and the ones it says are left out. */
+function habitWords(phrasing: string) {
+  const words = (phrasing.toLowerCase().match(/\p{L}+/gu) ?? [])
+    .map((word) => CAPITALS.test(word) ? 'capitals' : word.length > 3 ? word.replace(/s$/u, '') : word);
+  const used = new Set<string>();
+  const missing = new Set<string>();
+  words.forEach((word, index) => {
+    if (NEGATIONS.has(word)) return;
+    (NEGATIONS.has(words[index - 1]) ? missing : used).add(word);
+  });
+  // Lowercase text has no capitals.
+  if (used.has('lowercase')) missing.add('capitals');
+  return { all: new Set(words), used, missing };
 }
 
 /** Whether two phrasings describe the same casing and punctuation habit, worded differently. */
 export function sameHabit(a: string, b: string): boolean {
   const left = habitWords(a);
   const right = habitWords(b);
-  if (!left.size || !right.size) return false;
-  const shared = [...left].filter((word) => right.has(word)).length;
-  return shared / (left.size + right.size - shared) >= 0.5;
+  if (!left.all.size || !right.all.size) return false;
+  // "no punctuation" and "full punctuation" share words but say opposite things.
+  const clash = (one: typeof left, other: typeof left) => [...one.used].some((word) => other.missing.has(word));
+  if (clash(left, right) || clash(right, left)) return false;
+  const shared = [...left.all].filter((word) => right.all.has(word)).length;
+  return shared / (left.all.size + right.all.size - shared) >= 0.5;
 }
 
 /** How many plain dictations one hand correction is worth. */
