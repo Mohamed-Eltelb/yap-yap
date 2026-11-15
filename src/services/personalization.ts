@@ -106,7 +106,9 @@ export function dictionaryWordsFor(
  * Whether a hand edit changed how words are written (casing or punctuation on words the edit
  * kept), not only which words. Fixing a misheard name or adding a sentence is not a style choice.
  */
-export function isStyleEdit(before: string, after: string): boolean {
+export function isStyleEdit(before: string, after: string, ignoredWords: readonly string[] = []): boolean {
+  // Words the edit respelled as terms ("github" to "GitHub") are dictionary fixes, not style.
+  const ignored = new Set(ignoredWords.map((word) => word.toLowerCase()));
   const bareKey = (word: string) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
   const a = before.trim().split(/\s+/u).filter(Boolean).slice(0, 400);
   const b = after.trim().split(/\s+/u).filter(Boolean).slice(0, 400);
@@ -119,7 +121,7 @@ export function isStyleEdit(before: string, after: string): boolean {
   }
   for (let i = 0, j = 0; i < a.length && j < b.length;) {
     if (bareKey(a[i]) && bareKey(a[i]) === bareKey(b[j])) {
-      if (a[i] !== b[j]) return true;
+      if (a[i] !== b[j] && !ignored.has(bareKey(b[j]))) return true;
       i++; j++;
     } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
     else j++;
@@ -132,12 +134,16 @@ export function isStyleEdit(before: string, after: string): boolean {
  * its own output as the user's writing. Returns nothing when too little of the user's text is left.
  */
 export function userWrittenText(textBefore: string | undefined, ownTexts: readonly string[]): string | undefined {
-  let text = textBefore ?? '';
-  for (const own of ownTexts) {
-    const trimmed = own.trim();
-    if (trimmed.length >= 3) text = text.split(trimmed).join('\n');
-  }
-  text = text.replace(/\n{2,}/gu, '\n').trim();
+  // Compared line by line and sentence by sentence, ignoring spacing and case: the caret text is
+  // a fixed window that can start in the middle of a paste, and pastes may have had their first
+  // letter lowercased to continue a sentence.
+  const plain = (text: string) => text.replace(/\s+/gu, ' ').trim().toLowerCase();
+  const own = ownTexts.map(plain).filter((text) => text.length >= 3);
+  const kept = (textBefore ?? '')
+    .split(/\r?\n|(?<=[.!?…])\s+/u)
+    .map((piece) => piece.trim())
+    .filter((piece) => piece && !own.some((text) => text.includes(plain(piece))));
+  const text = kept.join('\n');
   return text.replace(/\s+/gu, '').length >= 20 ? text : undefined;
 }
 
@@ -452,7 +458,6 @@ export function parseRetainedStyles(value: unknown): RetainedStyleSample[] {
       createdAt,
       writingSample,
       ...(item.writingCorrection === true && { writingCorrection: true, ...(correctedAt && { writingCorrectedAt: correctedAt }) }),
-      ...(typeof item.writingSource === 'string' && item.writingSource && { writingSource: item.writingSource.slice(0, 100) }),
     }];
   });
   return capRetained(valid);
@@ -472,8 +477,8 @@ function capRetained(samples: readonly RetainedStyleSample[]): RetainedStyleSamp
     });
 }
 
-/** The style part of a History item, without its text, audio, or anything else. */
-export function toRetainedStyle(item: Pick<HistoryItem, 'id' | 'createdAt' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt' | 'writingSource'>): RetainedStyleSample | undefined {
+/** The style part of a History item, without its text, audio, or the app or site it went to. */
+export function toRetainedStyle(item: Pick<HistoryItem, 'id' | 'createdAt' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>): RetainedStyleSample | undefined {
   return parseRetainedStyles([item])[0];
 }
 

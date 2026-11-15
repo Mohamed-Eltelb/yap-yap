@@ -1081,6 +1081,7 @@ describe('learning from hand edits', () => {
     expect(isStyleEdit('see you soon', 'see you soon!')).toBe(true);
     expect(isStyleEdit('I met super base today', 'I met Supabase today')).toBe(false);
     expect(isStyleEdit('Meeting at noon.', 'Meeting at noon. Bring the slides.')).toBe(false);
+    expect(isStyleEdit('push it to github today', 'push it to GitHub today', ['GitHub'])).toBe(false);
   });
 
   it('learns respelled terms, not ordinary typo fixes', () => {
@@ -1115,6 +1116,11 @@ describe('learning from the user’s own writing', () => {
     expect(userWrittenText('Hi Sam,\nThanks for the quick reply on this.', [])).toBe('Hi Sam,\nThanks for the quick reply on this.');
     expect(userWrittenText('Hi Sam,\nPasted by the app earlier today.', ['Pasted by the app earlier today.'])).toBeUndefined();
     expect(userWrittenText(undefined, [])).toBeUndefined();
+    // The caret window can start mid-paste, use Windows line breaks, or hold a paste whose first letter was lowercased.
+    const paste = 'Sounds good. I will send the report tomorrow morning.';
+    expect(userWrittenText('report tomorrow morning.', [paste])).toBeUndefined();
+    expect(userWrittenText('Hi Sam,\r\nsounds good. I will send the report tomorrow morning.', [paste])).toBeUndefined();
+    expect(userWrittenText('Our plan for this week looks fine. sounds good.', [paste])).toBe('Our plan for this week looks fine.');
   });
 
   it('does not ask about phrasing drift without the user’s own writing', async () => {
@@ -1137,10 +1143,11 @@ describe('learned style outlives History', () => {
     const before = [item('a', '2026-01-02T00:00:00Z'), item('b', '2026-01-01T00:00:00Z')];
     const retained = retainRemovedStyles(before, [before[0]], []);
     expect(retained).toEqual([{
-      id: 'b', createdAt: '2026-01-01T00:00:00Z', writingSource: 'mail.example.com',
+      id: 'b', createdAt: '2026-01-01T00:00:00Z',
       writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case', fromUserText: true },
     }]);
     expect(JSON.stringify(retained)).not.toContain('secret');
+    expect(JSON.stringify(retained)).not.toContain('example.com');
     // Nothing removed: the same list comes back.
     expect(retainRemovedStyles(before, before, retained)).toBe(retained);
     // Learning reads both, without counting an item twice.

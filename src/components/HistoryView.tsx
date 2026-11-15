@@ -602,7 +602,7 @@ export function HistoryView({
       >
         <h2 id="clear-history-title" className="text-lg font-semibold">Clear all history?</h2>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          This permanently deletes all transcripts and recordings saved in Yap Yap. Your learned writing style is kept; reset it in Settings under Writing preferences.
+          This permanently deletes all transcripts and recordings saved in Yap Yap. Your learned writing style is kept; reset it in Settings under Personalization.
         </p>
         <form method="dialog" className="mt-5 flex justify-end gap-2">
           <button autoFocus className="rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm">Cancel</button>

@@ -84,7 +84,6 @@ export interface RetainedStyleSample {
   writingSample: WritingSample;
   writingCorrection?: boolean;
   writingCorrectedAt?: string;
-  writingSource?: string;
 }
 
 export interface WritingSample {

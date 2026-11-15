@@ -656,7 +656,7 @@ export function App() {
             if (!prev.settings.personalizationEnabled) return prev;
             // History kept no item (retention "never", or deleted already): keep only the style.
             if (!prev.history.some((h) => h.id === itemId)) {
-              const retained = toRetainedStyle({ id: itemId, createdAt: new Date().toISOString(), writingSample: sample, writingSource: source });
+              const retained = toRetainedStyle({ id: itemId, createdAt: new Date().toISOString(), writingSample: sample });
               return retained ? {
                 ...prev,
                 settings: { ...prev.settings, retainedStyleSamples: [retained, ...prev.settings.retainedStyleSamples.filter((item) => item.id !== itemId)] },
@@ -1267,7 +1267,7 @@ export function App() {
     showToast('Transcript updated');
     const llmId = appState.settings.activeLlmProvider;
     // A hand edit teaches style only when it changed casing or punctuation, not just words.
-    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none' && isStyleEdit(original.text, trimmed)) {
+    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none' && isStyleEdit(original.text, trimmed, extractCorrections(original.text, original.text, trimmed) ?? [])) {
       const provider = appState.providers[llmId];
       if (!isProviderConfigured(provider)) return;
       void detectWritingStyle(trimmed, provider, { category: original.writingSample?.category, before: original.text }).then((sample) => {
