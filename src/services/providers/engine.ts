@@ -1,7 +1,7 @@
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
 import { DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
-import { categoryForDestination, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, MAX_WRITING_PREFERENCES_LENGTH, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
+import { builtInCategory, categoryForDestination, sourceKey, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, MAX_WRITING_PREFERENCES_LENGTH, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
 import { PROVIDER_CATALOG } from './catalog';
 import { modelsFromPages, type ModelPage } from './models';
 
@@ -760,7 +760,14 @@ export async function proposeWritingPreferences(
     if (typeof rule === 'string') return rule;
     const { text, where } = (rule ?? {}) as { text?: unknown; where?: unknown };
     if (typeof text !== 'string') throw new Error('The AI reply could not be read. Try again.');
-    const category = readWritingRule(`[${typeof where === 'string' ? where : ''}] ${cleanWritingRule(text)}`).category;
+    const place = typeof where === 'string' ? where.trim() : '';
+    // An app or site name ("Slack") becomes its kind of place. A place Yap Yap cannot recognize
+    // is reported, never quietly widened to everywhere.
+    const named = sourceKey(place);
+    const category = readWritingRule(`[${place}] ${cleanWritingRule(text)}`).category ?? (named ? builtInCategory(named) : undefined);
+    if (!category && place && !/^(everywhere|all|any)$/i.test(place)) {
+      throw new Error(`Yap Yap can't tell when you're writing in "${place.slice(0, 40)}". Name a kind of place, like Messaging or Email.`);
+    }
     return writeWritingRule(cleanWritingRule(text), category);
   });
   const rules = parseWritingPreferences(lines);

@@ -240,7 +240,7 @@ export function PersonalizationEditor({
         <section className="yy-pref-section" aria-labelledby={rulesHeadingId}>
           <div className="yy-pref-heading">
             <h3 id={rulesHeadingId}>Your rules</h3>
-            <p>Yap Yap always follows these.</p>
+            <p>Yap Yap always follows these. A rule for one kind of place applies when Yap Yap can tell you're writing there.</p>
           </div>
           {rows.length > 0 ? (
             <ul className="yy-pref-rules" data-review={rulesChanged ? '' : undefined} aria-labelledby={rulesHeadingId}>
