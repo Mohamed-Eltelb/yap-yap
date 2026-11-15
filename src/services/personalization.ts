@@ -87,6 +87,31 @@ export function dictionaryWordsFor(
   return [...manual, ...learned].map((entry) => entry.word);
 }
 
+/**
+ * Whether a hand edit changed how words are written (casing or punctuation on words the edit
+ * kept), not only which words. Fixing a misheard name or adding a sentence is not a style choice.
+ */
+export function isStyleEdit(before: string, after: string): boolean {
+  const bareKey = (word: string) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  const a = before.trim().split(/\s+/u).filter(Boolean).slice(0, 400);
+  const b = after.trim().split(/\s+/u).filter(Boolean).slice(0, 400);
+  // Longest common subsequence of words, then compare the kept words as written.
+  const lcs = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = bareKey(a[i]) && bareKey(a[i]) === bareKey(b[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  for (let i = 0, j = 0; i < a.length && j < b.length;) {
+    if (bareKey(a[i]) && bareKey(a[i]) === bareKey(b[j])) {
+      if (a[i] !== b[j]) return true;
+      i++; j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
+    else j++;
+  }
+  return false;
+}
+
 /** Whether the word appears whole and capitalized somewhere other than a sentence start, like a name. */
 function isWrittenMidSentence(word: string, text: string): boolean {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

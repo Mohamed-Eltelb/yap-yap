@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -1065,5 +1065,21 @@ describe('personalization quick fixes', () => {
       { createdAt: '2026-01-02T00:00:00Z', text: 'New' },
     ];
     expect(skipDuplicateHistory(items, existing)).toEqual([items[1]]);
+  });
+});
+
+describe('learning from hand edits', () => {
+  it('counts an edit as a style correction only when kept words change casing or punctuation', () => {
+    expect(isStyleEdit('Hey Sam. Running late.', 'hey sam running late')).toBe(true);
+    expect(isStyleEdit('see you soon', 'see you soon!')).toBe(true);
+    expect(isStyleEdit('I met super base today', 'I met Supabase today')).toBe(false);
+    expect(isStyleEdit('Meeting at noon.', 'Meeting at noon. Bring the slides.')).toBe(false);
+  });
+
+  it('learns respelled terms, not ordinary typo fixes', () => {
+    expect(extractCorrections('we will recieve it', 'we will recieve it', 'we will receive it')).toEqual([]);
+    expect(extractCorrections('Recieve it now', 'Recieve it now', 'Receive it now')).toEqual([]);
+    expect(extractCorrections('deploy to versel now', 'deploy to versel now', 'deploy to Vercel now')).toEqual(['Vercel']);
+    expect(extractCorrections('use super base here', 'use super base here', 'use Supabase here')).toEqual(['Supabase']);
   });
 });

@@ -76,9 +76,14 @@ export function extractCorrections(pastedText: string, textAtPaste: string, text
     // A case-only change is learned only when the casing is distinctive (GitHub, API), so a
     // capitalized sentence start is not mistaken for a name. Joining two words into one
     // ("end point" → "endpoint") is always a real correction.
+    // A respelling is learned only when it looks like a term (a name, brand, or code word), so
+    // fixing an ordinary typo ("recieve" → "receive") does not fill the dictionary.
+    const sentenceStart = newStart === 0 || /[.!?…]["')\]”’]*$/u.test(after[newStart - 1]);
+    const looksLikeTerm = removed.length > 1 || /\d/u.test(word) || /^.+\p{Lu}/u.test(word)
+      || (/^\p{Lu}/u.test(word) && !sentenceStart);
     const distinctive = from === to
       ? removed.length > 1 || /^.+\p{Lu}/u.test(word)
-      : editDistance(from, to) <= Math.max(from.length, to.length) / 2;
+      : looksLikeTerm && editDistance(from, to) <= Math.max(from.length, to.length) / 2;
     if (distinctive && word.length >= 3 && word.length <= 40 && /\p{L}/u.test(word) && !learned.includes(word)) learned.push(word);
   }
   const rewrite = before.length >= 5 ? changed > before.length * 0.4 : replacements > 1;

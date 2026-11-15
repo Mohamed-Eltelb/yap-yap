@@ -11,7 +11,8 @@ import { getPreferredLanguageVariants } from './data/languages';
 import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { extractCorrections } from '../electron/pasteCorrections';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, isStyleEdit, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -525,7 +526,8 @@ export function App() {
           1,
           Math.round((countWords(rawText) / Math.max(1000, durationMs)) * 60_000)
         );
-        const autoWords = extractAutoDictionaryWords(finalText, dictWords);
+        // Ask answers and translations are not the user's words, so only dictation teaches terms.
+        const autoWords = mode === 'dictate' ? extractAutoDictionaryWords(finalText, dictWords) : [];
 
         const itemId = existingItemId ?? `h-${Date.now()}`;
         if (existingItemId) {
@@ -1158,19 +1160,10 @@ export function App() {
       const target = prev.history.find((h) => h.id === id);
       if (!target) return prev;
 
-      const oldTokens = new Set(
-        target.text
-          .split(/\s+/)
-          .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase())
-          .filter(Boolean)
-      );
-      const newTokens = trimmed
-        .split(/\s+/)
-        .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
-        .filter((t) => t.length >= 3 && !oldTokens.has(t.toLowerCase()));
-
+      // Only respellings that look like names or terms join the dictionary, not every new word.
+      const respelled = extractCorrections(target.text, target.text, trimmed) ?? [];
       const existingDict = new Set(prev.dictionary.map((d) => d.word.toLowerCase()));
-      const autoLearned = (prev.settings.personalizationEnabled ? newTokens : [])
+      const autoLearned = (prev.settings.personalizationEnabled ? respelled : [])
         .filter((t) => !existingDict.has(t.toLowerCase()))
         .slice(0, 3)
         .map((w, idx) => ({
@@ -1209,7 +1202,8 @@ export function App() {
     });
     showToast('Transcript updated');
     const llmId = appState.settings.activeLlmProvider;
-    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none') {
+    // A hand edit teaches style only when it changed casing or punctuation, not just words.
+    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none' && isStyleEdit(original.text, trimmed)) {
       const provider = appState.providers[llmId];
       if (!isProviderConfigured(provider)) return;
       void detectWritingStyle(trimmed, provider, { category: original.writingSample?.category, before: original.text }).then((sample) => {
