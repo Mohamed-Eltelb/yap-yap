@@ -15,9 +15,11 @@
     "build:electron": "npm run build && electron-builder",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:keyhook": "cmd /c native\\windows\\build.cmd"
   },
   "dependencies": {
+    "koffi": "^3.3.8",
     "loudness": "^0.4.2",
     "lucide-react": "^1.72.0",
     "react": "^19.1.0",
