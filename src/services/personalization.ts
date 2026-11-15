@@ -1,4 +1,4 @@
-import type { HistoryItem, WritingSample } from '../types/app';
+import type { HistoryItem, StyleCorrections, WritingSample } from '../types/app';
 
 export const WRITING_CATEGORIES = [
   'AI assistants',
@@ -192,6 +192,31 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
       examples: corrected.flatMap((entry) => entry.text?.trim() ? [entry.text.trim().slice(0, 240)] : []).slice(0, 2),
     };
   }).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+}
+
+/** Saved corrections, keeping only known categories with a usable tone and phrasing. */
+export function parseStyleCorrections(value: unknown): StyleCorrections {
+  const corrections: StyleCorrections = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return corrections;
+  for (const [category, entry] of Object.entries(value)) {
+    const sample = parseWritingSample(entry && typeof entry === 'object' ? { ...entry, category } : undefined);
+    if (sample) corrections[sample.category] = { tone: sample.tone, phrasing: sample.phrasing };
+  }
+  return corrections;
+}
+
+/**
+ * The learned profiles with the user's corrections in place. A correction replaces the learned
+ * tone and phrasing for its category until the user resets it, however much is learned later.
+ */
+export function applyStyleCorrections<T extends WritingProfile>(
+  profiles: readonly T[],
+  corrections: StyleCorrections | undefined,
+): (T & { corrected?: boolean })[] {
+  return profiles.map((profile) => {
+    const correction = corrections?.[profile.category];
+    return correction ? { ...profile, ...correction, corrected: true } : profile;
+  });
 }
 
 /** 0–100 with diminishing returns. A hand correction counts as three plain dictations. */

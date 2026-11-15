@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences, readWritingRule } from '../services/personalization';
+import { parseWritingPreferences } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -141,6 +141,13 @@ export function SettingsModal({
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const writingRules = parseWritingPreferences(settings.writingPreferences);
+  const correctedStyles = stats.categoryBreakdown.filter((profile) => 'corrected' in profile && profile.corrected).length;
+  const learnedStyles = stats.categoryBreakdown.length;
+  const preferencesSummary = [
+    writingRules.length > 0 && `${writingRules.length} ${writingRules.length === 1 ? 'rule' : 'rules'}`,
+    correctedStyles > 0 && `${correctedStyles} corrected ${correctedStyles === 1 ? 'style' : 'styles'}`,
+    learnedStyles > correctedStyles && `${learnedStyles - correctedStyles} learned ${learnedStyles - correctedStyles === 1 ? 'style' : 'styles'}`,
+  ].filter(Boolean).join(' · ');
   const activeLlm = settings.activeLlmProvider;
   const editorProvider = activeLlm !== 'none' && PROVIDER_CATALOG[activeLlm].supportsLlm && isProviderConfigured(providers[activeLlm])
     ? providers[activeLlm]
@@ -681,16 +688,9 @@ export function SettingsModal({
                   <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
                     <div className="min-w-0">
                       <h3 className="text-sm font-medium">Writing preferences</h3>
-                      {writingRules.length > 0 ? (
-                        <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-secondary)]">
-                          {writingRules.slice(0, 2).map((rule) => <li key={rule} className="truncate">{readWritingRule(rule).text}</li>)}
-                          {writingRules.length > 2 && <li>and {writingRules.length - 2} more</li>}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                          Tell Yap Yap how you want your text written, such as no period at the end of chat messages.
-                        </p>
-                      )}
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                        {preferencesSummary || 'Tell Yap Yap how you want your text written, or correct what it has learned about you.'}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -698,7 +698,7 @@ export function SettingsModal({
                       onClick={() => setPreferencesEditorOpen(true)}
                       className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--border-strong)] px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
                     >
-                      {writingRules.length > 0 ? 'Edit rules' : 'Add a rule'}
+                      {writingRules.length > 0 || stats.categoryBreakdown.length > 0 ? 'Edit' : 'Add a rule'}
                     </button>
                   </div>
                 )}
@@ -940,9 +940,10 @@ export function SettingsModal({
         <PersonalizationEditor
           preferences={settings.writingPreferences}
           profiles={stats.categoryBreakdown}
+          styleCorrections={settings.styleCorrections}
           provider={editorProvider}
           cleanupEnabled={settings.smartCleanup}
-          onSave={(writingPreferences) => onUpdateSettings({ writingPreferences })}
+          onSave={(changes) => onUpdateSettings(changes)}
           onClose={() => setPreferencesEditorOpen(false)}
           onOpenProviders={() => {
             setPreferencesEditorOpen(false);

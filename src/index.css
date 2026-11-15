@@ -1080,50 +1080,73 @@ textarea,
   color: var(--text-primary);
 }
 
-.yy-pref-learned {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+.yy-pref-section {
+  display: grid;
+  gap: 8px;
+}
+
+.yy-pref-section + .yy-pref-section {
+  margin-top: 6px;
+}
+
+.yy-pref-heading {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+}
+
+.yy-pref-section h3 {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.yy-pref-heading p {
+  color: var(--text-secondary);
   font-size: 12.5px;
 }
 
-.yy-pref-learned summary {
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.yy-pref-learned summary:hover {
-  color: var(--text-primary);
-}
-
-.yy-pref-learned ul {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.yy-pref-learned li {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-}
-
-.yy-pref-learned li > svg {
+/* Learned style rows: category icon, name and style, and Reset when corrected. */
+.yy-pref-styles li > svg:not(.yy-pref-mark) {
   flex: none;
   margin-top: 2px;
 }
 
-.yy-pref-learned li div {
+.yy-pref-styles li > div {
   display: grid;
+  flex: 1;
   min-width: 0;
 }
 
-.yy-pref-learned li span {
+.yy-pref-styles li > div > span {
   color: var(--text-secondary);
+  font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 
-.yy-pref-editor :is(button, summary):focus-visible {
+.yy-pref-styles li > div strong {
+  font-weight: 500;
+}
+
+.yy-pref-rules li > .yy-pref-reset {
+  display: block;
+  width: auto;
+  height: auto;
+  margin-top: 0;
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.yy-pref-rules li > .yy-pref-reset:hover {
+  background: var(--bg-subtle-hover);
+}
+
+.yy-pref-editor button:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }

@@ -84,6 +84,8 @@ export interface DictionaryEntry {
   createdAt: string;
 }
 
+export type StyleCorrections = Record<string, { tone: string; phrasing: string }>;
+
 export interface SettingsState {
   shortcuts: ShortcutGroup;
   interfaceLanguage: string;
@@ -98,6 +100,8 @@ export interface SettingsState {
   smartCleanup: boolean;
   personalizationEnabled: boolean;
   writingPreferences: string;
+  /** The user's corrections to learned styles, by category. They replace what was learned. */
+  styleCorrections: StyleCorrections;
   contextAwareness: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;

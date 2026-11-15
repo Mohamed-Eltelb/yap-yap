@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   smartCleanup: true,
   personalizationEnabled: true,
   writingPreferences: '',
+  styleCorrections: {},
   contextAwareness: true,
   floatingHud: true,
   historyRetention: 'forever',

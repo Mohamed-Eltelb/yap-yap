@@ -1,4 +1,4 @@
-import { buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, parseStyleCorrections, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -609,28 +609,68 @@ describe('Multi-Provider Engine', () => {
       .mockResolvedValueOnce(reply('{"rules":[]}'))
       .mockResolvedValueOnce(reply('{"rules":null}'))
       .mockResolvedValueOnce(reply('Sure, done!'))
-      .mockResolvedValueOnce(reply(JSON.stringify({ rules: Array.from({ length: 21 }, (_, index) => `Rule ${index}.`) })));
+      .mockResolvedValueOnce(reply(JSON.stringify({ rules: Array.from({ length: 21 }, (_, index) => `Rule ${index}.`) })))
+      // Only learned categories can be corrected, an unknown tone keeps the learned one,
+      // and a style returned unchanged is not a correction.
+      .mockResolvedValueOnce(reply(JSON.stringify({
+        rules: ['Use straight quotes.'],
+        styles: [
+          { category: 'Messaging', tone: 'Grumpy', phrasing: 'Standard capitalization, concise, standard punctuation' },
+          { category: 'Email', tone: 'Formal', phrasing: 'Sentence case.' },
+          { category: 'Spreadsheets', tone: 'Neutral', phrasing: 'No punctuation' },
+        ],
+      })));
     vi.stubGlobal('fetch', fetchMock);
     const profiles = [{
       category: 'Email', tone: 'Formal', phrasing: 'Sentence case',
       count: 3, corrections: 1, examples: ['Private client email'],
+    }, {
+      category: 'Messaging', tone: 'Neutral', phrasing: 'Standard capitalization, concise, no punctuation',
+      count: 5, corrections: 0, examples: [],
     }];
     const current = { rules: ['Use straight quotes.'], profiles };
+    const rulesOnly = (rules: string[]) => ({ rules, styles: {} });
 
     await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes'))
-      .resolves.toEqual(['Use straight quotes.', 'Avoid em dashes.']);
+      .resolves.toEqual(rulesOnly(['Use straight quotes.', 'Avoid em dashes.']));
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(JSON.parse(body.messages[1].content)).toEqual({
       rules: [{ text: 'Use straight quotes.', where: 'everywhere' }],
-      learnedStyles: [{ category: 'Email', tone: 'Formal', phrasing: 'Sentence case' }],
+      learnedStyles: [
+        { category: 'Email', tone: 'Formal', phrasing: 'Sentence case' },
+        { category: 'Messaging', tone: 'Neutral', phrasing: 'Standard capitalization, concise, no punctuation' },
+      ],
       request: 'Avoid em dashes',
     });
     await expect(proposeWritingPreferences(provider, current, 'No period in chats'))
-      .resolves.toEqual(['Use straight quotes.', '[Messaging] No final period.']);
-    await expect(proposeWritingPreferences(provider, current, 'Remove everything')).resolves.toEqual([]);
+      .resolves.toEqual(rulesOnly(['Use straight quotes.', '[Messaging] No final period.']));
+    await expect(proposeWritingPreferences(provider, current, 'Remove everything')).resolves.toEqual(rulesOnly([]));
     await expect(proposeWritingPreferences(provider, current, 'Translate to French')).rejects.toThrow('not something a writing rule can do');
     await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes')).rejects.toThrow('could not be read');
     await expect(proposeWritingPreferences(provider, current, 'Add many')).rejects.toThrow('limit of 20 rules');
+    await expect(proposeWritingPreferences(provider, current, 'I need punctuation back in messages')).resolves.toEqual({
+      rules: ['Use straight quotes.'],
+      styles: { Messaging: { tone: 'Neutral', phrasing: 'Standard capitalization, concise, standard punctuation' } },
+    });
+  });
+
+  it('applies saved corrections over learned styles until they are reset', () => {
+    const learned = buildWritingProfiles([
+      { mode: 'dictate', writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation' } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case' } },
+    ]);
+    const corrections = parseStyleCorrections({
+      messaging: { tone: 'Casual', phrasing: 'Standard punctuation' },
+      Nowhere: { tone: 'Casual', phrasing: 'x' },
+      Email: 'broken',
+    });
+    expect(corrections).toEqual({ Messaging: { tone: 'Casual', phrasing: 'Standard punctuation' } });
+    const applied = applyStyleCorrections(learned, corrections);
+    expect(applied.find((p) => p.category === 'Messaging')).toMatchObject({ phrasing: 'Standard punctuation', corrected: true, count: 1 });
+    expect(applied.find((p) => p.category === 'Email')).not.toHaveProperty('corrected');
+    expect(applyStyleCorrections(learned, {})).toEqual(learned);
+    const saved = getInitialState();
+    expect(sanitizeLoadedState({ ...saved, settings: { ...saved.settings, styleCorrections: 'bad' as never } }).settings.styleCorrections).toEqual({});
   });
 
   it('keeps saved writing rules clean, unique, and within limits', () => {

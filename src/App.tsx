@@ -11,7 +11,7 @@ import { getPreferredLanguageVariants } from './data/languages';
 import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
-import { buildSourceCategories, categoryForDestination, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -299,10 +299,11 @@ export function App() {
   // Silent and cancelled recordings stay in History but never count as dictation.
   const completedHistory = useMemo(() => appState.history.filter((item) => !item.outcome), [appState.history]);
 
-  const stats = useMemo(
-    () => computeInsights(completedHistory),
-    [completedHistory]
-  );
+  // Corrections the user made to learned styles replace them everywhere: cleanup, Insights, Settings.
+  const stats = useMemo(() => {
+    const insights = computeInsights(completedHistory);
+    return { ...insights, categoryBreakdown: applyStyleCorrections(insights.categoryBreakdown, appState.settings.styleCorrections) };
+  }, [completedHistory, appState.settings.styleCorrections]);
 
   const learnedSources = useMemo(() => buildSourceCategories(completedHistory), [completedHistory]);
 
