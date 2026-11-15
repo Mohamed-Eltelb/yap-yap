@@ -797,6 +797,17 @@ describe('Multi-Provider Engine', () => {
     expect(profile.phrasing).toBe('Sentence case, no exclamation points; Full punctuation');
   });
 
+  it('uses a style learned from a paste edit only once another sample agrees', () => {
+    const edit = (phrasing: string) => ({ mode: 'dictate' as const, writingSample: { category: 'Messaging', tone: 'Casual', phrasing, fromUserText: true, fromEdit: true } });
+    expect(buildWritingProfiles([edit('all lowercase, no punctuation')])[0]).toMatchObject({ tone: 'Casual', phrasing: '' });
+    expect(buildWritingProfiles([edit('all lowercase, no punctuation'), edit('lowercase, no punctuation')])[0].phrasing)
+      .toBe('all lowercase, no punctuation; lowercase, no punctuation');
+    expect(buildWritingProfiles([edit('all lowercase, no punctuation'), edit('Capitalized first word, period at end')])[0].phrasing).toBe('');
+    const written = { mode: 'dictate' as const, writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'lowercase, no periods', fromUserText: true } };
+    expect(buildWritingProfiles([edit('lowercase, no punctuation'), written])[0].phrasing).toBe('lowercase, no punctuation; lowercase, no periods');
+    expect(parseWritingSample({ category: 'Messaging', tone: 'Casual', phrasing: 'lowercase', fromEdit: true })).not.toHaveProperty('fromEdit');
+  });
+
   it('applies saved corrections over learned styles until they are reset', () => {
     const learned = buildWritingProfiles([
       { mode: 'dictate', writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation' } },

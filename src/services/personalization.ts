@@ -299,7 +299,8 @@ export function parseWritingSample(value: unknown): WritingSample | undefined {
     ?? 'Neutral');
   // A phrasing that looks like an instruction or carries a link is dropped; the tone still counts.
   const phrasing = styleDescription(readLabel(sample.phrasing, 120));
-  if (category && tone) return { category, tone, phrasing, ...(sample.fromUserText === true && phrasing && { fromUserText: true }) };
+  const fromUserText = sample.fromUserText === true && !!phrasing;
+  if (category && tone) return { category, tone, phrasing, ...(fromUserText && { fromUserText: true }), ...(fromUserText && sample.fromEdit === true && { fromEdit: true }) };
 }
 
 type ProfileEntry = Pick<HistoryItem, 'mode' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'> & { text?: string };
@@ -366,6 +367,19 @@ export function parseWritingPreferences(value: unknown): string[] {
   return rules;
 }
 
+function habitWords(phrasing: string): Set<string> {
+  return new Set(phrasing.toLowerCase().match(/\p{L}+/gu) ?? []);
+}
+
+/** Whether two phrasings describe the same casing and punctuation habit, worded differently. */
+export function sameHabit(a: string, b: string): boolean {
+  const left = habitWords(a);
+  const right = habitWords(b);
+  if (!left.size || !right.size) return false;
+  const shared = [...left].filter((word) => right.has(word)).length;
+  return shared / (left.size + right.size - shared) >= 0.5;
+}
+
 /** How many plain dictations one hand correction is worth. */
 const CORRECTION_WEIGHT = 3;
 /** The newest dictations that vote on a category's tone. */
@@ -402,7 +416,11 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
     // The newest correction comes first, then the most common recent phrasing (newest on a tie),
     // so one dictation does not swing it. A final period would read as "x.; y" once joined.
     const plain = (entry: { sample: WritingSample }) => entry.sample.phrasing.replace(/[.\s]+$/u, '');
-    const written = entries.filter((entry) => entry.corrected || entry.sample.fromUserText).slice(0, PHRASING_WINDOW);
+    const ownWriting = entries.filter((entry) => entry.corrected || entry.sample.fromUserText).slice(0, PHRASING_WINDOW);
+    // A fix made right after a paste can be a one-off, like a joke in lowercase. Its phrasing
+    // counts only once another sample of the user's writing describes the same habit.
+    const written = ownWriting.filter((entry) => entry.corrected || !entry.sample.fromEdit
+      || ownWriting.some((other) => other !== entry && sameHabit(other.sample.phrasing, entry.sample.phrasing)));
     const tally = new Map<string, { text: string; count: number; newest: number }>();
     written.forEach((entry, index) => {
       const text = plain(entry);

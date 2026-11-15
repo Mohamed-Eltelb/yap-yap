@@ -545,7 +545,7 @@ export function App() {
                 category: fixedCategory,
                 destination: location,
                 before: pasted,
-              }).then((sample) => sample && { ...sample, fromUserText: true });
+              }).then((sample) => sample && { ...sample, fromUserText: true, fromEdit: true });
             }
             const processed = await processTranscriptWithLlm(
               rawText,

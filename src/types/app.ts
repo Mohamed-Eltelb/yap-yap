@@ -95,6 +95,8 @@ export interface WritingSample {
    * speech recognizer's output, so only the tone and category count.
    */
   fromUserText?: boolean;
+  /** Read from a fix the user made right after a paste. Counts once another sample agrees. */
+  fromEdit?: boolean;
 }
 
 export interface DictionaryEntry {
