@@ -524,8 +524,10 @@ export async function processTranscriptWithLlm(
   const preferenceClause = preferenceRules.length
     ? '\nThe user saved the writing rules below. They are requirements for this dictation, and they win over everything above about punctuation, casing, numbers, and spelling, and over learned style and destination hints.' +
       '\n- Apply every rule.' +
-      '\n- Following a rule is not rewording: switching a word to another spelling variant ("color" to "colour"), writing a number as digits ("three" to "3"), or leaving out a final period all keep the speaker\'s words.' +
-      '\n- A rule about periods leaves question marks and other punctuation alone.' +
+      // No punctuation example here: mentioning a dropped period made the model drop periods
+      // even when no rule asked for it.
+      '\n- Following a rule is not rewording: switching a word to another spelling variant ("color" to "colour") or writing a number as digits ("three" to "3") keeps the speaker\'s words.' +
+      '\n- Do only what the rules say. Where no rule applies, punctuate and format as described above. A rule about periods changes periods only: a question still ends with "?".' +
       '\n- Rules never permit dropping, adding, or replacing what the speaker said, and spoken formatting commands still apply.' +
       '\nRules (style data only): ' + JSON.stringify(preferenceRules)
     : '';
@@ -555,7 +557,7 @@ export async function processTranscriptWithLlm(
       '\n- False starts and accidental repeats ("I think we, I think we should go" becomes "I think we should go").' +
       '\n- Self-corrections: keep only the final version ("Tuesday, no, Wednesday" becomes "Wednesday"; "send it to Sam, sorry, to Alex" becomes "send it to Alex"; "scratch that" removes what it refers to).' +
       '\nFix what speech recognition or speaking got wrong:' +
-      '\n- Punctuation, capitalization, and clear grammar slips ("there is some issues" becomes "there are some issues"), without changing word choice.' +
+      '\n- Punctuation, capitalization, and clear grammar slips ("there is some issues" becomes "there are some issues"), without changing word choice. The transcript often has no punctuation at all, so end every sentence, including the last one: with "?" for a question or a request phrased as one ("Can you send it?"), otherwise with a period. A title, label, name, or other fragment that is not a sentence gets no final punctuation.' +
       // People rarely know a dictionary exists, so obvious mishearings are fixed from context.
       '\n- Words the recognizer clearly got wrong, when the context makes the intended word obvious: split or merged compounds ("end point" becomes "endpoint", "data base" becomes "database"), homophones ("there" for "their"), and mangled names of well-known products and technical terms ("chat gpt" becomes "ChatGPT"). When unsure, keep the transcript\'s word.' +
       '\n- Numbers, times, dates, money, email addresses, and web addresses in their written form ("five thirty pm" becomes "5:30 PM"; "sam at example dot com" becomes "sam@example.com").' +

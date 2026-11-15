@@ -674,6 +674,36 @@ describe('Multi-Provider Engine', () => {
     expect(translation).not.toContain(preferences);
   });
 
+  it('sends a rule saved for one kind of place only when the dictation is going there', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content: 'Clean text.' } }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const options = {
+      targetLanguages: [], dictionaryWords: [], smartCleanup: true,
+      writingPreferences: '[Messaging] Leave out the final period.\nWrite numbers as digits.',
+    };
+    const gmail = { application: 'Google Chrome', domain: 'mail.google.com' };
+
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: gmail });
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: { application: 'Slack' } });
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, options);
+    // A category the app already knows wins over what the destination suggests.
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: gmail, destinationCategory: 'Messaging' });
+    const [email, chat, unknown, known] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
+    for (const prompt of [email, chat, unknown, known]) expect(prompt).toContain('Write numbers as digits.');
+    expect(email).not.toContain('Leave out the final period.');
+    expect(unknown).not.toContain('Leave out the final period.');
+    expect(chat).toContain('Leave out the final period.');
+    expect(known).toContain('Leave out the final period.');
+    // The place label is the app's business, not the model's.
+    expect(chat).not.toContain('[Messaging]');
+  });
+
   it('detects a category and supplies its learned style to dictation cleanup', async () => {
     vi.stubGlobal('window', undefined);
     const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
