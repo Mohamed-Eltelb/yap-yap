@@ -14,6 +14,25 @@ export function isMenuKey(keycode: number): boolean {
   return menuKeys.includes(keycode);
 }
 
+/** Windows sends a synthetic left Ctrl just before right Alt on AltGr layouts. */
+function isAltGrCtrl(pressed: ReadonlyMap<number, number>, windows: boolean): boolean {
+  const alt = pressed.get(UiohookKey.AltRight);
+  const ctrl = pressed.get(UiohookKey.Ctrl);
+  return windows && alt !== undefined && ctrl !== undefined && alt >= ctrl && alt - ctrl <= 15;
+}
+
+/** True when every pressed key belongs to one shortcut, so the keys may still become it. */
+export function startsShortcut<T extends { keys: number[][] }>(
+  bindings: T[],
+  pressed: ReadonlyMap<number, number>,
+  windows: boolean,
+): boolean {
+  const ignore = isAltGrCtrl(pressed, windows) ? UiohookKey.Ctrl : undefined;
+  const keys = [...pressed.keys()].filter((key) => key !== ignore);
+  return keys.length > 0 && bindings.some((binding) =>
+    keys.every((key) => binding.keys.some((options) => options.includes(key))));
+}
+
 export function matchShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,
@@ -25,9 +44,6 @@ export function matchShortcut<T extends { keys: number[][] }>(
   const exact = bindings.find(({ keys }) => matches(keys, pressed.size));
   if (exact || !windows) return exact;
 
-  // Windows sends a synthetic left Ctrl just before right Alt on AltGr layouts.
-  const alt = pressed.get(UiohookKey.AltRight);
-  const ctrl = pressed.get(UiohookKey.Ctrl);
-  if (alt === undefined || ctrl === undefined || alt < ctrl || alt - ctrl > 15) return;
+  if (!isAltGrCtrl(pressed, windows)) return;
   return bindings.find(({ keys }) => matches(keys, pressed.size - 1, UiohookKey.Ctrl));
 }
