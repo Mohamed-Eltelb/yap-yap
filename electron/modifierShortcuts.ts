@@ -1,6 +1,10 @@
 import { appendFile } from 'node:fs';
 import { UiohookKey, uIOhook } from 'uiohook-napi';
-import { isMenuKey, matchShortcut, needsMenuMask } from './shortcutMatch';
+import type { ShortcutPhase } from './hudActions';
+import { ShortcutFlow, type AppStatus } from './shortcutFlow';
+import { isMenuKey, matchShortcut, needsMenuMask, startsShortcut } from './shortcutMatch';
+
+export type { ShortcutPhase };
 
 const modifierKeys: Record<string, number[]> = {
   'Right Alt': [UiohookKey.AltRight],
@@ -44,12 +48,30 @@ let maskMenus = true;
 // Never bound by apps, so tapping it has no effect of its own.
 const maskKey = UiohookKey.F24;
 
-/** The shortcut editor must see the keys exactly as pressed. */
+type FlowHandlers = { appStatus: () => AppStatus; onPhase: (phase: ShortcutPhase) => void; onStop: () => void };
+let handlers: FlowHandlers | undefined;
+const flow = new ShortcutFlow({
+  holdMs: 1000,
+  appStatus: () => handlers?.appStatus() ?? 'idle',
+  emit: (out) => {
+    if (out.type === 'start') bindings[out.binding]?.trigger();
+    else if (out.type === 'stop') handlers?.onStop();
+    else handlers?.onPhase(out.type);
+  },
+});
+
+/** The shortcut editor must see the keys exactly as pressed, and shows nothing for them. */
 export function setMenuMasking(enabled: boolean) {
   maskMenus = enabled;
+  if (!enabled) flow.reset();
 }
 
-export function registerModifierShortcuts(shortcuts: { combo: string[]; trigger: () => void }[]) {
+export function registerModifierShortcuts(
+  shortcuts: { combo: string[]; trigger: () => void }[],
+  flowHandlers: FlowHandlers,
+) {
+  handlers = flowHandlers;
+  flow.reset();
   bindings = shortcuts.map(({ combo, trigger }) => ({
     keys: combo.map((key) => resolveKey(key)!),
     trigger,
@@ -101,8 +123,10 @@ uIOhook.on('keydown', ({ keycode, time }) => {
   remember(`down ${keycode} t=${time}${repeat ? ' repeat' : ''} masking=${maskMenus}`);
   if (keycode === maskKey) return;
   if (!repeat) {
+    const windows = process.platform === 'win32';
     pressed.set(keycode, time);
-    pending = matchShortcut(bindings, pressed, process.platform === 'win32');
+    pending = matchShortcut(bindings, pressed, windows);
+    if (maskMenus) flow.keyDown(startsShortcut(bindings, pressed, windows), pending ? bindings.indexOf(pending) : undefined);
   }
   // The hook cannot block keys, so stop the focused app from also acting on the shortcut.
   menuHeld = needsMenuMask(pressed);
@@ -117,9 +141,9 @@ uIOhook.on('keyup', ({ keycode, time }) => {
   menuHeld = needsMenuMask(pressed);
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.
   if (pressed.size > 0) return;
-  const binding = pending;
   pending = undefined;
-  binding?.trigger();
+  if (maskMenus) flow.allReleased();
+  else flow.reset();
 });
 
 export function stopModifierShortcuts() {
@@ -128,6 +152,7 @@ export function stopModifierShortcuts() {
   pending = undefined;
   pressed.clear();
   menuHeld = false;
+  flow.reset();
 }
 
 export function pasteWithKeyboard(): void {

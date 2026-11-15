@@ -1,4 +1,4 @@
-import type { HudAction } from './hudActions';
+import type { HudAction, ShortcutPhase } from './hudActions';
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('yapyap', {
@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld('yapyap', {
       cb(mode);
     ipcRenderer.on('trigger-mode', handler);
     return () => ipcRenderer.removeListener('trigger-mode', handler);
+  },
+  onShortcutPhase: (cb: (phase: ShortcutPhase) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, phase: ShortcutPhase) => cb(phase);
+    ipcRenderer.on('shortcut:phase', handler);
+    return () => ipcRenderer.removeListener('shortcut:phase', handler);
   },
   onHudState: (cb: (state: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state);

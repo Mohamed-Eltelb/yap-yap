@@ -40,6 +40,7 @@ declare global {
       setHudIgnoreMouse: (ignore: boolean) => void;
       sendHudAction: (action: HudAction) => void;
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
+      onShortcutPhase?: (cb: (phase: 'armed' | 'list' | 'closed' | 'busy') => void) => () => void;
       onHudState: (cb: (state: unknown) => void) => () => void;
       onHudAction: (
         cb: (action: HudAction) => void

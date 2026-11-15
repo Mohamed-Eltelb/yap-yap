@@ -25,7 +25,10 @@ import { watchPasteCorrections } from './pasteCorrections';
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
 let hudReady = false;
-let hudPayload: { show: boolean; state?: { status?: string; mode?: string } } = { show: false };
+let hudPayload: {
+  show: boolean;
+  state?: { status?: string; mode?: string; busyNotice?: boolean; shortcutList?: unknown[] };
+} = { show: false };
 let hudDisplayId: number | undefined;
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -73,7 +76,9 @@ let escapeRegistered = false;
 
 /** Esc cancels a recording from anywhere, and is left alone the rest of the time. */
 function syncEscapeCancel() {
-  const recording = hudPayload.state?.status === 'recording';
+  const state = hudPayload.state;
+  // Esc also cancels a dictation still processing while the busy notice offers that.
+  const recording = state?.status === 'recording' || (state?.status === 'processing' && state.busyNotice === true);
   if (recording === escapeRegistered) return;
   if (recording) {
     escapeRegistered = globalShortcut.register('Escape', () => {
@@ -226,6 +231,14 @@ function updateHudWindow(): void {
     height = 215;
   }
   if (state?.status === 'cancelled') width = 260;
+  if (state?.status === 'armed' && state.shortcutList) {
+    width = 300;
+    height = 170;
+  }
+  if (state?.status === 'processing' && state.busyNotice) {
+    width = 360;
+    height = 170;
+  }
   if (state?.status === 'error' || state?.status === 'result') {
     const answer = state.status === 'result' && state.mode === 'ask';
     width = answer ? 620 : 360;
@@ -327,7 +340,14 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
     }
   }
   try {
-    registerModifierShortcuts(modifierShortcuts);
+    registerModifierShortcuts(modifierShortcuts, {
+      appStatus: () => {
+        const status = hudPayload.state?.status;
+        return status === 'recording' || status === 'processing' ? status : 'idle';
+      },
+      onPhase: (phase) => mainWindow?.webContents.send('shortcut:phase', phase),
+      onStop: () => mainWindow?.webContents.send('hud:action', { type: 'stop' } satisfies HudAction),
+    });
     return true;
   } catch (error) {
     console.warn('Could not register modifier-only shortcuts', error);
