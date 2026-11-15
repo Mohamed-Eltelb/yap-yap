@@ -654,6 +654,15 @@ describe('Multi-Provider Engine', () => {
     });
   });
 
+  it('joins learned phrasings without stray periods', () => {
+    const [profile] = buildWritingProfiles([
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points.' } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Full punctuation' } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points' } },
+    ]);
+    expect(profile.phrasing).toBe('Sentence case, no exclamation points; Full punctuation');
+  });
+
   it('applies saved corrections over learned styles until they are reset', () => {
     const learned = buildWritingProfiles([
       { mode: 'dictate', writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation' } },

@@ -181,7 +181,9 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
     const votes = new Map<string, number>();
     for (const { sample } of pool) votes.set(sample.tone, (votes.get(sample.tone) ?? 0) + 1);
     const tone = [...votes].sort((a, b) => b[1] - a[1])[0][0];
-    const phrasing = [...new Map(pool.map(({ sample }) => [writingCategoryKey(sample.phrasing), sample.phrasing])).values()]
+    // A final period would read as "x.; y" once two phrasings are joined.
+    const phrasings = pool.map(({ sample }) => sample.phrasing.replace(/[.\s]+$/u, '')).filter(Boolean);
+    const phrasing = [...new Map(phrasings.map((text) => [writingCategoryKey(text), text])).values()]
       .slice(0, 2).join('; ');
     return {
       category,
