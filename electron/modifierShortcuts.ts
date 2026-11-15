@@ -3,7 +3,7 @@ import { UiohookKey, uIOhook } from 'uiohook-napi';
 import type { ShortcutPhase } from './hudActions';
 import { ShortcutFlow, type AppStatus } from './shortcutFlow';
 import { isMenuKey, matchShortcut, needsMenuMask, startsShortcut, swallowedKeys } from './shortcutMatch';
-import { setWindowsSwallowedKeys, startWindowsKeyHook, stopWindowsKeyHook } from './windowsKeyHook';
+import { KEYS_RESET, setWindowsSwallowedKeys, startWindowsKeyHook, stopWindowsKeyHook } from './windowsKeyHook';
 
 export type { ShortcutPhase };
 
@@ -65,6 +65,14 @@ const flow = new ShortcutFlow({
 export function setMenuMasking(enabled: boolean) {
   maskMenus = enabled;
   if (!enabled) flow.reset();
+  syncSwallowedKeys();
+}
+
+/** The shortcut editor records Right Alt, so nothing is swallowed while it is in use. */
+function syncSwallowedKeys() {
+  const keys = nativeHook && maskMenus ? swallowedKeys(bindings) : { leads: [], chords: [] };
+  swallowed = keys.leads;
+  if (nativeHook) setWindowsSwallowedKeys(keys);
 }
 
 export function registerModifierShortcuts(
@@ -87,14 +95,22 @@ export function registerModifierShortcuts(
   if (!running) {
     // On Windows Yap Yap's own hook watches keys, so it can swallow Right Alt.
     nativeHook = process.platform === 'win32' && startWindowsKeyHook((down, code, time) => {
-      if (down) handleKeyDown(code, time);
+      if (code === KEYS_RESET) forgetPressedKeys();
+      else if (down) handleKeyDown(code, time);
       else handleKeyUp(code, time);
     });
     if (!nativeHook) uIOhook.start();
     running = true;
   }
-  swallowed = nativeHook ? swallowedKeys(bindings).leads : [];
-  if (nativeHook) setWindowsSwallowedKeys(swallowedKeys(bindings));
+  syncSwallowedKeys();
+}
+
+/** Ctrl+Alt+Del, UAC and the lock screen take the keyboard without sending key-ups. */
+function forgetPressedKeys() {
+  pressed.clear();
+  pending = undefined;
+  menuHeld = false;
+  flow.reset();
 }
 
 let nativeHook = false;

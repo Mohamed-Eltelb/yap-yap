@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <condition_variable>
 #include <deque>
+#include <future>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -16,45 +18,85 @@ namespace {
 const int kRightAlt = 0xE38;
 const int kLeftCtrl = 0x1D;
 const DWORD kAltGrCtrlScan = 0x21D;
-
-struct Event { int down; int code; unsigned time; };
+// Tracks the AltGr fake Ctrl apart from the real left Ctrl.
+const int kAltGrCtrlId = -kLeftCtrl;
+// Tells Yap Yap that every key was released behind its back.
+const int kResetCode = -1;
 
 std::mutex keysLock;
 std::set<int> leads, chords;
-// Only touched by the hook thread (or by tests, with no hook running).
-std::set<int> heldLeads, swallowedDowns;
+// Keys whose key-down was swallowed. Their repeats and key-up are swallowed too, and
+// nothing else is, so Windows never sees a key go down without coming back up.
+std::set<int> swallowedDowns;
 
-std::mutex queueLock;
-std::condition_variable queueReady;
-std::deque<Event> queue;
+// One per start. A notifier from an earlier start may still be waiting for JavaScript,
+// so it keeps its own queue and stop flag and can never take this start's events.
+struct Event { int down; int code; unsigned time; };
+struct Channel {
+  std::mutex lock;
+  std::condition_variable ready;
+  std::deque<Event> events;
+  bool stopping = false;
+};
+std::mutex channelLock;
+std::shared_ptr<Channel> channel;
 KeyCallback callback = nullptr;
-bool stopping = false;
 
 HHOOK hook = nullptr;
+HWINEVENTHOOK desktopHook = nullptr;
 DWORD hookThreadId = 0;
-std::thread hookThread, notifierThread;
+std::thread hookThread;
 
 int codeOf(DWORD scan, DWORD flags) {
   if (scan == kAltGrCtrlScan) return kLeftCtrl;
-  return static_cast<int>(scan & 0xFF) | ((flags & LLKHF_EXTENDED) ? 0xE00 : 0);
+  const int low = static_cast<int>(scan & 0xFF);
+  if (!(flags & LLKHF_EXTENDED)) return low;
+  // uiohook gives the arrow keys a different prefix, and NumLock none.
+  if (low == 0x48 || low == 0x4B || low == 0x4D || low == 0x50) return 0xE000 | low;
+  if (low == 0x45) return low;
+  return 0xE00 | low;
 }
 
 bool swallow(bool down, DWORD scan, DWORD flags) {
   if (flags & LLKHF_INJECTED) return false;
   const int code = codeOf(scan, flags);
+  const int id = scan == kAltGrCtrlScan ? kAltGrCtrlId : code;
   std::lock_guard<std::mutex> guard(keysLock);
-  if (leads.count(code)) {
-    if (down) heldLeads.insert(code); else heldLeads.erase(code);
-    return true;
+  if (!down) return swallowedDowns.erase(id) > 0;
+  if (swallowedDowns.count(id)) return true;  // a repeat
+  bool leadHeld = false;
+  for (int lead : leads) leadHeld = leadHeld || swallowedDowns.count(lead) > 0;
+  const bool owned =
+      leads.count(code) > 0 ||
+      // AltGr layouts send a fake left Ctrl just before Right Alt.
+      (scan == kAltGrCtrlScan && leads.count(kRightAlt) > 0) ||
+      (leadHeld && chords.count(code) > 0);
+  if (owned) swallowedDowns.insert(id);
+  return owned;
+}
+
+void post(int down, int code, unsigned time) {
+  std::shared_ptr<Channel> target;
+  {
+    std::lock_guard<std::mutex> guard(channelLock);
+    target = channel;
   }
-  // AltGr layouts send a fake left Ctrl just before Right Alt.
-  if (scan == kAltGrCtrlScan && leads.count(kRightAlt)) return true;
-  if (down && !heldLeads.empty() && chords.count(code)) {
-    swallowedDowns.insert(code);
-    return true;
+  if (!target) return;
+  {
+    std::lock_guard<std::mutex> guard(target->lock);
+    target->events.push_back({down, code, time});
   }
-  if (!down && swallowedDowns.erase(code)) return true;
-  return false;
+  target->ready.notify_one();
+}
+
+// The secure desktop (Ctrl+Alt+Del, UAC, the lock screen) takes the keyboard without
+// sending key-ups to this hook, so held keys are forgotten when it appears.
+void forgetHeldKeys() {
+  {
+    std::lock_guard<std::mutex> guard(keysLock);
+    swallowedDowns.clear();
+  }
+  post(0, kResetCode, GetTickCount());
 }
 
 LRESULT CALLBACK hookProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -64,29 +106,27 @@ LRESULT CALLBACK hookProc(int nCode, WPARAM wParam, LPARAM lParam) {
   if (nCode == HC_ACTION && !(key->flags & LLKHF_INJECTED)) {
     const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
     const bool swallowed = swallow(down, key->scanCode, key->flags);
-    {
-      std::lock_guard<std::mutex> guard(queueLock);
-      queue.push_back({down ? 1 : 0, codeOf(key->scanCode, key->flags), static_cast<unsigned>(key->time)});
-    }
-    queueReady.notify_one();
+    post(down ? 1 : 0, codeOf(key->scanCode, key->flags), static_cast<unsigned>(key->time));
     if (swallowed) return 1;
   }
   return CallNextHookEx(hook, nCode, wParam, lParam);
 }
 
-void notify() {
+void CALLBACK desktopSwitched(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+  forgetHeldKeys();
+}
+
+void notify(std::shared_ptr<Channel> own) {
   for (;;) {
     Event event;
-    KeyCallback target;
     {
-      std::unique_lock<std::mutex> guard(queueLock);
-      queueReady.wait(guard, [] { return stopping || !queue.empty(); });
-      if (stopping) return;
-      event = queue.front();
-      queue.pop_front();
-      target = callback;
+      std::unique_lock<std::mutex> guard(own->lock);
+      own->ready.wait(guard, [&] { return own->stopping || !own->events.empty(); });
+      if (own->stopping) return;
+      event = own->events.front();
+      own->events.pop_front();
     }
-    if (target) target(event.down, event.code, event.time);
+    if (callback) callback(event.down, event.code, event.time);
   }
 }
 
@@ -100,55 +140,57 @@ __declspec(dllexport) void yk_set_keys(const int* leadCodes, int leadCount, cons
   chords.clear();
   for (int i = 0; i < leadCount; i++) leads.insert(leadCodes[i]);
   for (int i = 0; i < chordCount; i++) chords.insert(chordCodes[i]);
-  heldLeads.clear();
-  swallowedDowns.clear();
+  // Keys already swallowed stay tracked so their key-ups are swallowed as well.
 }
 
+// The callback must stay valid for the life of the process: a notifier from an earlier
+// start may still call it after yk_stop.
 __declspec(dllexport) int yk_start(KeyCallback cb) {
   if (hookThread.joinable()) return 1;
+  callback = cb;
+  auto own = std::make_shared<Channel>();
   {
-    std::lock_guard<std::mutex> guard(queueLock);
-    callback = cb;
-    stopping = false;
-    queue.clear();
+    std::lock_guard<std::mutex> guard(channelLock);
+    channel = own;
   }
-  notifierThread = std::thread(notify);
-  std::mutex startLock;
-  std::condition_variable started;
-  int result = -1;
-  hookThread = std::thread([&] {
+  std::thread(notify, own).detach();
+  std::promise<bool> started;
+  std::future<bool> result = started.get_future();
+  hookThread = std::thread([&started] {
     MSG msg;
     // Creates this thread's message queue before anyone posts WM_QUIT to it.
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    hookThreadId = GetCurrentThreadId();
     HMODULE module = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&hookProc), &module);
     hook = SetWindowsHookExW(WH_KEYBOARD_LL, hookProc, module, 0);
-    {
-      std::lock_guard<std::mutex> guard(startLock);
-      hookThreadId = GetCurrentThreadId();
-      result = hook ? 1 : 0;
+    desktopHook = SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+                                  desktopSwitched, 0, 0, WINEVENT_OUTOFCONTEXT);
+    const bool ok = hook != nullptr;
+    started.set_value(ok);
+    if (ok) {
+      while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+      }
+      UnhookWindowsHookEx(hook);
     }
-    started.notify_one();
-    if (!hook) return;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-      TranslateMessage(&msg);
-      DispatchMessageW(&msg);
-    }
-    UnhookWindowsHookEx(hook);
+    if (desktopHook) UnhookWinEvent(desktopHook);
     hook = nullptr;
+    desktopHook = nullptr;
   });
-  std::unique_lock<std::mutex> guard(startLock);
-  started.wait(guard, [&] { return result != -1; });
-  if (result == 1) return 1;
-  guard.unlock();
+  if (result.get()) return 1;
   hookThread.join();
   {
-    std::lock_guard<std::mutex> queueGuard(queueLock);
-    stopping = true;
+    std::lock_guard<std::mutex> guard(channelLock);
+    channel.reset();
   }
-  queueReady.notify_all();
-  notifierThread.detach();
+  {
+    std::lock_guard<std::mutex> guard(own->lock);
+    own->stopping = true;
+  }
+  own->ready.notify_all();
   return 0;
 }
 
@@ -157,24 +199,35 @@ __declspec(dllexport) void yk_stop() {
     PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
     hookThread.join();
   }
+  std::shared_ptr<Channel> own;
   {
-    std::lock_guard<std::mutex> guard(queueLock);
-    stopping = true;
-    callback = nullptr;
-    queue.clear();
+    std::lock_guard<std::mutex> guard(channelLock);
+    own.swap(channel);
   }
-  queueReady.notify_all();
+  if (!own) return;
+  {
+    std::lock_guard<std::mutex> guard(own->lock);
+    own->stopping = true;
+    own->events.clear();
+  }
   // The notifier may be waiting for JavaScript on this very thread, so it is not joined.
-  if (notifierThread.joinable()) notifierThread.detach();
+  own->ready.notify_all();
 }
 
 __declspec(dllexport) int yk_test_event(int down, int scan, int flags) {
   return swallow(down != 0, static_cast<DWORD>(scan), static_cast<DWORD>(flags)) ? 1 : 0;
 }
 
+__declspec(dllexport) int yk_test_code(int scan, int flags) {
+  return codeOf(static_cast<DWORD>(scan), static_cast<DWORD>(flags));
+}
+
+__declspec(dllexport) void yk_test_desktop_switch() {
+  forgetHeldKeys();
+}
+
 __declspec(dllexport) void yk_test_reset() {
   std::lock_guard<std::mutex> guard(keysLock);
-  heldLeads.clear();
   swallowedDowns.clear();
 }
 
