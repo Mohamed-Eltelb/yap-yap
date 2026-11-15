@@ -102,6 +102,7 @@ export function App() {
   const mutedForRecording = useRef(false);
   const muteTimer = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
+  const busyNoticeTimer = useRef<number | undefined>(undefined);
   const hudRef = useRef<HudState>(hud);
   const openedTargetsDuringRecording = useRef(false);
   hudRef.current = hud;
@@ -864,8 +865,12 @@ export function App() {
   const triggerDictationMode = useCallback(
     async (mode: DictationMode) => {
       const now = Date.now();
+      // A skipped trigger must not leave the shortcut placeholder on screen.
+      const closePlaceholder = () =>
+        setHud((current) => current.status === 'armed' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
       // Guard against duplicate globalShortcut + DOM keydown firing within 350ms
       if (now - lastTriggerTimeRef.current < 350) {
+        closePlaceholder();
         return;
       }
       lastTriggerTimeRef.current = now;
@@ -1019,8 +1024,33 @@ export function App() {
   useEffect(() => {
     if (isHudRoute || !hydrated) return;
     const unsubTrigger = window.yapyap?.onTriggerMode?.((mode) => {
-      if (modalOpen && document.hasFocus()) return;
+      if (modalOpen && document.hasFocus()) {
+        setHud((current) => current.status === 'armed' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
+        return;
+      }
       void triggerDictationMode(mode);
+    });
+    const unsubPhase = window.yapyap?.onShortcutPhase?.((phase) => {
+      if (modalOpen && document.hasFocus()) return;
+      const { status } = hudRef.current;
+      if (phase === 'armed') {
+        if (status === 'recording' || status === 'processing') return;
+        setHud({ status: 'armed', mode: 'dictate', levels: Array(20).fill(0.1) });
+      } else if (phase === 'list') {
+        if (status !== 'armed') return;
+        const { shortcuts } = appState.settings;
+        const shortcutList = (['dictate', 'translate', 'ask'] as const).map((mode) => ({ mode, combos: shortcuts[mode] }));
+        setHud((current) => current.status === 'armed' ? { ...current, shortcutList } : current);
+      } else if (phase === 'closed') {
+        setHud((current) => current.status === 'armed' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
+      } else if (phase === 'busy') {
+        if (status !== 'processing') return;
+        setHud((current) => current.status === 'processing' ? { ...current, busyNotice: true } : current);
+        window.clearTimeout(busyNoticeTimer.current);
+        busyNoticeTimer.current = window.setTimeout(() => {
+          setHud((current) => current.busyNotice ? { ...current, busyNotice: undefined } : current);
+        }, 4000);
+      }
     });
     const unsubAction = window.yapyap?.onHudAction?.((action) => {
       if (action.type === 'stop') void stopAndProcess();
@@ -1033,9 +1063,10 @@ export function App() {
     });
     return () => {
       unsubTrigger?.();
+      unsubPhase?.();
       unsubAction?.();
     };
-  }, [cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel]);
+  }, [appState.settings, cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {

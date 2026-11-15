@@ -5,7 +5,7 @@ import { AnswerMarkdown } from './AnswerMarkdown';
 import { YapLogo } from './YapLogo';
 
 export interface HudState {
-  status: 'idle' | 'recording' | 'processing' | 'cancelled' | 'result' | 'error';
+  status: 'idle' | 'armed' | 'recording' | 'processing' | 'cancelled' | 'result' | 'error';
   mode: DictationMode;
   levels: number[];
   resultText?: string;
@@ -14,7 +14,13 @@ export interface HudState {
   targets?: string[];
   targetLanguage?: string;
   appearance?: AppearanceMode;
+  /** Shown while the shortcut key is held long enough to ask for it. */
+  shortcutList?: { mode: DictationMode; combos: string[][] }[];
+  /** The shortcut was pressed while this dictation was still processing. */
+  busyNotice?: boolean;
 }
+
+const modeLabels: Record<DictationMode, string> = { dictate: 'Dictate', translate: 'Translate', ask: 'Ask anything' };
 
 interface Props {
   hud: HudState;
@@ -128,7 +134,31 @@ export function DictationHud({
           </div>
         </>
       )}
-      {hud.status === 'processing' && (
+      {hud.status === 'armed' && !hud.shortcutList && (
+        <div className="yy-hud-pill yy-hud-armed" role="status" aria-label="Waiting for shortcut">
+          <div className="yy-hud-wave" aria-hidden="true">
+            {bars.map((_, index) => <span key={index} style={{ height: '2px' }} />)}
+          </div>
+        </div>
+      )}
+      {hud.status === 'armed' && hud.shortcutList && (
+        <section className="yy-hud-shortcuts" aria-label="Shortcuts">
+          {hud.shortcutList.map(({ mode, combos }) => (
+            <div key={mode} className="yy-hud-shortcut">
+              <span>{modeLabels[mode]}</span>
+              <kbd>{combos.map((combo) => combo.join(' + ')).join(' or ')}</kbd>
+            </div>
+          ))}
+        </section>
+      )}
+      {hud.status === 'processing' && hud.busyNotice && (
+        <section className="yy-hud-busy" role="alert">
+          <strong>Yap Yap is still processing your last dictation</strong>
+          <p>Press Esc or click Cancel to cancel it.</p>
+          <button type="button" onClick={onCancel}>Cancel</button>
+        </section>
+      )}
+      {hud.status === 'processing' && !hud.busyNotice && (
         <div className="yy-hud-thinking" role="status">
           <span>Thinking</span>
         </div>

@@ -2015,3 +2015,64 @@ textarea,
 .yy-hud-retry:hover {
   background: var(--bg-hover);
 }
+
+.yy-hud-armed {
+  justify-content: center;
+  min-width: 70px;
+}
+
+.yy-hud-shortcuts,
+.yy-hud-busy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #ffffff4a;
+  border-radius: 15px;
+  background: #060707;
+  color: #fff;
+  font-size: 12px;
+}
+
+.yy-hud-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-weight: 550;
+}
+
+.yy-hud-shortcut kbd {
+  padding: 3px 7px;
+  border: 1px solid #ffffff2e;
+  border-radius: 7px;
+  background: #ffffff14;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.yy-hud-busy {
+  align-items: center;
+  text-align: center;
+}
+
+.yy-hud-busy strong {
+  font-size: 13px;
+}
+
+.yy-hud-busy p {
+  margin: 0;
+  color: #ffffffb3;
+}
+
+.yy-hud-busy button {
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #ffffff26;
+  color: #fff;
+  font-weight: 650;
+}
+
+.yy-hud-busy button:hover {
+  background: #ffffff40;
+}
