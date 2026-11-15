@@ -707,7 +707,7 @@ export function App() {
         );
 
         // Words the user respells in the destination right after the paste join the dictionary.
-        if (pasted && mode === 'dictate' && appState.settings.personalizationEnabled) {
+        if (pasted && mode === 'dictate' && appState.settings.personalizationEnabled && appState.settings.learnFromEdits) {
           void desktop?.watchPasteCorrections?.(delivered).then((edits) => {
             // Fixing casing or punctuation in the pasted text is the clearest sign of how the user
             // writes. Only those edits are sent for learning, not ones that just change words.
@@ -719,7 +719,7 @@ export function App() {
             let added: string[] = [];
             setAppState((prev) => {
               const known = new Set(prev.dictionary.map((entry) => entry.word.toLowerCase()));
-              added = prev.settings.personalizationEnabled ? words.filter((word) => !known.has(word.toLowerCase())) : [];
+              added = prev.settings.personalizationEnabled && prev.settings.learnFromEdits ? words.filter((word) => !known.has(word.toLowerCase())) : [];
               if (!added.length) return prev;
               const createdAt = new Date().toISOString();
               return {

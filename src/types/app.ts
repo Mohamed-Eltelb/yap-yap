@@ -141,6 +141,8 @@ export interface SettingsState {
    */
   sourceCategories: Record<string, string>;
   contextAwareness: boolean;
+  /** Watch fixes made right after a paste to learn style and dictionary words. */
+  learnFromEdits: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;
   cloudSyncMock: boolean;

@@ -705,7 +705,7 @@ export function SettingsModal({
                       <Info aria-hidden="true" className="size-3.5" />
                     </button>
                     <div id="personalization-tooltip" role="tooltip" className="yy-personalization-tooltip invisible absolute left-0 top-full z-20 mt-1 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-hover:visible group-focus-within:visible">
-                      Yap Yap learns your tone per category through your configured AI provider. Casing and punctuation are learned only from your own writing: transcripts you correct in History and, with context awareness on, text you already wrote in the app. Short excerpts of corrected transcripts guide future formatting in the same category.
+                      Yap Yap learns your tone per category through your configured AI provider. Casing and punctuation are learned only from your own writing: transcripts you correct in History, fixes you make right after a paste, and, with context awareness on, text you already wrote in the app. Short excerpts of corrected transcripts guide future formatting in the same category.
                     </div>
                   </div>
                 </div>
@@ -718,6 +718,16 @@ export function SettingsModal({
                     </p>
                   </div>
                   <Toggle label="Context awareness" checked={settings.contextAwareness} onChange={(contextAwareness) => onUpdateSettings({ contextAwareness })} />
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+                  <div>
+                    <h3 className="text-sm font-medium">Learn from my edits</h3>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      When you fix casing, punctuation, or a misspelled name right after Yap Yap pastes, it learns your style and adds the name to your dictionary. Turn this off to keep Yap Yap from reading the text after it pastes.
+                    </p>
+                  </div>
+                  <Toggle label="Learn from my edits" checked={settings.learnFromEdits} onChange={(learnFromEdits) => onUpdateSettings({ learnFromEdits })} />
                 </div>
 
                 {/* Rules apply even with personalization off, so they stay editable. */}

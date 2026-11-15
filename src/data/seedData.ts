@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   retainedStyleSamples: [],
   sourceCategories: {},
   contextAwareness: true,
+  learnFromEdits: true,
   floatingHud: true,
   historyRetention: 'forever',
   cloudSyncMock: false,
