@@ -196,20 +196,35 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
   }).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
 }
 
+/** Room for a corrected version of two joined learned phrasings. */
+export const MAX_CORRECTED_PHRASING_LENGTH = 240;
+
 /** Saved corrections, keeping only known categories with a usable tone and phrasing. */
 export function parseStyleCorrections(value: unknown): StyleCorrections {
   const corrections: StyleCorrections = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return corrections;
-  for (const [category, entry] of Object.entries(value)) {
-    const sample = parseWritingSample(entry && typeof entry === 'object' ? { ...entry, category } : undefined);
-    if (sample) corrections[sample.category] = { tone: sample.tone, phrasing: sample.phrasing };
+  for (const [key, entry] of Object.entries(value)) {
+    const category = WRITING_CATEGORIES.find((name) => writingCategoryKey(name) === writingCategoryKey(key));
+    if (!category || !entry || typeof entry !== 'object') continue;
+    const fields = entry as Record<string, unknown>;
+    const tone = readLabel(fields.tone, 72);
+    const phrasing = readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH);
+    if (!tone && !phrasing) continue;
+    corrections[category] = { ...(tone && { tone }), ...(phrasing && { phrasing }) };
   }
   return corrections;
 }
 
+/** Adds corrections to saved ones field by field, so an earlier tone fix survives a later punctuation fix. */
+export function mergeStyleCorrections(saved: StyleCorrections, changes: StyleCorrections): StyleCorrections {
+  const merged = { ...saved };
+  for (const [category, correction] of Object.entries(changes)) merged[category] = { ...merged[category], ...correction };
+  return merged;
+}
+
 /**
- * The learned profiles with the user's corrections in place. A correction replaces the learned
- * tone and phrasing for its category until the user resets it, however much is learned later.
+ * The learned profiles with the user's corrections in place. A correction replaces only the
+ * parts it covers, tone or phrasing; the other part keeps following what Yap Yap learns.
  */
 export function applyStyleCorrections<T extends WritingProfile>(
   profiles: readonly T[],
@@ -217,7 +232,13 @@ export function applyStyleCorrections<T extends WritingProfile>(
 ): (T & { corrected?: boolean })[] {
   return profiles.map((profile) => {
     const correction = corrections?.[profile.category];
-    return correction ? { ...profile, ...correction, corrected: true } : profile;
+    if (!correction?.tone && !correction?.phrasing) return profile;
+    return {
+      ...profile,
+      ...(correction.tone && { tone: correction.tone }),
+      ...(correction.phrasing && { phrasing: correction.phrasing }),
+      corrected: true,
+    };
   });
 }
 

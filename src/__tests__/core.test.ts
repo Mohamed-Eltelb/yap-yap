@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, parseStyleCorrections, restoreWritingStyles, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, restoreWritingStyles, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -610,15 +610,21 @@ describe('Multi-Provider Engine', () => {
       .mockResolvedValueOnce(reply('{"rules":null}'))
       .mockResolvedValueOnce(reply('Sure, done!'))
       .mockResolvedValueOnce(reply(JSON.stringify({ rules: Array.from({ length: 21 }, (_, index) => `Rule ${index}.`) })))
-      // Only learned categories can be corrected, an unknown tone keeps the learned one,
-      // and a style returned unchanged is not a correction.
+      // A correction keeps only the fields that change: an unknown tone or a style returned
+      // unchanged is not a correction. A style for a place not learned yet is reported back.
       .mockResolvedValueOnce(reply(JSON.stringify({
         rules: ['Use straight quotes.'],
         styles: [
-          { category: 'Messaging', tone: 'Grumpy', phrasing: 'Standard capitalization, concise, standard punctuation' },
+          { category: 'messaging', tone: 'Grumpy', phrasing: 'Standard capitalization, concise, standard punctuation.' },
           { category: 'Email', tone: 'Formal', phrasing: 'Sentence case.' },
           { category: 'Spreadsheets', tone: 'Neutral', phrasing: 'No punctuation' },
         ],
+      })))
+      .mockResolvedValueOnce(reply(JSON.stringify({
+        rules: ['Use straight quotes.'],
+        // A long learned style echoed back unchanged is still unchanged.
+        styles: [{ category: 'Email', tone: 'Friendly' }, { category: 'Development tools', phrasing: `${'Sentence case, '.repeat(10)}no period.` }],
+        unlearned: ['Social platforms', 'Email', 'Nowhere'],
       })));
     vi.stubGlobal('fetch', fetchMock);
     const profiles = [{
@@ -627,9 +633,12 @@ describe('Multi-Provider Engine', () => {
     }, {
       category: 'Messaging', tone: 'Neutral', phrasing: 'Standard capitalization, concise, no punctuation',
       count: 5, corrections: 0, examples: [],
+    }, {
+      category: 'Development tools', tone: 'Neutral', phrasing: `${'Sentence case, '.repeat(10)}no period`,
+      count: 2, corrections: 0, examples: [],
     }];
     const current = { rules: ['Use straight quotes.'], profiles };
-    const rulesOnly = (rules: string[]) => ({ rules, styles: {} });
+    const rulesOnly = (rules: string[]) => ({ rules, styles: {}, unlearned: [] });
 
     await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes'))
       .resolves.toEqual(rulesOnly(['Use straight quotes.', 'Avoid em dashes.']));
@@ -639,6 +648,7 @@ describe('Multi-Provider Engine', () => {
       learnedStyles: [
         { category: 'Email', tone: 'Formal', phrasing: 'Sentence case' },
         { category: 'Messaging', tone: 'Neutral', phrasing: 'Standard capitalization, concise, no punctuation' },
+        { category: 'Development tools', tone: 'Neutral', phrasing: `${'Sentence case, '.repeat(10)}no period` },
       ],
       request: 'Avoid em dashes',
     });
@@ -650,8 +660,27 @@ describe('Multi-Provider Engine', () => {
     await expect(proposeWritingPreferences(provider, current, 'Add many')).rejects.toThrow('limit of 20 rules');
     await expect(proposeWritingPreferences(provider, current, 'I need punctuation back in messages')).resolves.toEqual({
       rules: ['Use straight quotes.'],
-      styles: { Messaging: { tone: 'Neutral', phrasing: 'Standard capitalization, concise, standard punctuation' } },
+      styles: { Messaging: { phrasing: 'Standard capitalization, concise, standard punctuation' } },
+      unlearned: ['Spreadsheets'],
     });
+    await expect(proposeWritingPreferences(provider, current, 'Be friendly in emails and on social media')).resolves.toEqual({
+      rules: ['Use straight quotes.'],
+      styles: { Email: { tone: 'Friendly' } },
+      unlearned: ['Social platforms'],
+    });
+  });
+
+  it('keeps corrections to the parts the user changed', () => {
+    const [learned] = buildWritingProfiles([
+      { mode: 'dictate', writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'No punctuation' } },
+    ]);
+    // Only the phrasing is corrected, so the tone keeps following what is learned.
+    expect(applyStyleCorrections([learned], { Messaging: { phrasing: 'Standard punctuation' } })[0])
+      .toMatchObject({ tone: 'Casual', phrasing: 'Standard punctuation', corrected: true });
+    // A later fix to the tone keeps the earlier fix to the phrasing.
+    expect(mergeStyleCorrections({ Messaging: { phrasing: 'Standard punctuation' } }, { Messaging: { tone: 'Friendly' } }))
+      .toEqual({ Messaging: { phrasing: 'Standard punctuation', tone: 'Friendly' } });
+    expect(parseStyleCorrections({ Messaging: { tone: 'Friendly' }, Email: { phrasing: '' } })).toEqual({ Messaging: { tone: 'Friendly' } });
   });
 
   it('forgets learned styles by category and can put them back', () => {

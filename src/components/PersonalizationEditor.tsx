@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
 import { proposeWritingPreferences } from '../services/providers/engine';
-import { parseWritingPreferences, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
+import { mergeStyleCorrections, parseWritingPreferences, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
 import type { ProviderConfig, StyleCorrections } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
@@ -23,6 +23,8 @@ interface Props {
   cleanupEnabled: boolean;
   onSave: (changes: Saved) => void;
   /** Forgets what was learned for a category and returns what Undo puts back. */
+  /** A category to bring into view when the editor opens. */
+  focusCategory?: string;
   onForgetStyle: (category: string) => ForgottenStyles;
   onRestoreStyle: (forgotten: ForgottenStyles) => void;
   onClose: () => void;
@@ -36,13 +38,15 @@ const suggestions = [
   { label: 'British spelling', request: 'Use British spelling' },
 ];
 
+const listCategories = (names: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(names);
+
 /** Rules that differ only by case or a final period are the same rule. */
 const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
 
 const describeStyle = (style: { tone: string; phrasing: string }) => `${style.tone} tone. ${style.phrasing.replace(/[.\s]*$/u, '.')}`;
 
 export function PersonalizationEditor({
-  preferences, profiles, styleCorrections, provider, cleanupEnabled, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,
+  preferences, profiles, styleCorrections, provider, cleanupEnabled, focusCategory, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,
 }: Props) {
   const inputId = useId();
   const rulesHeadingId = useId();
@@ -61,9 +65,23 @@ export function PersonalizationEditor({
 
   useEffect(() => {
     // The dialog focuses its close button when it opens. Typing a request is the main action.
-    input.current?.focus();
+    // Opened for a category, the focus must not scroll the dialog away from it.
+    input.current?.focus({ preventScroll: Boolean(focusCategory) });
     return () => { latestCall.current = -1; };
+    // Runs once when the editor opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Opened from a category in the report: bring that style into view and mark it briefly.
+  const [focused, setFocused] = useState(focusCategory);
+  useEffect(() => {
+    if (!focusCategory) return;
+    const row = [...document.querySelectorAll<HTMLElement>('.yy-pref-styles li[data-category]')]
+      .find((element) => element.dataset.category === focusCategory);
+    row?.scrollIntoView({ block: 'center' });
+    const timer = window.setTimeout(() => setFocused(undefined), 1600);
+    return () => window.clearTimeout(timer);
+  }, [focusCategory]);
 
   const save = (next: Partial<Saved>, message: string) => {
     const before = { writingPreferences: preferences, styleCorrections };
@@ -90,7 +108,9 @@ export function PersonalizationEditor({
       const current = new Set(rules.map(ruleKey));
       const rulesUnchanged = next.rules.length === rules.length && next.rules.every((rule) => current.has(ruleKey(rule)));
       if (rulesUnchanged && Object.keys(next.styles).length === 0) {
-        setNotice('Nothing to change for that. Your rules and learned style already match it.');
+        setNotice(next.unlearned.length
+          ? `Yap Yap hasn’t learned a style for ${listCategories(next.unlearned)} yet. It will after you dictate there a few times, and then you can correct it here.`
+          : 'Nothing to change for that. Your rules and learned style already match it.');
       } else {
         setProposal(next);
         setRequest('');
@@ -186,13 +206,13 @@ export function PersonalizationEditor({
                       <CategoryIcon category={profile.category} />
                       <div>
                         <strong>{profile.category}</strong>
-                        <span><span className="sr-only">Corrected style: </span>{describeStyle(next)}</span>
+                        <span><span className="sr-only">Corrected style: </span>{describeStyle({ ...profile, ...next })}</span>
                       </div>
                     </li>,
                   ];
                 }
                 return [
-                  <li key={profile.category}>
+                  <li key={profile.category} data-category={profile.category} data-focused={focused === profile.category || undefined}>
                     <CategoryIcon category={profile.category} />
                     <div>
                       <strong>
@@ -255,7 +275,7 @@ export function PersonalizationEditor({
               data-primary
               onClick={() => save({
                 writingPreferences: proposal.rules.join('\n'),
-                styleCorrections: { ...styleCorrections, ...proposal.styles },
+                styleCorrections: mergeStyleCorrections(styleCorrections, proposal.styles),
               }, 'Changes saved.')}
             >
               Save

@@ -150,6 +150,13 @@ export function SettingsModal({
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  /** The category to show first when the editor opens from a report row. */
+  const [editorCategory, setEditorCategory] = useState<string>();
+  const openPreferencesEditor = (category?: string) => {
+    setHighlightedCat(null);
+    setEditorCategory(category);
+    setPreferencesEditorOpen(true);
+  };
   const writingRules = parseWritingPreferences(settings.writingPreferences);
   const correctedStyles = stats.categoryBreakdown.filter((profile) => 'corrected' in profile && profile.corrected).length;
   const learnedStyles = stats.categoryBreakdown.length;
@@ -705,7 +712,7 @@ export function SettingsModal({
                     <button
                       type="button"
                       aria-haspopup="dialog"
-                      onClick={() => setPreferencesEditorOpen(true)}
+                      onClick={() => openPreferencesEditor()}
                       className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--border-strong)] px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
                     >
                       {writingRules.length > 0 || stats.categoryBreakdown.length > 0 ? 'Edit' : 'Add a rule'}
@@ -805,6 +812,15 @@ export function SettingsModal({
                               onFocus={settings.personalizationEnabled ? () => setHighlightedCat(item.category) : undefined}
                               onBlur={settings.personalizationEnabled ? () => setHighlightedCat(null) : undefined}
                               aria-describedby={settings.personalizationEnabled ? `style-${item.category}` : undefined}
+                              role={settings.personalizationEnabled ? 'button' : undefined}
+                              aria-haspopup={settings.personalizationEnabled ? 'dialog' : undefined}
+                              aria-label={settings.personalizationEnabled ? `${item.category}, ${item.percent}%. Open its learned style` : undefined}
+                              onClick={settings.personalizationEnabled ? () => openPreferencesEditor(item.category) : undefined}
+                              onKeyDown={settings.personalizationEnabled ? (event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                openPreferencesEditor(item.category);
+                              } : undefined}
                               className="yy-personalization-row group/row relative yy-personalization-columns grid items-center gap-2 rounded-lg px-2 py-2.5 text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
                             >
                               {settings.personalizationEnabled && (
@@ -990,6 +1006,7 @@ export function SettingsModal({
           preferences={settings.writingPreferences}
           profiles={stats.categoryBreakdown}
           styleCorrections={settings.styleCorrections}
+          focusCategory={editorCategory}
           onForgetStyle={(category) => onForgetLearnedStyle([category])}
           onRestoreStyle={onRestoreLearnedStyle}
           provider={editorProvider}
