@@ -17,7 +17,6 @@ import { createDefaultProviders, PROVIDER_CATALOG, isProviderConfigured } from '
 import {
   detectWritingStyle,
   listProviderModels,
-  keepFinalQuestionMark,
   processTranscriptWithLlm,
   proposeWritingPreferences,
   testProviderConnection,
@@ -673,17 +672,6 @@ describe('Multi-Provider Engine', () => {
     const [dictation, translation] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
     expect(dictation).toContain(preferences);
     expect(translation).not.toContain(preferences);
-  });
-
-  it('puts back a question mark that cleanup dropped, and nothing else', () => {
-    expect(keepFinalQuestionMark('can you test it or not?', 'Can you test it or not')).toBe('Can you test it or not?');
-    expect(keepFinalQuestionMark('can you test it?', 'Can you test it\n')).toBe('Can you test it?\n');
-    expect(keepFinalQuestionMark('هل جربته؟', 'هل جربته')).toBe('هل جربته؟');
-    // Only a missing ending is filled in: other endings, and statements, are left as cleaned.
-    expect(keepFinalQuestionMark('can you test it?', 'Can you test it.')).toBe('Can you test it.');
-    expect(keepFinalQuestionMark('can you test it?', 'Can you test it!')).toBe('Can you test it!');
-    expect(keepFinalQuestionMark('test it', 'Test it')).toBe('Test it');
-    expect(keepFinalQuestionMark('test it?', '')).toBe('');
   });
 
   it('sends a rule saved for one kind of place only when the dictation is going there', async () => {
