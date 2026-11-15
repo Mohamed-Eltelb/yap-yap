@@ -11,7 +11,7 @@ import { getPreferredLanguageVariants } from './data/languages';
 import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, forgetWritingStyles, restoreWritingStyles, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, forgetWritingStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -321,6 +321,12 @@ export function App() {
     const insights = computeInsights(completedHistory);
     return { ...insights, categoryBreakdown: applyStyleCorrections(insights.categoryBreakdown, appState.settings.styleCorrections) };
   }, [completedHistory, appState.settings.styleCorrections]);
+
+  // Dictations made since each correction, so the editor can suggest updating one that no longer fits.
+  const recentStyleSamples = useMemo(
+    () => samplesSinceCorrection(completedHistory, appState.settings.styleCorrections),
+    [completedHistory, appState.settings.styleCorrections]
+  );
 
   const learnedSources = useMemo(() => buildSourceCategories(completedHistory), [completedHistory]);
 
@@ -1377,6 +1383,7 @@ export function App() {
         providers={appState.providers}
         onUpdateProvider={updateProvider}
         onRemoveProvider={removeProvider}
+        recentStyleSamples={recentStyleSamples}
         onForgetLearnedStyle={forgetLearnedStyle}
         onRestoreLearnedStyle={restoreLearnedStyle}
         onResetLearnedStyle={() => {

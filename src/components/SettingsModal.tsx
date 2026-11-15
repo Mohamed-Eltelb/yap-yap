@@ -22,6 +22,7 @@ import {
   ProviderId,
   SettingsModalTab,
   SettingsState,
+  WritingSample,
 } from '../types/app';
 import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
@@ -43,6 +44,8 @@ interface Props {
   providers: Record<ProviderId, ProviderConfig>;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
+  /** Styles learned since each correction, for suggesting an update. */
+  recentStyleSamples: Record<string, WritingSample[]>;
   /** Forgets the learned style for one category and returns what to restore on Undo. */
   onForgetLearnedStyle: (categories: string[]) => ForgottenStyles;
   onRestoreLearnedStyle: (forgotten: ForgottenStyles) => void;
@@ -135,6 +138,7 @@ export function SettingsModal({
   providers,
   onUpdateProvider,
   onRemoveProvider,
+  recentStyleSamples,
   onForgetLearnedStyle,
   onRestoreLearnedStyle,
   onResetLearnedStyle,
@@ -1007,6 +1011,7 @@ export function SettingsModal({
           profiles={stats.categoryBreakdown}
           styleCorrections={settings.styleCorrections}
           focusCategory={editorCategory}
+          recentSamples={recentStyleSamples}
           onForgetStyle={(category) => onForgetLearnedStyle([category])}
           onRestoreStyle={onRestoreLearnedStyle}
           provider={editorProvider}

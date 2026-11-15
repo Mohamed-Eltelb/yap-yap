@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
-import { proposeWritingPreferences } from '../services/providers/engine';
+import { proposeWritingPreferences, suggestStyleUpdate } from '../services/providers/engine';
 import { mergeStyleCorrections, parseWritingPreferences, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
-import type { ProviderConfig, StyleCorrections } from '../types/app';
+import type { ProviderConfig, StyleCorrections, WritingSample } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
 
@@ -25,6 +25,8 @@ interface Props {
   /** Forgets what was learned for a category and returns what Undo puts back. */
   /** A category to bring into view when the editor opens. */
   focusCategory?: string;
+  /** Styles learned since each correction, newest first. */
+  recentSamples?: Record<string, WritingSample[]>;
   onForgetStyle: (category: string) => ForgottenStyles;
   onRestoreStyle: (forgotten: ForgottenStyles) => void;
   onClose: () => void;
@@ -38,7 +40,10 @@ const suggestions = [
   { label: 'British spelling', request: 'Use British spelling' },
 ];
 
-const listCategories = (names: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(names);
+/** Suggestion checks already made this session, so reopening the editor does not ask again. */
+const checkedUpdates = new Map<string, Promise<StyleCorrections[string] | undefined>>();
+
+const listCategories =(names: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(names);
 
 /** Rules that differ only by case or a final period are the same rule. */
 const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
@@ -46,7 +51,7 @@ const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
 const describeStyle = (style: { tone: string; phrasing: string }) => `${style.tone} tone. ${style.phrasing.replace(/[.\s]*$/u, '.')}`;
 
 export function PersonalizationEditor({
-  preferences, profiles, styleCorrections, provider, cleanupEnabled, focusCategory, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,
+  preferences, profiles, styleCorrections, provider, cleanupEnabled, focusCategory, recentSamples, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,
 }: Props) {
   const inputId = useId();
   const rulesHeadingId = useId();
@@ -74,6 +79,32 @@ export function PersonalizationEditor({
 
   // Opened from a category in the report: bring that style into view and mark it briefly.
   const [focused, setFocused] = useState(focusCategory);
+
+  // Corrections the user's recent writing no longer matches. Checked once when the editor opens.
+  const [updates, setUpdates] = useState<StyleCorrections>({});
+  useEffect(() => {
+    if (!provider || !recentSamples) return;
+    let open = true;
+    void (async () => {
+      for (const [category, samples] of Object.entries(recentSamples)) {
+        const correction = styleCorrections[category];
+        if (!correction) continue;
+        const key = `${category}|${correction.since}|${samples.length}`;
+        if (!checkedUpdates.has(key)) checkedUpdates.set(key, suggestStyleUpdate(provider, correction, samples));
+        const update = await checkedUpdates.get(key);
+        if (open && update) setUpdates((current) => ({ ...current, [category]: update }));
+      }
+    })();
+    return () => { open = false; };
+    // Runs once when the editor opens; a decision below updates the saved correction itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Accepts the suggestion, or keeps the correction ({}), and waits for new dictations either way. */
+  const decideUpdate = (category: string, update: StyleCorrections[string], message: string) => {
+    setUpdates(({ [category]: _done, ...rest }) => rest);
+    save({ styleCorrections: mergeStyleCorrections(styleCorrections, { [category]: update }, new Date().toISOString()) }, message);
+  };
   useEffect(() => {
     if (!focusCategory) return;
     const row = [...document.querySelectorAll<HTMLElement>('.yy-pref-styles li[data-category]')]
@@ -220,6 +251,31 @@ export function PersonalizationEditor({
                         {profile.corrected && <em className="yy-pref-scope">Corrected by you</em>}
                       </strong>
                       <span>{describeStyle(profile)}</span>
+                      {updates[profile.category] && !proposal && (
+                        <div className="yy-pref-drift">
+                          <p>
+                            Your recent {profile.category} writing looks different:{' '}
+                            <strong>{describeStyle({ ...profile, ...updates[profile.category] })}</strong>
+                          </p>
+                          <div>
+                            <button
+                              type="button"
+                              className="yy-pref-button"
+                              data-primary
+                              onClick={() => decideUpdate(profile.category, updates[profile.category], `${profile.category} style updated.`)}
+                            >
+                              Update
+                            </button>
+                            <button
+                              type="button"
+                              className="yy-pref-button"
+                              onClick={() => decideUpdate(profile.category, {}, `Kept your ${profile.category} correction.`)}
+                            >
+                              Keep mine
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {profile.corrected && !proposal && (
                       <button
@@ -275,7 +331,7 @@ export function PersonalizationEditor({
               data-primary
               onClick={() => save({
                 writingPreferences: proposal.rules.join('\n'),
-                styleCorrections: mergeStyleCorrections(styleCorrections, proposal.styles),
+                styleCorrections: mergeStyleCorrections(styleCorrections, proposal.styles, new Date().toISOString()),
               }, 'Changes saved.')}
             >
               Save

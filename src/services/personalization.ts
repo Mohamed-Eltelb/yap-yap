@@ -163,6 +163,9 @@ export function parseWritingPreferences(value: unknown): string[] {
   return rules;
 }
 
+/** How many plain dictations one hand correction is worth. */
+const CORRECTION_WEIGHT = 3;
+
 export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingProfile[] {
   const groups = new Map<string, { sample: WritingSample; corrected: boolean; text?: string }[]>();
   for (const item of items) {
@@ -175,14 +178,18 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
   }
 
   return [...groups].map(([category, entries]) => {
-    // History is newest first. Hand corrections outrank samples taken from raw speech.
+    // History is newest first. A hand correction counts as three dictations, the same weight as in
+    // personalizationScore, so it leads without stopping the category from learning.
     const corrected = entries.filter((entry) => entry.corrected);
-    const pool = corrected.length ? corrected : entries;
     const votes = new Map<string, number>();
-    for (const { sample } of pool) votes.set(sample.tone, (votes.get(sample.tone) ?? 0) + 1);
+    for (const { sample, corrected: isCorrection } of entries) {
+      votes.set(sample.tone, (votes.get(sample.tone) ?? 0) + (isCorrection ? CORRECTION_WEIGHT : 1));
+    }
     const tone = [...votes].sort((a, b) => b[1] - a[1])[0][0];
+    // The newest correction's phrasing comes first, then the newest learned ones.
     // A final period would read as "x.; y" once two phrasings are joined.
-    const phrasings = pool.map(({ sample }) => sample.phrasing.replace(/[.\s]+$/u, '')).filter(Boolean);
+    const phrasings = [...corrected.slice(0, 1), ...entries]
+      .map(({ sample }) => sample.phrasing.replace(/[.\s]+$/u, '')).filter(Boolean);
     const phrasing = [...new Map(phrasings.map((text) => [writingCategoryKey(text), text])).values()]
       .slice(0, 2).join('; ');
     return {
@@ -210,16 +217,46 @@ export function parseStyleCorrections(value: unknown): StyleCorrections {
     const tone = readLabel(fields.tone, 72);
     const phrasing = readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH);
     if (!tone && !phrasing) continue;
-    corrections[category] = { ...(tone && { tone }), ...(phrasing && { phrasing }) };
+    const since = typeof fields.since === 'string' && !Number.isNaN(Date.parse(fields.since)) ? fields.since : undefined;
+    corrections[category] = { ...(tone && { tone }), ...(phrasing && { phrasing }), ...(since && { since }) };
   }
   return corrections;
 }
 
-/** Adds corrections to saved ones field by field, so an earlier tone fix survives a later punctuation fix. */
-export function mergeStyleCorrections(saved: StyleCorrections, changes: StyleCorrections): StyleCorrections {
+/**
+ * Adds corrections to saved ones field by field, so an earlier tone fix survives a later
+ * punctuation fix. `since` marks when the user last decided, for update suggestions.
+ */
+export function mergeStyleCorrections(saved: StyleCorrections, changes: StyleCorrections, since?: string): StyleCorrections {
   const merged = { ...saved };
-  for (const [category, correction] of Object.entries(changes)) merged[category] = { ...merged[category], ...correction };
+  for (const [category, correction] of Object.entries(changes)) {
+    merged[category] = { ...merged[category], ...correction, ...(since && { since }) };
+  }
   return merged;
+}
+
+/** Dictations a corrected category needs after the correction before an update is suggested. */
+export const STYLE_UPDATE_MIN_SAMPLES = 5;
+
+/**
+ * For each corrected category, the styles learned from dictations made after the correction,
+ * newest first. Only categories with enough of them to judge are included.
+ */
+export function samplesSinceCorrection(
+  history: readonly Pick<HistoryItem, 'mode' | 'createdAt' | 'writingSample'>[],
+  corrections: StyleCorrections,
+): Record<string, WritingSample[]> {
+  const result: Record<string, WritingSample[]> = {};
+  for (const [category, correction] of Object.entries(corrections)) {
+    const since = correction.since ? Date.parse(correction.since) : NaN;
+    if (Number.isNaN(since)) continue;
+    const samples = history.flatMap((item) => {
+      const sample = item.mode === 'dictate' ? parseWritingSample(item.writingSample) : undefined;
+      return sample?.category === category && Date.parse(item.createdAt) > since ? [sample] : [];
+    });
+    if (samples.length >= STYLE_UPDATE_MIN_SAMPLES) result[category] = samples.slice(0, 12);
+  }
+  return result;
 }
 
 /**
@@ -288,6 +325,6 @@ export function restoreWritingStyles<T extends Pick<HistoryItem, 'id' | 'writing
 
 /** 0–100 with diminishing returns. A hand correction counts as three plain dictations. */
 export function personalizationScore(profile: Pick<WritingProfile, 'count' | 'corrections'>): number {
-  const points = profile.count + 2 * profile.corrections;
+  const points = profile.count + (CORRECTION_WEIGHT - 1) * profile.corrections;
   return Number((100 * points / (points + 30)).toFixed(1));
 }

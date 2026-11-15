@@ -85,7 +85,12 @@ export interface DictionaryEntry {
 }
 
 /** Per category, only the parts the user corrected. The rest of the style keeps learning. */
-export type StyleCorrections = Record<string, { tone?: string; phrasing?: string }>;
+export type StyleCorrections = Record<string, {
+  tone?: string;
+  phrasing?: string;
+  /** When the user last corrected or confirmed it. Later dictations can suggest an update. */
+  since?: string;
+}>;
 
 export interface SettingsState {
   shortcuts: ShortcutGroup;

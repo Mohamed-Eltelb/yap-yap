@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, restoreWritingStyles, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -19,6 +19,7 @@ import {
   listProviderModels,
   processTranscriptWithLlm,
   proposeWritingPreferences,
+  suggestStyleUpdate,
   testProviderConnection,
   transcribeAudio,
 } from '../services/providers/engine';
@@ -670,6 +671,30 @@ describe('Multi-Provider Engine', () => {
     });
   });
 
+  it('suggests updating a correction only after enough new dictations disagree', async () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes)).toISOString();
+    const sample = { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase, no punctuation' };
+    const corrections = { Messaging: { tone: 'Neutral', phrasing: 'Standard punctuation', since: at(10) } };
+    const history = Array.from({ length: 7 }, (_, index) => ({ mode: 'dictate' as const, createdAt: at(20 - index * 2), writingSample: sample }));
+    // Dictations before the correction (minutes 8 and 10) do not count, so 5 remain.
+    expect(samplesSinceCorrection(history, corrections).Messaging).toHaveLength(5);
+    expect(samplesSinceCorrection(history.slice(1), corrections)).toEqual({});
+    // Deciding resets the clock.
+    expect(mergeStyleCorrections(corrections, { Messaging: {} }, at(30)).Messaging).toEqual({ ...corrections.Messaging, since: at(30) });
+
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const reply = (content: string) => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content } }] }) });
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(reply('{"differs": true, "phrasing": "Lowercase, no punctuation."}'))
+      .mockResolvedValueOnce(reply('{"differs": false}')));
+    const recent = samplesSinceCorrection(history, corrections).Messaging;
+    await expect(suggestStyleUpdate(provider, corrections.Messaging, recent))
+      .resolves.toEqual({ tone: 'Casual', phrasing: 'Lowercase, no punctuation' });
+    // Phrasing agrees and most tones still match the correction (3 of 5), so nothing is suggested.
+    const mixed = recent.map((item, index) => ({ ...item, tone: index % 2 ? 'Casual' : 'Neutral' }));
+    await expect(suggestStyleUpdate(provider, corrections.Messaging, mixed)).resolves.toBeUndefined();
+  });
+
   it('keeps corrections to the parts the user changed', () => {
     const [learned] = buildWritingProfiles([
       { mode: 'dictate', writingSample: { category: 'Messaging', tone: 'Casual', phrasing: 'No punctuation' } },
@@ -865,9 +890,15 @@ it('keeps categories to the fixed set and lets hand corrections lead the profile
     { mode: 'ask', writingSample: messaging },
   ]);
   expect(profiles).toEqual([
-    { category: 'Email', tone: 'Formal', phrasing: 'Full sentences', count: 3, corrections: 1, examples: ['Dear Sam, thank you.'] },
+    { category: 'Email', tone: 'Formal', phrasing: 'Full sentences; Concise', count: 3, corrections: 1, examples: ['Dear Sam, thank you.'] },
     { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase', count: 1, corrections: 0, examples: [] },
   ]);
+  // A correction counts as three dictations, so enough new dictations still move the style.
+  const later = buildWritingProfiles([
+    ...Array.from({ length: 4 }, () => ({ mode: 'dictate' as const, writingSample: email })),
+    { mode: 'dictate', writingSample: corrected, writingCorrection: true },
+  ]);
+  expect(later[0].tone).toBe('Friendly');
   expect(personalizationScore(profiles[0])).toBeGreaterThan(personalizationScore(profiles[1]));
   expect(personalizationScore({ count: 1000, corrections: 0 })).toBeLessThan(100);
 });

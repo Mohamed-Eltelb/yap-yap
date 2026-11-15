@@ -10,6 +10,7 @@ import { parseStyleCorrections, parseWritingPreferences } from './personalizatio
 import {
   DictionaryEntry,
   HistoryItem,
+  StyleCorrections,
   ProviderConfig,
   ProviderId,
   SettingsState,
@@ -240,7 +241,7 @@ export function sanitizeLoadedState(
       ...DEFAULT_SETTINGS,
       ...(raw.settings ?? {}),
       writingPreferences: parseWritingPreferences(raw.settings?.writingPreferences).join('\n'),
-      styleCorrections: parseStyleCorrections(raw.settings?.styleCorrections),
+      styleCorrections: stampStyleCorrections(parseStyleCorrections(raw.settings?.styleCorrections)),
       shortcuts: removeDuplicateShortcuts({
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),
@@ -250,6 +251,15 @@ export function sanitizeLoadedState(
     history: assignHistoryIds(realHistory),
     dictionary: realDictionary,
   };
+}
+
+/**
+ * Corrections saved before they carried a date count from now, so update suggestions only
+ * look at dictations made after this point, never at the habits that were corrected.
+ */
+function stampStyleCorrections(corrections: StyleCorrections): StyleCorrections {
+  const now = new Date().toISOString();
+  return Object.fromEntries(Object.entries(corrections).map(([category, correction]) => [category, { since: now, ...correction }]));
 }
 
 export async function loadPersistedState(): Promise<PersistedAppState> {

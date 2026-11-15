@@ -1152,6 +1152,31 @@ textarea,
   margin-top: 2px;
 }
 
+/* A suggestion to update a correction the user's recent writing no longer matches. */
+.yy-pref-drift {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  font-size: 12.5px;
+}
+
+.yy-pref-drift p {
+  color: var(--text-secondary);
+}
+
+.yy-pref-drift strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.yy-pref-drift div {
+  display: flex;
+  gap: 6px;
+}
+
 /* The style the editor was opened for, marked briefly. */
 .yy-pref-styles li {
   transition: background-color 0.6s ease;
