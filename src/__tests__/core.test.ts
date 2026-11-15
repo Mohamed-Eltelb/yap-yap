@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -1123,5 +1123,48 @@ describe('learning from the user’s own writing', () => {
     const recent = Array.from({ length: 5 }, () => ({ category: 'Messaging', tone: 'Neutral', phrasing: 'Lowercase' }));
     await expect(suggestStyleUpdate({ ...createDefaultProviders().groq, apiKey: 'test' }, { tone: 'Neutral', phrasing: 'Standard' }, recent)).resolves.toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('learned style outlives History', () => {
+  const item = (id: string, createdAt: string, category = 'Email'): HistoryItem => ({
+    id, createdAt, mode: 'dictate', rawText: 'secret', text: 'secret words', durationMs: 1000, wordCount: 2, wpm: 100,
+    providerId: 'groq', model: 'm', writingSample: { category, tone: 'Formal', phrasing: 'Sentence case', fromUserText: true },
+    writingSource: 'mail.example.com', audioDataUrl: 'data:audio/webm;base64,AAAA',
+  });
+
+  it('keeps only the style of removed dictations, never their text or audio', () => {
+    const before = [item('a', '2026-01-02T00:00:00Z'), item('b', '2026-01-01T00:00:00Z')];
+    const retained = retainRemovedStyles(before, [before[0]], []);
+    expect(retained).toEqual([{
+      id: 'b', createdAt: '2026-01-01T00:00:00Z', writingSource: 'mail.example.com',
+      writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case', fromUserText: true },
+    }]);
+    expect(JSON.stringify(retained)).not.toContain('secret');
+    // Nothing removed: the same list comes back.
+    expect(retainRemovedStyles(before, before, retained)).toBe(retained);
+    // Learning reads both, without counting an item twice.
+    const merged = withRetainedStyles([before[0]], [...retained, ...retainRemovedStyles(before, [], [])]);
+    expect(merged.map((entry) => entry.id)).toEqual(['a', 'b']);
+    expect(buildWritingProfiles(merged)[0]).toMatchObject({ count: 2, phrasing: 'Sentence case' });
+  });
+
+  it('caps retained samples per category and survives saving and loading', () => {
+    const many = Array.from({ length: 60 }, (_, index) => item(`i${index}`, new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString()));
+    const retained = retainRemovedStyles(many, [], []);
+    expect(retained).toHaveLength(50);
+    expect(retained[0].id).toBe('i59');
+    expect(parseRetainedStyles(JSON.parse(JSON.stringify(retained)))).toEqual(retained);
+    expect(parseRetainedStyles([{ id: 'x', createdAt: 'bad' }, 'junk'])).toEqual([]);
+    const saved = getInitialState();
+    expect(sanitizeLoadedState({ ...saved, settings: { ...saved.settings, retainedStyleSamples: retained } }).settings.retainedStyleSamples).toHaveLength(50);
+  });
+
+  it('forgets retained samples with their category and puts them back on Undo', () => {
+    const retained = [...retainRemovedStyles([item('a', '2026-01-01T00:00:00Z'), item('m', '2026-01-02T00:00:00Z', 'Messaging')], [], [])];
+    const forgotten = forgetRetainedStyles(retained, ['Email']);
+    expect(forgotten.retained.map((sample) => sample.id)).toEqual(['m']);
+    expect(restoreRetainedStyles(forgotten.retained, forgotten.forgotten)).toEqual(retained);
+    expect(forgetRetainedStyles(retained).retained).toEqual([]);
   });
 });

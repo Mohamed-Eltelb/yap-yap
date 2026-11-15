@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, isStyleEdit, userWrittenText, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetRetainedStyles, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -121,9 +121,12 @@ export function App() {
   useEffect(() => {
     if (isHudRoute) return;
     loadPersistedState().then((loaded) => {
+      const history = filterByRetention(loaded.history, loaded.settings.historyRetention);
       setAppState({
         ...loaded,
-        history: filterByRetention(loaded.history, loaded.settings.historyRetention),
+        history,
+        // Dictations that expired while the app was closed keep their learned style.
+        settings: { ...loaded.settings, retainedStyleSamples: retainRemovedStyles(loaded.history, history, loaded.settings.retainedStyleSamples) },
       });
       setHydrated(true);
     });
@@ -250,8 +253,13 @@ export function App() {
     const forgotten: ForgottenStyles = { samples: {}, styleCorrections: {} };
     setAppState((prev) => {
       const next = forgetWritingStyles(prev.history, prev.settings.styleCorrections, categories);
-      Object.assign(forgotten, next.forgotten);
-      return { ...prev, history: next.history, settings: { ...prev.settings, styleCorrections: next.styleCorrections } };
+      const retained = forgetRetainedStyles(prev.settings.retainedStyleSamples, categories);
+      Object.assign(forgotten, next.forgotten, { retained: retained.forgotten });
+      return {
+        ...prev,
+        history: next.history,
+        settings: { ...prev.settings, styleCorrections: next.styleCorrections, retainedStyleSamples: retained.retained },
+      };
     });
     return forgotten;
   }, []);
@@ -259,7 +267,15 @@ export function App() {
   const restoreLearnedStyle = useCallback((forgotten: ForgottenStyles) => {
     setAppState((prev) => {
       const next = restoreWritingStyles(prev.history, prev.settings.styleCorrections, forgotten);
-      return { ...prev, history: next.history, settings: { ...prev.settings, styleCorrections: next.styleCorrections } };
+      return {
+        ...prev,
+        history: next.history,
+        settings: {
+          ...prev.settings,
+          styleCorrections: next.styleCorrections,
+          retainedStyleSamples: restoreRetainedStyles(prev.settings.retainedStyleSamples, forgotten.retained),
+        },
+      };
     });
   }, []);
 
@@ -320,20 +336,39 @@ export function App() {
 
   // Silent and cancelled recordings stay in History but never count as dictation.
   const completedHistory = useMemo(() => appState.history.filter((item) => !item.outcome), [appState.history]);
+  // Learning also reads the style of dictations that have left History.
+  const learningHistory = useMemo(
+    () => withRetainedStyles(completedHistory, appState.settings.retainedStyleSamples),
+    [completedHistory, appState.settings.retainedStyleSamples]
+  );
 
   // Corrections the user made to learned styles replace them everywhere: cleanup, Insights, Settings.
   const stats = useMemo(() => {
-    const insights = computeInsights(completedHistory);
+    const insights = computeInsights(completedHistory, new Date(), learningHistory);
     return { ...insights, categoryBreakdown: applyStyleCorrections(insights.categoryBreakdown, appState.settings.styleCorrections) };
-  }, [completedHistory, appState.settings.styleCorrections]);
+  }, [completedHistory, learningHistory, appState.settings.styleCorrections]);
 
   // Dictations made since each correction, so the editor can suggest updating one that no longer fits.
   const recentStyleSamples = useMemo(
-    () => samplesSinceCorrection(completedHistory, appState.settings.styleCorrections),
-    [completedHistory, appState.settings.styleCorrections]
+    () => samplesSinceCorrection(learningHistory, appState.settings.styleCorrections),
+    [learningHistory, appState.settings.styleCorrections]
   );
 
-  const learnedSources = useMemo(() => buildSourceCategories(completedHistory), [completedHistory]);
+  const learnedSources = useMemo(() => buildSourceCategories(learningHistory), [learningHistory]);
+
+  // Whatever removes dictations from History (delete, clear, retention), their learned style stays.
+  const previousHistoryRef = useRef<HistoryItem[] | null>(null);
+  useEffect(() => {
+    if (!hydrated || isHudRoute) return;
+    const previous = previousHistoryRef.current;
+    previousHistoryRef.current = appState.history;
+    if (!previous || previous === appState.history) return;
+    if (retainRemovedStyles(previous, appState.history, []).length === 0) return;
+    setAppState((prev) => ({
+      ...prev,
+      settings: { ...prev.settings, retainedStyleSamples: retainRemovedStyles(previous, prev.history, prev.settings.retainedStyleSamples) },
+    }));
+  }, [appState.history, hydrated, isHudRoute]);
 
   const restoreAudioMute = useCallback(() => {
     if (muteTimer.current !== null) {
@@ -617,10 +652,21 @@ export function App() {
 
         // Style learning runs beside delivery so it never delays the paste.
         void learnStyle?.().then((sample) => {
-          if (sample) setAppState((prev) => prev.settings.personalizationEnabled ? {
-            ...prev,
-            history: prev.history.map((h) => h.id === itemId && !h.writingCorrection ? { ...h, writingSample: sample } : h),
-          } : prev);
+          if (sample) setAppState((prev) => {
+            if (!prev.settings.personalizationEnabled) return prev;
+            // History kept no item (retention "never", or deleted already): keep only the style.
+            if (!prev.history.some((h) => h.id === itemId)) {
+              const retained = toRetainedStyle({ id: itemId, createdAt: new Date().toISOString(), writingSample: sample, writingSource: source });
+              return retained ? {
+                ...prev,
+                settings: { ...prev.settings, retainedStyleSamples: [retained, ...prev.settings.retainedStyleSamples.filter((item) => item.id !== itemId)] },
+              } : prev;
+            }
+            return {
+              ...prev,
+              history: prev.history.map((h) => h.id === itemId && !h.writingCorrection ? { ...h, writingSample: sample } : h),
+            };
+          });
         });
 
         const desktop = window.yapyap;

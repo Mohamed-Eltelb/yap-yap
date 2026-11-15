@@ -73,6 +73,20 @@ export interface HistoryItem {
   writingSource?: string;
 }
 
+/**
+ * A learned style sample kept after its History item was deleted or expired, so clearing History
+ * does not erase what Yap Yap learned. Holds no transcript text or audio.
+ */
+export interface RetainedStyleSample {
+  /** The History item it came from. */
+  id: string;
+  createdAt: string;
+  writingSample: WritingSample;
+  writingCorrection?: boolean;
+  writingCorrectedAt?: string;
+  writingSource?: string;
+}
+
 export interface WritingSample {
   category: string;
   tone: string;
@@ -120,6 +134,8 @@ export interface SettingsState {
   writingPreferences: string;
   /** The user's corrections to learned styles, by category. They replace what was learned. */
   styleCorrections: StyleCorrections;
+  /** Learned style samples whose History items are gone. Kept until the user resets learned style. */
+  retainedStyleSamples: RetainedStyleSample[];
   contextAwareness: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;

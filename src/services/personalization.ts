@@ -1,4 +1,4 @@
-import type { HistoryItem, StyleCorrections, WritingSample } from '../types/app';
+import type { HistoryItem, RetainedStyleSample, StyleCorrections, WritingSample } from '../types/app';
 
 export const WRITING_CATEGORIES = [
   'AI assistants',
@@ -430,6 +430,100 @@ export function applyStyleCorrections<T extends WritingProfile>(
 export interface ForgottenStyles {
   samples: Record<string, Pick<HistoryItem, 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>>;
   styleCorrections: StyleCorrections;
+  /** Retained samples of deleted History items that were forgotten too. */
+  retained?: RetainedStyleSample[];
+}
+
+/** Retained samples kept per category: enough for the tone window. */
+const RETAINED_PER_CATEGORY = 50;
+
+/** Saved retained samples, keeping valid ones only, newest first and capped per category. */
+export function parseRetainedStyles(value: unknown): RetainedStyleSample[] {
+  if (!Array.isArray(value)) return [];
+  const valid = value.flatMap((raw): RetainedStyleSample[] => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Record<string, unknown>;
+    const writingSample = parseWritingSample(item.writingSample);
+    const createdAt = typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt)) ? item.createdAt : undefined;
+    if (!writingSample || !createdAt || typeof item.id !== 'string' || !item.id) return [];
+    const correctedAt = typeof item.writingCorrectedAt === 'string' && Number.isFinite(Date.parse(item.writingCorrectedAt)) ? item.writingCorrectedAt : undefined;
+    return [{
+      id: item.id.slice(0, 200),
+      createdAt,
+      writingSample,
+      ...(item.writingCorrection === true && { writingCorrection: true, ...(correctedAt && { writingCorrectedAt: correctedAt }) }),
+      ...(typeof item.writingSource === 'string' && item.writingSource && { writingSource: item.writingSource.slice(0, 100) }),
+    }];
+  });
+  return capRetained(valid);
+}
+
+function capRetained(samples: readonly RetainedStyleSample[]): RetainedStyleSample[] {
+  const seen = new Set<string>();
+  const perCategory = new Map<string, number>();
+  return [...samples]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .filter((sample) => {
+      const count = perCategory.get(sample.writingSample.category) ?? 0;
+      if (seen.has(sample.id) || count >= RETAINED_PER_CATEGORY) return false;
+      seen.add(sample.id);
+      perCategory.set(sample.writingSample.category, count + 1);
+      return true;
+    });
+}
+
+/** The style part of a History item, without its text, audio, or anything else. */
+export function toRetainedStyle(item: Pick<HistoryItem, 'id' | 'createdAt' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt' | 'writingSource'>): RetainedStyleSample | undefined {
+  return parseRetainedStyles([item])[0];
+}
+
+/**
+ * Keeps the learned style of dictations that left History (deleted, cleared, or expired), so
+ * History settings never erase what Yap Yap learned. Returns the same list when nothing left.
+ */
+export function retainRemovedStyles(
+  before: readonly HistoryItem[],
+  after: readonly HistoryItem[],
+  retained: readonly RetainedStyleSample[],
+): RetainedStyleSample[] {
+  const remaining = new Set(after.map((item) => item.id));
+  const removed = before.flatMap((item) => {
+    if (remaining.has(item.id) || item.mode !== 'dictate' || item.outcome) return [];
+    return toRetainedStyle(item) ?? [];
+  });
+  return removed.length ? capRetained([...removed, ...retained]) : retained as RetainedStyleSample[];
+}
+
+/**
+ * What learning reads: History plus retained samples of items no longer in it, newest first.
+ * Retained samples carry no text, so they never become hand-edited examples.
+ */
+export function withRetainedStyles<T extends Pick<HistoryItem, 'id' | 'createdAt'>>(
+  history: readonly T[],
+  retained: readonly RetainedStyleSample[],
+): (T | (RetainedStyleSample & { mode: 'dictate' }))[] {
+  if (!retained.length) return history as T[];
+  const present = new Set(history.map((item) => item.id));
+  const extra = retained.filter((sample) => !present.has(sample.id) && !!present.add(sample.id))
+    .map((sample) => ({ ...sample, mode: 'dictate' as const }));
+  return [...history, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/** Forgets retained samples for the given categories, or all, and returns them for Undo. */
+export function forgetRetainedStyles(
+  retained: readonly RetainedStyleSample[],
+  categories?: readonly string[],
+): { retained: RetainedStyleSample[]; forgotten: RetainedStyleSample[] } {
+  const matches = (sample: RetainedStyleSample) => !categories || categories.includes(sample.writingSample.category);
+  return { retained: retained.filter((sample) => !matches(sample)), forgotten: retained.filter(matches) };
+}
+
+/** Puts forgotten retained samples back. */
+export function restoreRetainedStyles(
+  retained: readonly RetainedStyleSample[],
+  forgotten: readonly RetainedStyleSample[] | undefined,
+): RetainedStyleSample[] {
+  return forgotten?.length ? capRetained([...retained, ...forgotten]) : retained as RetainedStyleSample[];
 }
 
 /**

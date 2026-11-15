@@ -23,6 +23,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   personalizationEnabled: true,
   writingPreferences: '',
   styleCorrections: {},
+  retainedStyleSamples: [],
   contextAwareness: true,
   floatingHud: true,
   historyRetention: 'forever',

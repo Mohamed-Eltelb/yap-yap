@@ -180,7 +180,9 @@ export function filterByRetention(
 
 export function computeInsights(
   items: HistoryItem[],
-  now = new Date()
+  now = new Date(),
+  /** What learned styles are built from, when it differs from History (see withRetainedStyles). */
+  styleItems: Parameters<typeof buildWritingProfiles>[0] = items,
 ): InsightsStats {
   const totalWords = items.reduce((sum, item) => sum + item.wordCount, 0);
   const totalDurationMs = items.reduce((sum, item) => sum + item.durationMs, 0);
@@ -243,7 +245,7 @@ export function computeInsights(
     cursor = addCalendarDays(cursor, -1);
   }
 
-  const profiles = buildWritingProfiles(items);
+  const profiles = buildWritingProfiles(styleItems);
   const categoryBreakdown = profiles.map((profile) => ({ ...profile, percent: personalizationScore(profile) }));
   // Weighted by use, so the headline reflects the contexts the user actually dictates in.
   const sampleCount = profiles.reduce((sum, profile) => sum + profile.count, 0);
