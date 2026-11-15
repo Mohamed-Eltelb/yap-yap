@@ -971,7 +971,7 @@ textarea,
   flex: none;
   padding: 7px 13px;
   border: 1px solid var(--border-strong);
-  border-radius: 9px;
+  border-radius: 999px;
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -982,13 +982,12 @@ textarea,
 }
 
 .yy-pref-button[data-primary] {
-  border-color: transparent;
-  background: var(--accent-blue-fill);
-  color: #fff;
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
 }
 
 .yy-pref-button[data-primary]:hover {
-  background: var(--accent-blue-hover);
+  background: color-mix(in srgb, var(--btn-dark-bg) 90%, var(--btn-dark-text));
 }
 
 .yy-pref-status {
@@ -1003,7 +1002,7 @@ textarea,
 }
 
 .yy-pref-status button {
-  color: var(--accent-blue);
+  color: var(--text-primary);
   font-weight: 500;
   cursor: pointer;
 }
@@ -1016,14 +1015,14 @@ textarea,
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 8px 8px 8px 14px;
+  padding: 6px 6px 6px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
+  border-radius: 24px;
   background: var(--bg-subtle);
 }
 
 .yy-pref-composer:focus-within {
-  border-color: var(--accent-blue);
+  border-color: var(--text-primary);
 }
 
 .yy-pref-composer textarea {
@@ -1049,13 +1048,13 @@ textarea,
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--accent-blue-fill);
-  color: #fff;
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
   cursor: pointer;
 }
 
 .yy-pref-composer button:hover:not(:disabled) {
-  background: var(--accent-blue-hover);
+  background: color-mix(in srgb, var(--btn-dark-bg) 90%, var(--btn-dark-text));
 }
 
 .yy-pref-composer button:disabled {
@@ -1168,7 +1167,7 @@ textarea,
 }
 
 .yy-pref-editor button:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
