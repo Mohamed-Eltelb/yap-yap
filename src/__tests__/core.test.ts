@@ -1288,3 +1288,22 @@ describe('where a requested rule applies', () => {
     await expect(ask('my cousin')).rejects.toThrow('can\u2019t tell'.replace('\u2019', "'"));
   });
 });
+
+describe('matching apps and Google sites', () => {
+  it('tells Google Sheets, Slides, and Forms apart from Docs', () => {
+    expect(browserDomain('https://docs.google.com/spreadsheets/d/abc/edit')).toBe('sheets.google.com');
+    expect(browserDomain('https://docs.google.com/presentation/d/abc')).toBe('slides.google.com');
+    expect(browserDomain('https://docs.google.com/forms/d/abc')).toBe('forms.google.com');
+    expect(browserDomain('https://docs.google.com/document/d/abc')).toBe('docs.google.com');
+    expect(categoryForDestination({ domain: 'sheets.google.com' })).toBe('Spreadsheets');
+  });
+
+  it('matches app names as whole words', () => {
+    expect(categoryForDestination({ application: '1Password' })).toBeUndefined();
+    expect(categoryForDestination({ application: 'Cloudflare WARP' })).toBeUndefined();
+    expect(categoryForDestination({ application: 'Microsoft Word' })).toBe('Document editors');
+    expect(categoryForDestination({ application: 'WordPad' })).toBe('Document editors');
+    expect(categoryForDestination({ application: 'Windows Terminal' })).toBe('Development tools');
+    expect(categoryForDestination({ application: 'Warp' })).toBe('Development tools');
+  });
+});

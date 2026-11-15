@@ -197,7 +197,15 @@ export function browserDomain(address: unknown): string | undefined {
   try {
     const url = new URL(address.includes('://') ? address : `https://${address}`);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;
-    if (/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*$/i.test(url.hostname)) return url.hostname;
+    if (!/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*$/i.test(url.hostname)) return;
+    // Google keeps Sheets, Slides, and Forms on docs.google.com; only the first path part tells
+    // them apart. They are named by their own hosts, and nothing else of the path is kept.
+    if (url.hostname.toLowerCase() === 'docs.google.com') {
+      const kind = url.pathname.split('/')[1]?.toLowerCase();
+      const host = { spreadsheets: 'sheets.google.com', presentation: 'slides.google.com', forms: 'forms.google.com' }[kind ?? ''];
+      if (host) return host;
+    }
+    return url.hostname;
   } catch {
     return undefined;
   }

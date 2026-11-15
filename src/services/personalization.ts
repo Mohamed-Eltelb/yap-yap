@@ -29,8 +29,8 @@ const destinationRules: [WritingCategory, domain: RegExp, application: RegExp][]
   ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|slack\.com|messenger\.com)$|^teams\.(microsoft|live)\.com$|^(messages|chat)\.google\.com$/, /slack|discord|whatsapp|telegram|teams|signal|messages|messenger|phone link/],
   ['Social platforms', /(^|\.)(x\.com|twitter\.com|linkedin\.com|facebook\.com|instagram\.com|reddit\.com|threads\.(net|com)|bsky\.app|tiktok\.com|youtube\.com|mastodon\.social)$/, /^$/],
   ['Project management', /(^|\.)(linear\.app|atlassian\.net|trello\.com|asana\.com|clickup\.com|monday\.com|basecamp\.com)$/, /linear|jira|trello|asana|clickup/],
-  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|warp|antigravity|codex/],
-  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer|sticky ?notes/],
+  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|^warp$|antigravity|codex/],
+  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer|wordpad|sticky ?notes/],
 ];
 
 export interface WritingDestination {
@@ -260,7 +260,12 @@ export function categoryForDestination(destination?: { application?: string; dom
   const domain = destination.domain?.toLowerCase().replace(/^www\./, '');
   if (domain) return destinationRules.find(([, pattern]) => pattern.test(domain))?.[0];
   const application = destination.application?.toLowerCase() ?? '';
-  return application ? destinationRules.find(([, , pattern]) => pattern.test(application))?.[0] : undefined;
+  return application ? destinationRules.find(([, , pattern]) => matchesWhole(pattern, application))?.[0] : undefined;
+}
+
+/** Whether the pattern matches whole words, so "word" never matches "1Password". */
+function matchesWhole(pattern: RegExp, text: string): boolean {
+  return new RegExp(`(?<!\\p{L})(?:${pattern.source})(?!\\p{L})`, 'u').test(text);
 }
 
 function readLabel(value: unknown, limit: number): string {
