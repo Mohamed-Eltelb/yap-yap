@@ -601,7 +601,21 @@ export async function processTranscriptWithLlm(
     return { finalText: result, answer: result };
   }
   // Some models echo the wrapper despite the instruction.
-  return { finalText: result.replace(/^\s*<transcript>\s*|\s*<\/transcript>\s*$/g, '') };
+  const finalText = result.replace(/^\s*<transcript>\s*|\s*<\/transcript>\s*$/g, '');
+  return { finalText: mode === 'dictate' ? keepFinalQuestionMark(transcript, finalText) : finalText };
+}
+
+/**
+ * Puts back a question mark that cleanup dropped. A rule like "no period in chat messages"
+ * makes some models remove all final punctuation, so when speech recognition ended the
+ * transcript with "?" and the cleaned text now ends with no punctuation at all, the "?" returns.
+ */
+export function keepFinalQuestionMark(transcript: string, cleaned: string): string {
+  if (!/[?？؟]["')\]”’]*\s*$/u.test(transcript)) return cleaned;
+  const end = cleaned.trimEnd();
+  if (!end || /[\p{P}\p{S}]$/u.test(end)) return cleaned;
+  // Arabic speech gets the Arabic question mark.
+  return end + (/[؀-ۿ]/u.test(end.slice(-40)) ? '؟' : '?') + cleaned.slice(end.length);
 }
 
 function omitsSamplingTemperature(model: string): boolean {
