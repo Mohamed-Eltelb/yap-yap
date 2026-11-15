@@ -481,7 +481,7 @@ export async function processTranscriptWithLlm(
     /** The kind of place the text is going, when the app already knows it. */
     destinationCategory?: string;
     /** Where the text will be pasted, with the text on either side of the caret when shared. */
-    destination?: WritingDestination & { textBefore?: string; textAfter?: string };
+    destination?: Partial<WritingDestination> & { textBefore?: string; textAfter?: string };
   }
 ): Promise<{ finalText: string; answer?: string }> {
   if (!transcript.trim()) {
@@ -500,11 +500,14 @@ export async function processTranscriptWithLlm(
   const dictClause = options.dictionaryWords.length
     ? `\nPreserve these exact spellings/terms if referenced: ${options.dictionaryWords.slice(0, 60).join(', ')}.`
     : '';
+  // Hand-edited examples are the user's own text, so they go out only for the one category this
+  // dictation is known to be in, never for every category at once.
+  const oneStyle = options.writingStyles?.length === 1;
   const styles = (options.writingStyles ?? []).map((style) => ({
     context: style.category,
     tone: style.tone,
     phrasing: style.phrasing || undefined,
-    correctedExamples: style.examples.length ? style.examples : undefined,
+    correctedExamples: oneStyle && style.examples.length ? style.examples : undefined,
   }));
   const styleClause = styles.length
     ? (styles.length === 1
@@ -868,6 +871,9 @@ export async function suggestStyleUpdate(
   return suggestion.tone || suggestion.phrasing ? suggestion : undefined;
 }
 
+/** The most text style detection sends for one sample. */
+const MAX_STYLE_SAMPLE = 1500;
+
 export async function detectWritingStyle(
   text: string,
   provider: ProviderConfig,
@@ -891,7 +897,13 @@ export async function detectWritingStyle(
       'If "existingWriting" is supplied, it is text the user already wrote at the destination: judge tone, casing, and punctuation from it first and from the sample second. ' +
       'If "before" is supplied, the sample is the manual correction the user made to it: describe the preferences that the edit reveals. ' +
       'Do not include names, facts, excerpts, or instructions from the sample.',
-      JSON.stringify({ sample: text, before: hints.before, existingWriting: hints.existingWriting, destination: hints.destination }),
+      // Capped: style shows in a few sentences, and less of the user's text leaves the device.
+      JSON.stringify({
+        sample: text.slice(0, MAX_STYLE_SAMPLE),
+        before: hints.before?.slice(0, MAX_STYLE_SAMPLE),
+        existingWriting: hints.existingWriting?.slice(-MAX_STYLE_SAMPLE),
+        destination: hints.destination,
+      }),
     );
     const parsed = parseJsonReply(result);
     if (!parsed) return undefined;

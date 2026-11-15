@@ -550,17 +550,18 @@ export function App() {
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
                 writingStyles,
-                writingPreferences: mode === 'dictate' && appState.settings.personalizationEnabled
-                  ? appState.settings.writingPreferences
-                  : undefined,
+                // Rules are the user's own instructions, so they apply even with learning off.
+                writingPreferences: mode === 'dictate' ? appState.settings.writingPreferences : undefined,
                 // Rules saved for one kind of place apply only when the destination is that kind.
                 destinationCategory: knownCategory,
                 // Before and after stay separate so the model knows where the caret is.
-                destination: location && {
-                  ...location,
+                // The app and site go to the provider only with personalization on, and the text
+                // near the caret only with context awareness on.
+                destination: location && (appState.settings.personalizationEnabled || shareText) ? {
+                  ...(appState.settings.personalizationEnabled && location),
                   textBefore: shareText ? destination.textBefore || undefined : undefined,
                   textAfter: shareText ? destination.textAfter || undefined : undefined,
-                },
+                } : undefined,
               }
             );
             finalText = processed.finalText || rawText;
@@ -1123,9 +1124,7 @@ export function App() {
           dictionaryWords: dictionaryWordsFor(appState.dictionary, appState.settings.personalizationEnabled),
           smartCleanup: appState.settings.smartCleanup,
           writingStyles,
-          writingPreferences: item.mode === 'dictate' && appState.settings.personalizationEnabled
-            ? appState.settings.writingPreferences
-            : undefined,
+          writingPreferences: item.mode === 'dictate' ? appState.settings.writingPreferences : undefined,
           // The category learned for this dictation stands in for its destination.
           destinationCategory: item.writingSample?.category,
         }
@@ -1275,7 +1274,8 @@ export function App() {
     showToast('Transcript updated');
     const llmId = appState.settings.activeLlmProvider;
     // A hand edit teaches style only when it changed casing or punctuation, not just words.
-    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && llmId !== 'none' && isStyleEdit(original.text, trimmed, extractCorrections(original.text, original.text, trimmed) ?? [])) {
+    // Learning from an edit needs AI cleanup on: with it off, no dictation text goes to a provider.
+    if (original.mode === 'dictate' && appState.settings.personalizationEnabled && appState.settings.smartCleanup && llmId !== 'none' && isStyleEdit(original.text, trimmed, extractCorrections(original.text, original.text, trimmed) ?? [])) {
       const provider = appState.providers[llmId];
       if (!isProviderConfigured(provider)) return;
       void detectWritingStyle(trimmed, provider, { category: original.writingSample?.category, before: original.text }).then((sample) => {

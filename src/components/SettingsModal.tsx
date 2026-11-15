@@ -716,7 +716,8 @@ export function SettingsModal({
                   <Toggle label="Context awareness" checked={settings.contextAwareness} onChange={(contextAwareness) => onUpdateSettings({ contextAwareness })} />
                 </div>
 
-                {settings.personalizationEnabled && (
+                {/* Rules apply even with personalization off, so they stay editable. */}
+                {(
                   <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
                     <div className="min-w-0">
                       <h3 className="text-sm font-medium">Writing preferences</h3>
