@@ -500,14 +500,13 @@ export async function processTranscriptWithLlm(
   const dictClause = options.dictionaryWords.length
     ? `\nPreserve these exact spellings/terms if referenced: ${options.dictionaryWords.slice(0, 60).join(', ')}.`
     : '';
-  // Hand-edited examples are the user's own text, so they go out only for the one category this
-  // dictation is known to be in, never for every category at once.
-  const oneStyle = options.writingStyles?.length === 1;
-  const styles = (options.writingStyles ?? []).map((style) => ({
+  // Hand-edited examples are the strongest style signal. When the place is unknown, only the two
+  // most-used categories carry theirs, so the prompt stays short and little past text goes out.
+  const styles = (options.writingStyles ?? []).map((style, index) => ({
     context: style.category,
     tone: style.tone,
     phrasing: style.phrasing || undefined,
-    correctedExamples: oneStyle && style.examples.length ? style.examples : undefined,
+    correctedExamples: index < 2 && style.examples.length ? style.examples : undefined,
   }));
   const styleClause = styles.length
     ? (styles.length === 1

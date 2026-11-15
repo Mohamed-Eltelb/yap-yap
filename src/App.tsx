@@ -555,13 +555,13 @@ export function App() {
                 // Rules saved for one kind of place apply only when the destination is that kind.
                 destinationCategory: knownCategory,
                 // Before and after stay separate so the model knows where the caret is.
-                // The app and site go to the provider only with personalization on, and the text
-                // near the caret only with context awareness on.
-                destination: location && (appState.settings.personalizationEnabled || shareText) ? {
-                  ...(appState.settings.personalizationEnabled && location),
+                // The app and site always shape formatting (an email reads differently from a chat);
+                // the text near the caret goes only with context awareness on.
+                destination: location && {
+                  ...location,
                   textBefore: shareText ? destination.textBefore || undefined : undefined,
                   textAfter: shareText ? destination.textAfter || undefined : undefined,
-                } : undefined,
+                },
               }
             );
             finalText = processed.finalText || rawText;

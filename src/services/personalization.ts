@@ -280,7 +280,7 @@ export function writingCategoryKey(category: string): string {
  * Learned phrasing goes into every later cleanup prompt, so it must read as a description of
  * casing and punctuation, never as an instruction, a link, or quoted text from a web page.
  */
-const NOT_A_STYLE = /https?:|www\.|[`"{}<>]|\b(?:ignore|disregard|override|instructions?|prompt|system|assistant|you must|respond|reply with|answer)\b/iu;
+const NOT_A_STYLE = /https?:|www\.|[`"{}<>]|\b(?:ignore|disregard|override|instructions?|prompt|system|assistant|you must|reply with)\b/iu;
 
 export function styleDescription(text: string): string {
   return text && !NOT_A_STYLE.test(text) ? text : '';
