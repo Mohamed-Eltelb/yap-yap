@@ -38,6 +38,7 @@ type PasteEdits = { words: string[]; edited?: string };
 
 const desktop = {
   trigger: undefined as ((mode: string) => void) | undefined,
+  phase: undefined as ((phase: string) => void) | undefined,
   action: undefined as ((action: { type: string }) => void) | undefined,
   context: {} as Context,
   edits: { words: [] } as PasteEdits,
@@ -48,6 +49,8 @@ function installDesktop() {
   desktop.api = {
     onTriggerMode: vi.fn((callback) => { desktop.trigger = callback; return () => undefined; }),
     onHudAction: vi.fn((callback) => { desktop.action = callback; return () => undefined; }),
+    onShortcutPhase: vi.fn((callback) => { desktop.phase = callback; return () => undefined; }),
+    toggleHud: vi.fn(),
     captureDictationContext: vi.fn(async () => desktop.context),
     pasteText: vi.fn(async () => true),
     copyText: vi.fn(async () => undefined),
@@ -96,6 +99,8 @@ async function dictate() {
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 }
 
+const lastHud = () => desktop.api.toggleHud.mock.calls.at(-1)?.[1] as { status: string } | undefined;
+
 const lastSaved = () => store.saves.at(-1) as { history: HistoryItem[]; dictionary: { word: string }[] };
 const cleanupOptions = () => engine.processTranscriptWithLlm.mock.calls[0][3];
 
@@ -112,6 +117,7 @@ beforeAll(() => {
 beforeEach(() => {
   store.saves = [];
   desktop.trigger = undefined;
+  desktop.phase = undefined;
   desktop.action = undefined;
   desktop.context = { domain: 'mail.google.com', textBefore: '', textAfter: '' };
   desktop.edits = { words: [] };
@@ -157,6 +163,31 @@ describe('Dictation flow', () => {
 
     expect(desktop.api.pasteText).not.toHaveBeenCalled();
     expect(lastSaved().history).toHaveLength(0);
+  });
+
+  it('closes the shortcut placeholder when no API key is set', async () => {
+    seed();
+    const loaded = store.loaded as { providers: Record<string, { apiKey: string }> };
+    loaded.providers.groq.apiKey = '';
+    render(<App />);
+    await waitFor(() => expect(desktop.phase).toBeDefined());
+    await act(async () => { desktop.phase!('armed'); });
+    expect(lastHud()?.status).toBe('armed');
+    await act(async () => { desktop.trigger!('dictate'); });
+    expect(lastHud()?.status).toBe('idle');
+  });
+
+  it('keeps an error on screen when Alt is pressed without a shortcut', async () => {
+    seed();
+    engine.transcribeAudio.mockRejectedValueOnce(new Error('Network down'));
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(lastHud()?.status).toBe('error'));
+    await act(async () => { desktop.phase!('armed'); desktop.phase!('closed'); });
+    expect(lastHud()?.status).toBe('error');
   });
 
   it('does not apply a style learned from a single dictation', async () => {

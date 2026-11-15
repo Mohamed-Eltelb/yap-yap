@@ -54,6 +54,15 @@ describe('Shortcut flow', () => {
     expect(outputs).toEqual([{ type: 'armed' }, { type: 'closed' }]);
   });
 
+  it('closes as soon as the keys can no longer become a shortcut', () => {
+    const { flow, outputs } = setup();
+    flow.keyDown(true, 0);
+    flow.keyDown(false, undefined);
+    vi.advanceTimersByTime(1000);
+    flow.allReleased();
+    expect(outputs).toEqual([{ type: 'armed' }, { type: 'closed' }]);
+  });
+
   it('stops on press and ignores that release', () => {
     const { flow, outputs } = setup('recording');
     flow.keyDown(true, 0);

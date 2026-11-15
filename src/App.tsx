@@ -920,6 +920,7 @@ export function App() {
         } else {
           const message = 'Add an API key in Yap Yap to start dictating.';
           if (document.hasFocus() || !useFloatingHud) {
+            closePlaceholder();
             setModalTab('providers');
             setModalOpen(true);
             showToast(message);
@@ -1051,7 +1052,8 @@ export function App() {
       if (modalOpen && document.hasFocus()) return;
       const { status } = hudRef.current;
       if (phase === 'armed') {
-        if (status === 'recording' || status === 'processing') return;
+        // An answer, error or Undo on screen stays until a shortcut actually starts.
+        if (status !== 'idle') return;
         setHud({ status: 'armed', mode: 'dictate', levels: Array(20).fill(0.1) });
       } else if (phase === 'list') {
         if (status !== 'armed') return;

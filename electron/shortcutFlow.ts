@@ -25,6 +25,13 @@ export class ShortcutFlow {
   /** Called for the first press of a key only, never for its repeats. */
   keyDown(starts: boolean, match: number | undefined): void {
     if (this.state === 'armed') {
+      // AltGr+Q types @ and Alt+Tab switches windows: close as soon as no shortcut fits.
+      if (!starts) {
+        this.clear();
+        this.state = 'ignoring';
+        this.options.emit({ type: 'closed' });
+        return;
+      }
       this.match = match;
       return;
     }
