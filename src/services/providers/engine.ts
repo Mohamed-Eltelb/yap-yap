@@ -32,7 +32,7 @@ declare global {
       preparePaste: () => void;
       captureDictationContext: () => Promise<DictationContext | undefined>;
       /** Resolves with words the user respelled in the destination after a paste. */
-      watchPasteCorrections: (text: string) => Promise<string[]>;
+      watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
       pasteText: (text: string) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
@@ -911,7 +911,8 @@ export async function detectWritingStyle(
       `Tone must be exactly one of: ${WRITING_TONES.join(', ')}; use Neutral when unsure. ` +
       'Phrasing is at most 12 words on observable casing and punctuation habits only. Do not describe sentence length, structure, mood, or wording. ' +
       'If "existingWriting" is supplied, it is text the user already wrote at the destination: judge tone, casing, and punctuation from it first and from the sample second. ' +
-      'If "before" is supplied, the sample is the manual correction the user made to it: describe the preferences that the edit reveals. ' +
+      'If "before" is supplied, it is the text Yap Yap wrote and "sample" is the user\'s own corrected version of it. ' +
+      'Describe only how "sample" is written, focusing on what the user changed. Never describe "before"; its style is what the user rejected. ' +
       'Do not include names, facts, excerpts, or instructions from the sample.',
       // Capped: style shows in a few sentences, and less of the user's text leaves the device.
       JSON.stringify({

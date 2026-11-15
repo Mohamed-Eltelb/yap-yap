@@ -1,6 +1,6 @@
 import { applyStyleCorrections, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
-import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
+import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildHeatmapWeeks,
@@ -1017,9 +1017,9 @@ describe('Corrections made in the destination after a paste', () => {
     const reads = [pasted, pasted.replace('super base', 'Supab'), fixed, fixed, ''].map((text) => ({ field: 'a', text }));
     const read = vi.fn(async () => reads.shift() ?? { field: 'b', text: '' });
     const options = { settleMs: 0, intervalMs: 0, windowMs: 1000 };
-    expect(await watchPasteCorrections(pasted, read, options)).toEqual(['Supabase']);
-    expect(await watchPasteCorrections(pasted, async () => ({ field: 'a', text: 'something else' }), options)).toEqual([]);
-    expect(await watchPasteCorrections(pasted, async () => undefined, options)).toEqual([]);
+    expect(await watchPasteCorrections(pasted, read, options)).toEqual({ words: ['Supabase'], edited: fixed });
+    expect(await watchPasteCorrections(pasted, async () => ({ field: 'a', text: 'something else' }), options)).toEqual({ words: [] });
+    expect(await watchPasteCorrections(pasted, async () => undefined, options)).toEqual({ words: [] });
   });
 });
 
@@ -1311,5 +1311,20 @@ describe('matching apps and Google sites', () => {
     expect(categoryForDestination({ application: 'WordPad' })).toBe('Document editors');
     expect(categoryForDestination({ application: 'Windows Terminal' })).toBe('Development tools');
     expect(categoryForDestination({ application: 'Warp' })).toBe('Development tools');
+  });
+});
+
+describe('learning from edits right after a paste', () => {
+  it('finds the pasted text as the user left it', () => {
+    const pasted = 'Hey Sam. Running late. See you soon.';
+    const field = (text: string) => `Chat with Sam
+${text}
+Send`;
+    expect(editedPaste(pasted, field(pasted), field('hey sam running late see you soon'))).toBe('hey sam running late see you soon');
+    expect(editedPaste(pasted, field(pasted), field(pasted))).toBeUndefined();
+    expect(editedPaste(pasted, field(pasted), 'unrelated')).toBeUndefined();
+    // Only casing and punctuation fixes are worth learning from.
+    expect(isStyleEdit(pasted, 'hey sam running late see you soon')).toBe(true);
+    expect(isStyleEdit(pasted, 'Hey Sam. Running late. See you at 5.')).toBe(false);
   });
 });

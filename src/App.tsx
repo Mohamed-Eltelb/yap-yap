@@ -482,6 +482,8 @@ export function App() {
         let finalText = rawText;
         let answer: string | undefined;
         let learnStyle: (() => Promise<WritingSample | undefined>) | undefined;
+        /** Learns from the casing and punctuation the user fixes in the pasted text. */
+        let learnFromEdit: ((edited: string, pasted: string) => Promise<WritingSample | undefined>) | undefined;
         let usedProviderId: ProviderId = sttProviderId;
         let usedModel = sttProvider.sttModel;
 
@@ -539,6 +541,11 @@ export function App() {
                 destination: location,
                 existingWriting,
               }).then((sample) => sample && existingWriting ? { ...sample, fromUserText: true } : sample);
+              if (choice !== DONT_LEARN) learnFromEdit = (edited, pasted) => detectWritingStyle(edited, styleProvider, {
+                category: fixedCategory,
+                destination: location,
+                before: pasted,
+              }).then((sample) => sample && { ...sample, fromUserText: true });
             }
             const processed = await processTranscriptWithLlm(
               rawText,
@@ -661,24 +668,30 @@ export function App() {
           });
         }
 
-        // Style learning runs beside delivery so it never delays the paste.
-        void learnStyle?.().then((sample) => {
-          if (sample) setAppState((prev) => {
-            if (!prev.settings.personalizationEnabled) return prev;
-            // History kept no item (retention "never", or deleted already): keep only the style.
-            if (!prev.history.some((h) => h.id === itemId)) {
-              const retained = toRetainedStyle({ id: itemId, createdAt: new Date().toISOString(), writingSample: sample });
-              return retained ? {
-                ...prev,
-                settings: { ...prev.settings, retainedStyleSamples: [retained, ...prev.settings.retainedStyleSamples.filter((item) => item.id !== itemId)] },
-              } : prev;
-            }
-            return {
+        // Saves what this dictation taught. A sample read from the user's own writing is never
+        // replaced by one read from speech.
+        const keepSample = (sample: WritingSample) => setAppState((prev) => {
+          if (!prev.settings.personalizationEnabled) return prev;
+          const replaces = (current?: WritingSample) => !(current?.fromUserText && !sample.fromUserText);
+          // History kept no item (retention "never", or deleted already): keep only the style.
+          if (!prev.history.some((h) => h.id === itemId)) {
+            const existing = prev.settings.retainedStyleSamples.find((item) => item.id === itemId);
+            const retained = replaces(existing?.writingSample)
+              ? toRetainedStyle({ id: itemId, createdAt: existing?.createdAt ?? new Date().toISOString(), writingSample: sample })
+              : undefined;
+            return retained ? {
               ...prev,
-              history: prev.history.map((h) => h.id === itemId && !h.writingCorrection ? { ...h, writingSample: sample } : h),
-            };
-          });
+              settings: { ...prev.settings, retainedStyleSamples: [retained, ...prev.settings.retainedStyleSamples.filter((item) => item.id !== itemId)] },
+            } : prev;
+          }
+          return {
+            ...prev,
+            history: prev.history.map((h) => h.id === itemId && !h.writingCorrection && replaces(h.writingSample) ? { ...h, writingSample: sample } : h),
+          };
         });
+
+        // Style learning runs beside delivery so it never delays the paste.
+        void learnStyle?.().then((sample) => sample && keepSample(sample));
 
         const desktop = window.yapyap;
         const delivered = mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
@@ -695,8 +708,14 @@ export function App() {
 
         // Words the user respells in the destination right after the paste join the dictionary.
         if (pasted && mode === 'dictate' && appState.settings.personalizationEnabled) {
-          void desktop?.watchPasteCorrections?.(delivered).then((words) => {
-            if (!words?.length) return;
+          void desktop?.watchPasteCorrections?.(delivered).then((edits) => {
+            // Fixing casing or punctuation in the pasted text is the clearest sign of how the user
+            // writes. Only those edits are sent for learning, not ones that just change words.
+            if (edits?.edited && learnFromEdit && isStyleEdit(delivered, edits.edited, edits.words)) {
+              void learnFromEdit(edits.edited, delivered).then((sample) => sample && keepSample(sample));
+            }
+            const words = edits?.words ?? [];
+            if (!words.length) return;
             let added: string[] = [];
             setAppState((prev) => {
               const known = new Set(prev.dictionary.map((entry) => entry.word.toLowerCase()));

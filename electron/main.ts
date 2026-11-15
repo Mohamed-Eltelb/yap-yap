@@ -411,7 +411,7 @@ app.whenReady().then(() => {
   ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()
       ? watchPasteCorrections(text, readFocusedField)
-      : []);
+      : { words: [] });
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
   });

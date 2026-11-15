@@ -90,10 +90,27 @@ export function extractCorrections(pastedText: string, textAtPaste: string, text
   return rewrite ? [] : learned.slice(0, 3);
 }
 
+/**
+ * The pasted text as it reads now, after the user's edits, or nothing when it was not edited or
+ * can no longer be found. Lets Yap Yap learn the casing and punctuation the user fixed by hand.
+ */
+export function editedPaste(pastedText: string, textAtPaste: string, textNow: string): string | undefined {
+  const pasted = squash(pastedText);
+  const region = pasted && pastedRegion(pasted, squash(textAtPaste), squash(textNow));
+  return region && region !== pasted && region.length <= pasted.length * 2 + 40 ? region : undefined;
+}
+
+/** What the user changed in the pasted text: respelled terms, and the edited text itself. */
+export interface PasteEdits {
+  words: string[];
+  edited?: string;
+}
+
 let finishWatch: (() => void) | undefined;
 
 /**
- * Watches the field that was just pasted into and resolves with the words the user corrected.
+ * Watches the field that was just pasted into and resolves with the words the user corrected
+ * and the pasted text as the user left it.
  * Stops when focus leaves the field, a new paste starts, or the window closes. Field text is
  * compared in memory only.
  */
@@ -101,7 +118,7 @@ export async function watchPasteCorrections(
   pastedText: string,
   readField: () => Promise<FocusedField | undefined>,
   { settleMs = 400, intervalMs = 1500, windowMs = 30_000 } = {},
-): Promise<string[]> {
+): Promise<PasteEdits> {
   finishWatch?.();
   let finished = false;
   let wake: (() => void) | undefined;
@@ -113,9 +130,10 @@ export async function watchPasteCorrections(
 
   await pause(settleMs);
   const first = finished ? undefined : await readField();
-  if (!first || !squash(first.text).includes(squash(pastedText))) return [];
+  if (!first || !squash(first.text).includes(squash(pastedText))) return { words: [] };
 
   let corrections: string[] = [];
+  let edited: string | undefined;
   let previous = first.text;
   for (const deadline = Date.now() + windowMs; !finished && Date.now() < deadline;) {
     await pause(intervalMs);
@@ -123,8 +141,11 @@ export async function watchPasteCorrections(
     const current = await readField();
     if (!current || current.field !== first.field) break;
     // Two identical reads in a row mean the user is not mid-word.
-    if (current.text === previous) corrections = extractCorrections(pastedText, first.text, current.text) ?? corrections;
+    if (current.text === previous) {
+      corrections = extractCorrections(pastedText, first.text, current.text) ?? corrections;
+      edited = editedPaste(pastedText, first.text, current.text) ?? edited;
+    }
     previous = current.text;
   }
-  return corrections;
+  return { words: corrections, edited };
 }
