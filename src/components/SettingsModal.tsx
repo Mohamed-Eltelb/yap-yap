@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences } from '../services/personalization';
+import { parseWritingPreferences, type ForgottenStyles } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -29,6 +29,7 @@ import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSett
 import { SelectMenu } from './SelectMenu';
 import { ProviderSettings } from './ProviderSettings';
 import { PersonalizationEditor } from './PersonalizationEditor';
+import { SettingsSubdialog } from './SettingsSubdialog';
 
 interface Props {
   open: boolean;
@@ -42,6 +43,11 @@ interface Props {
   providers: Record<ProviderId, ProviderConfig>;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
+  /** Forgets the learned style for one category and returns what to restore on Undo. */
+  onForgetLearnedStyle: (categories: string[]) => ForgottenStyles;
+  onRestoreLearnedStyle: (forgotten: ForgottenStyles) => void;
+  /** Forgets every learned style and correction. Rules stay. */
+  onResetLearnedStyle: () => void;
   stats: InsightsStats;
   toast: string | null;
 }
@@ -129,6 +135,9 @@ export function SettingsModal({
   providers,
   onUpdateProvider,
   onRemoveProvider,
+  onForgetLearnedStyle,
+  onRestoreLearnedStyle,
+  onResetLearnedStyle,
   stats,
   toast,
 }: Props) {
@@ -140,6 +149,7 @@ export function SettingsModal({
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const writingRules = parseWritingPreferences(settings.writingPreferences);
   const correctedStyles = stats.categoryBreakdown.filter((profile) => 'corrected' in profile && profile.corrected).length;
   const learnedStyles = stats.categoryBreakdown.length;
@@ -726,21 +736,37 @@ export function SettingsModal({
                         <summary aria-label="Personalization options" className="grid size-8 cursor-pointer list-none place-items-center rounded-lg hover:bg-[var(--bg-hover)]">
                           <MoreHorizontal aria-hidden="true" size={16} />
                         </summary>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            const details = event.currentTarget.closest('details');
-                            if (details) {
-                              details.open = false;
-                              details.querySelector('summary')?.focus();
-                            }
-                            setHighlightedCat(null);
-                            onUpdateSettings({ personalizationEnabled: false });
-                          }}
-                          className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] px-3 py-2.5 text-sm shadow-lg hover:bg-[var(--bg-hover)]"
-                        >
-                          Disable personalization
-                        </button>
+                        <div className="absolute right-0 top-full z-10 mt-1 grid overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] py-1 text-sm shadow-lg">
+                          {(stats.categoryBreakdown.length > 0 || Object.keys(settings.styleCorrections).length > 0) && (
+                            <button
+                              type="button"
+                              aria-haspopup="dialog"
+                              onClick={(event) => {
+                                const details = event.currentTarget.closest('details');
+                                if (details) details.open = false;
+                                setConfirmResetOpen(true);
+                              }}
+                              className="whitespace-nowrap px-3 py-2 text-left hover:bg-[var(--bg-hover)]"
+                            >
+                              Reset learned style
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              const details = event.currentTarget.closest('details');
+                              if (details) {
+                                details.open = false;
+                                details.querySelector('summary')?.focus();
+                              }
+                              setHighlightedCat(null);
+                              onUpdateSettings({ personalizationEnabled: false });
+                            }}
+                            className="whitespace-nowrap px-3 py-2 text-left hover:bg-[var(--bg-hover)]"
+                          >
+                            Disable personalization
+                          </button>
+                        </div>
                       </details>
                     ) : (
                       <button
@@ -936,11 +962,36 @@ export function SettingsModal({
           onClose={() => setLanguageDialog(null)}
         />
       )}
+      {open && activeTab === 'personalization' && confirmResetOpen && (
+        <SettingsSubdialog
+          title="Reset learned style?"
+          description="Yap Yap forgets the style it learned in every category, along with your corrections to it. Your rules, dictionary, and History text stay. It starts learning again from your next dictation."
+          onClose={() => setConfirmResetOpen(false)}
+        >
+          <div className="yy-pref-confirm">
+            <button type="button" className="yy-pref-button" onClick={() => setConfirmResetOpen(false)}>Cancel</button>
+            <button
+              type="button"
+              className="yy-pref-button"
+              data-danger
+              onClick={() => {
+                setConfirmResetOpen(false);
+                setHighlightedCat(null);
+                onResetLearnedStyle();
+              }}
+            >
+              Reset learned style
+            </button>
+          </div>
+        </SettingsSubdialog>
+      )}
       {open && activeTab === 'personalization' && preferencesEditorOpen && (
         <PersonalizationEditor
           preferences={settings.writingPreferences}
           profiles={stats.categoryBreakdown}
           styleCorrections={settings.styleCorrections}
+          onForgetStyle={(category) => onForgetLearnedStyle([category])}
+          onRestoreStyle={onRestoreLearnedStyle}
           provider={editorProvider}
           cleanupEnabled={settings.smartCleanup}
           onSave={(changes) => onUpdateSettings(changes)}

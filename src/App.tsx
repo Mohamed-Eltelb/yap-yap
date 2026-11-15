@@ -11,7 +11,7 @@ import { getPreferredLanguageVariants } from './data/languages';
 import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, forgetWritingStyles, restoreWritingStyles, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -238,6 +238,23 @@ export function App() {
         settings: nextSettings,
         history: nextHistory,
       };
+    });
+  }, []);
+
+  /** Forgets the learned style for some categories, or all, and returns what it removed. */
+  const forgetLearnedStyle = useCallback((categories?: string[]): ForgottenStyles => {
+    const { forgotten } = forgetWritingStyles(appState.history, appState.settings.styleCorrections, categories);
+    setAppState((prev) => {
+      const next = forgetWritingStyles(prev.history, prev.settings.styleCorrections, categories);
+      return { ...prev, history: next.history, settings: { ...prev.settings, styleCorrections: next.styleCorrections } };
+    });
+    return forgotten;
+  }, [appState.history, appState.settings.styleCorrections]);
+
+  const restoreLearnedStyle = useCallback((forgotten: ForgottenStyles) => {
+    setAppState((prev) => {
+      const next = restoreWritingStyles(prev.history, prev.settings.styleCorrections, forgotten);
+      return { ...prev, history: next.history, settings: { ...prev.settings, styleCorrections: next.styleCorrections } };
     });
   }, []);
 
@@ -1360,6 +1377,12 @@ export function App() {
         providers={appState.providers}
         onUpdateProvider={updateProvider}
         onRemoveProvider={removeProvider}
+        onForgetLearnedStyle={forgetLearnedStyle}
+        onRestoreLearnedStyle={restoreLearnedStyle}
+        onResetLearnedStyle={() => {
+          forgetLearnedStyle();
+          showToast('Learned style reset');
+        }}
         stats={stats}
         toast={toast}
       />

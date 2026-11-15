@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
 import { proposeWritingPreferences } from '../services/providers/engine';
-import { parseWritingPreferences, readWritingRule, type WritingProfile } from '../services/personalization';
+import { parseWritingPreferences, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
 import type { ProviderConfig, StyleCorrections } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
@@ -22,6 +22,9 @@ interface Props {
   /** Rules and styles are applied by AI cleanup, so they do nothing while it is off. */
   cleanupEnabled: boolean;
   onSave: (changes: Saved) => void;
+  /** Forgets what was learned for a category and returns what Undo puts back. */
+  onForgetStyle: (category: string) => ForgottenStyles;
+  onRestoreStyle: (forgotten: ForgottenStyles) => void;
   onClose: () => void;
   onOpenProviders: () => void;
 }
@@ -39,7 +42,7 @@ const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
 const describeStyle = (style: { tone: string; phrasing: string }) => `${style.tone} tone. ${style.phrasing.replace(/[.\s]*$/u, '.')}`;
 
 export function PersonalizationEditor({
-  preferences, profiles, styleCorrections, provider, cleanupEnabled, onSave, onClose, onOpenProviders,
+  preferences, profiles, styleCorrections, provider, cleanupEnabled, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,
 }: Props) {
   const inputId = useId();
   const rulesHeadingId = useId();
@@ -53,8 +56,8 @@ export function PersonalizationEditor({
   const [error, setError] = useState<string>();
   const [proposal, setProposal] = useState<{ rules: string[]; styles: StyleCorrections }>();
   const [notice, setNotice] = useState<string>();
-  /** What was saved before the last change, so it can be put back. */
-  const [previous, setPrevious] = useState<Saved>();
+  /** Puts back the last change. */
+  const [undo, setUndo] = useState<() => void>();
 
   useEffect(() => {
     // The dialog focuses its close button when it opens. Typing a request is the main action.
@@ -63,7 +66,8 @@ export function PersonalizationEditor({
   }, []);
 
   const save = (next: Partial<Saved>, message: string) => {
-    setPrevious({ writingPreferences: preferences, styleCorrections });
+    const before = { writingPreferences: preferences, styleCorrections };
+    setUndo(() => () => onSave(before));
     setProposal(undefined);
     setError(undefined);
     setNotice(message);
@@ -78,7 +82,7 @@ export function PersonalizationEditor({
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
-    setPrevious(undefined);
+    setUndo(undefined);
     setProposal(undefined);
     try {
       const next = await proposeWritingPreferences(provider, { rules, profiles }, instruction);
@@ -211,6 +215,21 @@ export function PersonalizationEditor({
                         Reset
                       </button>
                     )}
+                    {!proposal && (
+                      <button
+                        type="button"
+                        aria-label={`Forget what Yap Yap learned for ${profile.category}`}
+                        title="Forget"
+                        onClick={() => {
+                          const forgotten = onForgetStyle(profile.category);
+                          setUndo(() => () => onRestoreStyle(forgotten));
+                          setError(undefined);
+                          setNotice(`Forgot the ${profile.category} style.`);
+                        }}
+                      >
+                        <X aria-hidden="true" size={14} />
+                      </button>
+                    )}
                   </li>,
                 ];
               })}
@@ -248,12 +267,12 @@ export function PersonalizationEditor({
           {notice && (
             <>
               {notice}
-              {previous !== undefined && (
+              {undo && (
                 <button
                   type="button"
                   onClick={() => {
-                    onSave(previous);
-                    setPrevious(undefined);
+                    undo();
+                    setUndo(undefined);
                     setNotice('Change undone.');
                   }}
                 >

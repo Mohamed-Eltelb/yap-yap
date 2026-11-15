@@ -221,6 +221,50 @@ export function applyStyleCorrections<T extends WritingProfile>(
   });
 }
 
+/** What forgetting removed, so it can be put back. */
+export interface ForgottenStyles {
+  samples: Record<string, Pick<HistoryItem, 'writingSample' | 'writingCorrection'>>;
+  styleCorrections: StyleCorrections;
+}
+
+/**
+ * Forgets the learned style for the given categories, or for all of them. The dictated text
+ * stays in History; only the style samples and the user's corrections for those categories go.
+ */
+export function forgetWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection'>>(
+  history: readonly T[],
+  corrections: StyleCorrections,
+  categories?: readonly string[],
+): { history: T[]; styleCorrections: StyleCorrections; forgotten: ForgottenStyles } {
+  const matches = (category: string | undefined) => !!category && (!categories || categories.includes(category));
+  const forgotten: ForgottenStyles = { samples: {}, styleCorrections: {} };
+  const nextHistory = history.map((item) => {
+    if (!matches(item.writingSample?.category)) return item;
+    forgotten.samples[item.id] = { writingSample: item.writingSample, writingCorrection: item.writingCorrection };
+    const { writingSample: _sample, writingCorrection: _correction, ...rest } = item;
+    return rest as T;
+  });
+  const styleCorrections: StyleCorrections = {};
+  for (const [category, correction] of Object.entries(corrections)) {
+    if (matches(category)) forgotten.styleCorrections[category] = correction;
+    else styleCorrections[category] = correction;
+  }
+  return { history: nextHistory, styleCorrections, forgotten };
+}
+
+/** Puts forgotten styles back. Items deleted since then stay deleted. */
+export function restoreWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection'>>(
+  history: readonly T[],
+  corrections: StyleCorrections,
+  forgotten: ForgottenStyles,
+): { history: T[]; styleCorrections: StyleCorrections } {
+  return {
+    // A style learned again since then is newer, so it wins.
+    history: history.map((item) => forgotten.samples[item.id] && !item.writingSample ? { ...item, ...forgotten.samples[item.id] } : item),
+    styleCorrections: { ...forgotten.styleCorrections, ...corrections },
+  };
+}
+
 /** 0–100 with diminishing returns. A hand correction counts as three plain dictations. */
 export function personalizationScore(profile: Pick<WritingProfile, 'count' | 'corrections'>): number {
   const points = profile.count + 2 * profile.corrections;

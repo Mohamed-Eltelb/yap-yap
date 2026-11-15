@@ -1,4 +1,4 @@
-import { applyStyleCorrections, parseStyleCorrections, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, parseStyleCorrections, restoreWritingStyles, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -652,6 +652,30 @@ describe('Multi-Provider Engine', () => {
       rules: ['Use straight quotes.'],
       styles: { Messaging: { tone: 'Neutral', phrasing: 'Standard capitalization, concise, standard punctuation' } },
     });
+  });
+
+  it('forgets learned styles by category and can put them back', () => {
+    const messaging = { category: 'Messaging', tone: 'Casual', phrasing: 'No punctuation' };
+    const email = { category: 'Email', tone: 'Formal', phrasing: 'Sentence case' };
+    const history = [
+      { id: 'a', text: 'hey', writingSample: messaging, writingCorrection: true },
+      { id: 'b', text: 'Dear Sam', writingSample: email },
+      { id: 'c', text: 'no sample' },
+    ];
+    const corrections = { Messaging: { tone: 'Casual', phrasing: 'Standard punctuation' }, Email: { tone: 'Formal', phrasing: 'Full stops' } };
+
+    const one = forgetWritingStyles(history, corrections, ['Messaging']);
+    expect(one.history[0]).toEqual({ id: 'a', text: 'hey' });
+    expect(one.history[1]).toBe(history[1]);
+    expect(one.styleCorrections).toEqual({ Email: corrections.Email });
+    expect(restoreWritingStyles(one.history, one.styleCorrections, one.forgotten)).toEqual({ history, styleCorrections: corrections });
+
+    const all = forgetWritingStyles(history, corrections);
+    expect(all.history.every((item) => !('writingSample' in item))).toBe(true);
+    expect(all.styleCorrections).toEqual({});
+    // A style learned again after forgetting is newer than the one Undo would put back.
+    const relearned = all.history.map((item) => item.id === 'b' ? { ...item, writingSample: { ...email, tone: 'Friendly' } } : item);
+    expect(restoreWritingStyles(relearned, {}, all.forgotten).history[1].writingSample?.tone).toBe('Friendly');
   });
 
   it('joins learned phrasings without stray periods', () => {

@@ -990,6 +990,25 @@ textarea,
   background: color-mix(in srgb, var(--btn-dark-bg) 90%, var(--btn-dark-text));
 }
 
+.yy-pref-button[data-danger] {
+  border-color: transparent;
+  background: #dc2626;
+  color: #fff;
+}
+
+.yy-pref-button[data-danger]:hover {
+  background: #b91c1c;
+}
+
+/* Buttons of a short confirmation dialog. */
+.yy-pref-confirm {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 22px 20px;
+  font-size: 13.5px;
+}
+
 .yy-pref-status {
   display: flex;
   gap: 8px;
