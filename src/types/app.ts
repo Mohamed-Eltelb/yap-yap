@@ -90,6 +90,11 @@ export type StyleCorrections = Record<string, {
   phrasing?: string;
   /** When the user last corrected or confirmed it. Later dictations can suggest an update. */
   since?: string;
+  /**
+   * Styles the user turned down: what was learned before the correction, and suggestions they
+   * declined. Speech keeps showing those habits, so they are never suggested again.
+   */
+  rejected?: { tones?: string[]; phrasings?: string[] };
 }>;
 
 export interface SettingsState {

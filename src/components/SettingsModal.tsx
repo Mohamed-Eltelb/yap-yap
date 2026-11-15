@@ -754,7 +754,11 @@ export function SettingsModal({
                               aria-haspopup="dialog"
                               onClick={(event) => {
                                 const details = event.currentTarget.closest('details');
-                                if (details) details.open = false;
+                                if (details) {
+                                  // Focus the menu button first: the dialog returns focus to it on Cancel.
+                                  details.querySelector('summary')?.focus();
+                                  details.open = false;
+                                }
                                 setConfirmResetOpen(true);
                               }}
                               className="whitespace-nowrap px-3 py-2 text-left hover:bg-[var(--bg-hover)]"

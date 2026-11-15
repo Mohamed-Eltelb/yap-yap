@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
 import { proposeWritingPreferences, suggestStyleUpdate } from '../services/providers/engine';
-import { mergeStyleCorrections, parseWritingPreferences, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
+import { mergeStyleCorrections, parseWritingPreferences, rejectStyles, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
 import type { ProviderConfig, StyleCorrections, WritingSample } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
@@ -81,7 +81,8 @@ export function PersonalizationEditor({
   const [focused, setFocused] = useState(focusCategory);
 
   // Corrections the user's recent writing no longer matches. Checked once when the editor opens.
-  const [updates, setUpdates] = useState<StyleCorrections>({});
+  // Each suggestion remembers the correction it was made for, and disappears if that changes.
+  const [updates, setUpdates] = useState<Record<string, { tone?: string; phrasing?: string; since?: string }>>({});
   useEffect(() => {
     if (!provider || !recentSamples) return;
     let open = true;
@@ -89,21 +90,32 @@ export function PersonalizationEditor({
       for (const [category, samples] of Object.entries(recentSamples)) {
         const correction = styleCorrections[category];
         if (!correction) continue;
-        const key = `${category}|${correction.since}|${samples.length}`;
+        const key = `${category}|${correction.since}|${samples.length}|${JSON.stringify(correction.rejected ?? {})}`;
         if (!checkedUpdates.has(key)) checkedUpdates.set(key, suggestStyleUpdate(provider, correction, samples));
         const update = await checkedUpdates.get(key);
-        if (open && update) setUpdates((current) => ({ ...current, [category]: update }));
+        if (open && update) setUpdates((current) => ({ ...current, [category]: { ...update, since: correction.since } }));
       }
     })();
     return () => { open = false; };
     // Runs once when the editor opens; a decision below updates the saved correction itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const updateFor = (category: string) => {
+    const update = updates[category];
+    return update && styleCorrections[category]?.since === update.since ? update : undefined;
+  };
 
-  /** Accepts the suggestion, or keeps the correction ({}), and waits for new dictations either way. */
-  const decideUpdate = (category: string, update: StyleCorrections[string], message: string) => {
+  /** Update takes the suggestion; Keep mine remembers it as turned down. Both wait for new dictations. */
+  const decideUpdate = (category: string, accept: boolean) => {
+    const update = updateFor(category);
+    if (!update) return;
+    const { since: _since, ...fields } = update;
     setUpdates(({ [category]: _done, ...rest }) => rest);
-    save({ styleCorrections: mergeStyleCorrections(styleCorrections, { [category]: update }, new Date().toISOString()) }, message);
+    const change = accept ? fields : rejectStyles(styleCorrections[category], fields);
+    save(
+      { styleCorrections: mergeStyleCorrections(styleCorrections, { [category]: change }, new Date().toISOString()) },
+      accept ? `${category} style updated.` : `Kept your ${category} correction.`,
+    );
   };
   useEffect(() => {
     if (!focusCategory) return;
@@ -114,6 +126,9 @@ export function PersonalizationEditor({
     return () => window.clearTimeout(timer);
   }, [focusCategory]);
 
+  /** Puts focus back on the request box after an action removes the button that had it. */
+  const refocus = () => window.setTimeout(() => input.current?.focus({ preventScroll: true }), 0);
+
   const save = (next: Partial<Saved>, message: string) => {
     const before = { writingPreferences: preferences, styleCorrections };
     setUndo(() => () => onSave(before));
@@ -121,6 +136,31 @@ export function PersonalizationEditor({
     setError(undefined);
     setNotice(message);
     onSave({ writingPreferences: preferences, styleCorrections, ...next });
+    refocus();
+  };
+
+  /**
+   * Saves the reviewed change. Each corrected style also remembers what it replaced, so the
+   * habit the user corrected is never suggested back to them. Styles for a category that is no
+   * longer learned are dropped, since they would apply unseen once it is learned again.
+   */
+  const saveProposal = (change: { rules: string[]; styles: StyleCorrections }) => {
+    const styles: StyleCorrections = {};
+    for (const [category, correction] of Object.entries(change.styles)) {
+      const profile = profiles.find((item) => item.category === category);
+      if (!profile) continue;
+      styles[category] = {
+        ...rejectStyles(styleCorrections[category], {
+          tone: correction.tone && profile.tone,
+          phrasing: correction.phrasing && profile.phrasing,
+        }),
+        ...correction,
+      };
+    }
+    save({
+      writingPreferences: change.rules.join('\n'),
+      styleCorrections: mergeStyleCorrections(styleCorrections, styles, new Date().toISOString()),
+    }, 'Changes saved.');
   };
 
   const submit = async (event?: FormEvent) => {
@@ -150,7 +190,11 @@ export function PersonalizationEditor({
       if (call !== latestCall.current) return;
       setError(failure instanceof Error ? failure.message : 'The update could not be prepared. Try again.');
     } finally {
-      if (call === latestCall.current) setBusy(false);
+      if (call === latestCall.current) {
+        setBusy(false);
+        // The request box was disabled while busy, which drops its focus.
+        refocus();
+      }
     }
   };
 
@@ -162,6 +206,8 @@ export function PersonalizationEditor({
   ];
   const rulesChanged = rows.some((row) => row.change);
   const stylesChanged = Object.keys(proposal?.styles ?? {}).length > 0;
+  // Row actions wait while a change is prepared or reviewed, so Save never works from an old list.
+  const idle = !proposal && !busy;
 
   return (
     <SettingsSubdialog
@@ -196,7 +242,7 @@ export function PersonalizationEditor({
                       </em>
                     )}
                   </span>
-                  {!proposal && (
+                  {idle && (
                     <button
                       type="button"
                       aria-label={`Remove rule: ${readWritingRule(text).text}`}
@@ -251,25 +297,25 @@ export function PersonalizationEditor({
                         {profile.corrected && <em className="yy-pref-scope">Corrected by you</em>}
                       </strong>
                       <span>{describeStyle(profile)}</span>
-                      {updates[profile.category] && !proposal && (
+                      {updateFor(profile.category) && idle && (
                         <div className="yy-pref-drift">
                           <p>
                             Your recent {profile.category} writing looks different:{' '}
-                            <strong>{describeStyle({ ...profile, ...updates[profile.category] })}</strong>
+                            <strong>{describeStyle({ ...profile, ...updateFor(profile.category) })}</strong>
                           </p>
                           <div>
                             <button
                               type="button"
                               className="yy-pref-button"
                               data-primary
-                              onClick={() => decideUpdate(profile.category, updates[profile.category], `${profile.category} style updated.`)}
+                              onClick={() => decideUpdate(profile.category, true)}
                             >
                               Update
                             </button>
                             <button
                               type="button"
                               className="yy-pref-button"
-                              onClick={() => decideUpdate(profile.category, {}, `Kept your ${profile.category} correction.`)}
+                              onClick={() => decideUpdate(profile.category, false)}
                             >
                               Keep mine
                             </button>
@@ -277,7 +323,7 @@ export function PersonalizationEditor({
                         </div>
                       )}
                     </div>
-                    {profile.corrected && !proposal && (
+                    {profile.corrected && idle && (
                       <button
                         type="button"
                         className="yy-pref-reset"
@@ -291,7 +337,7 @@ export function PersonalizationEditor({
                         Reset
                       </button>
                     )}
-                    {!proposal && (
+                    {idle && (
                       <button
                         type="button"
                         aria-label={`Forget what Yap Yap learned for ${profile.category}`}
@@ -301,6 +347,7 @@ export function PersonalizationEditor({
                           setUndo(() => () => onRestoreStyle(forgotten));
                           setError(undefined);
                           setNotice(`Forgot the ${profile.category} style.`);
+                          refocus();
                         }}
                       >
                         <X aria-hidden="true" size={14} />
@@ -329,33 +376,31 @@ export function PersonalizationEditor({
               type="button"
               className="yy-pref-button"
               data-primary
-              onClick={() => save({
-                writingPreferences: proposal.rules.join('\n'),
-                styleCorrections: mergeStyleCorrections(styleCorrections, proposal.styles, new Date().toISOString()),
-              }, 'Changes saved.')}
+              onClick={() => saveProposal(proposal)}
             >
               Save
             </button>
           </div>
         )}
 
-        <div role="status" className="yy-pref-status">
-          {notice && (
-            <>
-              {notice}
-              {undo && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    undo();
-                    setUndo(undefined);
-                    setNotice('Change undone.');
-                  }}
-                >
-                  Undo
-                </button>
-              )}
-            </>
+        {/* Only the message is live. Undo sits beside it, so it is not read out as part of it. */}
+        <div className="yy-pref-status">
+          <span role="status">
+            {notice}
+            {proposal && <span className="sr-only">A change is ready. Review it above, then save or discard it.</span>}
+          </span>
+          {notice && undo && (
+            <button
+              type="button"
+              onClick={() => {
+                undo();
+                setUndo(undefined);
+                setNotice('Change undone.');
+                refocus();
+              }}
+            >
+              Undo
+            </button>
           )}
         </div>
 

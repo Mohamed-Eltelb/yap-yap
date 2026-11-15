@@ -808,18 +808,24 @@ export async function proposeWritingPreferences(
  */
 export async function suggestStyleUpdate(
   provider: ProviderConfig,
-  correction: { tone?: string; phrasing?: string },
+  correction: StyleCorrections[string],
   recent: readonly WritingSample[],
 ): Promise<{ tone?: string; phrasing?: string } | undefined> {
   if (recent.length === 0) return;
   const suggestion: { tone?: string; phrasing?: string } = {};
+  const rejectedTones = new Set((correction.rejected?.tones ?? []).map((tone) => tone.toLowerCase()));
+  const rejectedPhrasings = correction.rejected?.phrasings ?? [];
 
-  // Tone is one of a few labels, so a clear majority is enough.
+  // Tone is one of a few labels, so a clear majority is enough. A tone the user already
+  // turned down is the habit they corrected, not a change in how they write.
   if (correction.tone) {
     const votes = new Map<string, number>();
     for (const { tone } of recent) votes.set(tone, (votes.get(tone) ?? 0) + 1);
     const [tone, count] = [...votes].sort((a, b) => b[1] - a[1])[0];
-    if (tone !== correction.tone && count / recent.length >= 0.6) suggestion.tone = tone;
+    const known = WRITING_TONES.find((name) => name.toLowerCase() === tone.toLowerCase());
+    if (known && known !== correction.tone && !rejectedTones.has(known.toLowerCase()) && count / recent.length >= 0.6) {
+      suggestion.tone = known;
+    }
   }
 
   // Phrasing is free text, so the model judges whether it really contradicts the correction.
@@ -828,17 +834,22 @@ export async function suggestStyleUpdate(
       const reply = await callLlm(
         provider,
         'A dictation app learned how its user writes in one kind of place, and the user corrected that description. "recent" describes the dictations the user made there after the correction.' +
-        '\nDecide whether most of "recent" clearly contradicts the correction about casing or punctuation, for example the correction says standard punctuation and most recent ones say no punctuation.' +
-        ' Different wording, or details the correction does not mention, are not a contradiction.' +
-        '\nReturn only JSON: {"differs": false}, or {"differs": true, "phrasing": "..."}.' +
+        ' "rejected" lists descriptions the user already turned down, such as the habit they corrected away.' +
+        '\nLooking only at casing and punctuation, say which one most of "recent" is closest to:' +
+        '\n- "correction": it mostly fits the correction. Different wording, or details the correction does not mention, still fit.' +
+        '\n- "rejected": it mostly fits one of the rejected descriptions. The user already decided against that, even if the wording differs.' +
+        '\n- "new": most recent descriptions clearly contradict the correction about the same thing, and fit no rejected description. For example, the correction says standard capitalization and most recent ones say all lowercase.' +
+        '\nMixed, varied, or occasional habits are not a contradiction: choose "correction" for them. When unsure, choose "correction".' +
+        '\nReturn only JSON: {"closest": "correction"}, {"closest": "rejected"}, or {"closest": "new", "phrasing": "..."}.' +
         ' "phrasing" describes how the user writes now, in the same style as the descriptions, for example "Lowercase, no punctuation": casing and punctuation only, in English, at most 10 words.' +
         ' It describes the recent writing, never the correction, and never explains the difference.',
-        JSON.stringify({ correction: correction.phrasing, recent: recent.map(({ phrasing }) => phrasing) }),
+        JSON.stringify({ correction: correction.phrasing, rejected: rejectedPhrasings, recent: recent.map(({ phrasing }) => phrasing) }),
       );
       const parsed = parseJsonReply(reply);
       const phrasing = typeof parsed?.phrasing === 'string' ? parsed.phrasing.replace(/\s+/gu, ' ').trim().replace(/[.\s]+$/u, '') : '';
-      const same = phrasing.toLowerCase() === correction.phrasing.replace(/[.\s]+$/u, '').toLowerCase();
-      if (parsed?.differs === true && phrasing && !same) {
+      const plain = (text: string) => text.replace(/[.\s]+$/u, '').toLowerCase();
+      const same = [correction.phrasing, ...rejectedPhrasings].some((text) => plain(text) === plain(phrasing));
+      if (parsed?.closest === 'new' && phrasing && !same) {
         suggestion.phrasing = (phrasing[0].toLocaleUpperCase() + phrasing.slice(1)).slice(0, MAX_CORRECTED_PHRASING_LENGTH);
       }
     } catch {

@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -685,14 +685,35 @@ describe('Multi-Provider Engine', () => {
     const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
     const reply = (content: string) => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content } }] }) });
     vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(reply('{"differs": true, "phrasing": "Lowercase, no punctuation."}'))
-      .mockResolvedValueOnce(reply('{"differs": false}')));
+      .mockResolvedValueOnce(reply('{"closest": "new", "phrasing": "Lowercase, no punctuation."}'))
+      .mockResolvedValueOnce(reply('{"closest": "correction"}')));
     const recent = samplesSinceCorrection(history, corrections).Messaging;
     await expect(suggestStyleUpdate(provider, corrections.Messaging, recent))
       .resolves.toEqual({ tone: 'Casual', phrasing: 'Lowercase, no punctuation' });
     // Phrasing agrees and most tones still match the correction (3 of 5), so nothing is suggested.
     const mixed = recent.map((item, index) => ({ ...item, tone: index % 2 ? 'Casual' : 'Neutral' }));
     await expect(suggestStyleUpdate(provider, corrections.Messaging, mixed)).resolves.toBeUndefined();
+  });
+
+  it('never suggests a style the user already turned down', async () => {
+    const correction = rejectStyles(
+      { tone: 'Professional', phrasing: 'Standard punctuation', since: '2026-01-01T00:00:00.000Z' },
+      { tone: 'Casual', phrasing: 'No punctuation' },
+    );
+    expect(correction.rejected).toEqual({ tones: ['Casual'], phrasings: ['No punctuation'] });
+    // Saved and loaded again, the list survives and stays short.
+    const many = Array.from({ length: 8 }, (_, index) => `Habit ${index}`);
+    expect(parseStyleCorrections({ Messaging: { ...correction, rejected: { phrasings: many } } }).Messaging.rejected)
+      .toEqual({ phrasings: many.slice(-5) });
+
+    const recent = Array.from({ length: 5 }, () => ({ category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation' }));
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const reply = (content: string) => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content } }] }) });
+    const fetchMock = vi.fn().mockResolvedValue(reply('{"closest": "new", "phrasing": "No punctuation."}'));
+    vi.stubGlobal('fetch', fetchMock);
+    // The tone and the phrasing are both the habit that was corrected away.
+    await expect(suggestStyleUpdate(provider, correction, recent)).resolves.toBeUndefined();
+    expect(JSON.parse(JSON.parse(fetchMock.mock.calls[0][1].body).messages[1].content).rejected).toEqual(['No punctuation']);
   });
 
   it('keeps corrections to the parts the user changed', () => {
@@ -702,6 +723,10 @@ describe('Multi-Provider Engine', () => {
     // Only the phrasing is corrected, so the tone keeps following what is learned.
     expect(applyStyleCorrections([learned], { Messaging: { phrasing: 'Standard punctuation' } })[0])
       .toMatchObject({ tone: 'Casual', phrasing: 'Standard punctuation', corrected: true });
+    // Hand-edited examples show the corrected-away phrasing, so they are dropped with it, not with the tone.
+    const withExamples = { ...learned, examples: ['no caps no dots'] };
+    expect(applyStyleCorrections([withExamples], { Messaging: { phrasing: 'Standard punctuation' } })[0].examples).toEqual([]);
+    expect(applyStyleCorrections([withExamples], { Messaging: { tone: 'Friendly' } })[0].examples).toEqual(['no caps no dots']);
     // A later fix to the tone keeps the earlier fix to the phrasing.
     expect(mergeStyleCorrections({ Messaging: { phrasing: 'Standard punctuation' } }, { Messaging: { tone: 'Friendly' } }))
       .toEqual({ Messaging: { phrasing: 'Standard punctuation', tone: 'Friendly' } });

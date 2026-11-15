@@ -1016,7 +1016,8 @@ textarea,
   font-size: 12.5px;
 }
 
-.yy-pref-status:empty {
+/* The live region stays in the page, so it is announced, but takes no room while empty. */
+.yy-pref-status:not(:has(button)):has(> [role='status']:empty) {
   display: none;
 }
 

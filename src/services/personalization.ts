@@ -218,9 +218,37 @@ export function parseStyleCorrections(value: unknown): StyleCorrections {
     const phrasing = readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH);
     if (!tone && !phrasing) continue;
     const since = typeof fields.since === 'string' && !Number.isNaN(Date.parse(fields.since)) ? fields.since : undefined;
-    corrections[category] = { ...(tone && { tone }), ...(phrasing && { phrasing }), ...(since && { since }) };
+    const rejectedFields = (fields.rejected && typeof fields.rejected === 'object' ? fields.rejected : {}) as Record<string, unknown>;
+    const readList = (list: unknown, limit: number) => (Array.isArray(list) ? list : [])
+      .map((item) => readLabel(item, limit)).filter(Boolean).slice(-MAX_REJECTED_STYLES);
+    const tones = readList(rejectedFields.tones, 72);
+    const phrasings = readList(rejectedFields.phrasings, MAX_CORRECTED_PHRASING_LENGTH);
+    corrections[category] = {
+      ...(tone && { tone }),
+      ...(phrasing && { phrasing }),
+      ...(since && { since }),
+      ...((tones.length || phrasings.length) && { rejected: { ...(tones.length && { tones }), ...(phrasings.length && { phrasings }) } }),
+    };
   }
   return corrections;
+}
+
+/** How many turned-down styles each correction remembers. */
+const MAX_REJECTED_STYLES = 5;
+
+/** Adds styles the user turned down to a correction, so they are not suggested again. */
+export function rejectStyles(
+  correction: StyleCorrections[string] | undefined,
+  rejected: { tone?: string; phrasing?: string },
+): StyleCorrections[string] {
+  const add = (list: string[] | undefined, value: string | undefined) => {
+    if (!value) return list;
+    const rest = (list ?? []).filter((item) => item.toLowerCase() !== value.toLowerCase());
+    return [...rest, value].slice(-MAX_REJECTED_STYLES);
+  };
+  const tones = add(correction?.rejected?.tones, rejected.tone);
+  const phrasings = add(correction?.rejected?.phrasings, rejected.phrasing);
+  return { ...correction, rejected: { ...(tones && { tones }), ...(phrasings && { phrasings }) } };
 }
 
 /**
@@ -273,7 +301,9 @@ export function applyStyleCorrections<T extends WritingProfile>(
     return {
       ...profile,
       ...(correction.tone && { tone: correction.tone }),
-      ...(correction.phrasing && { phrasing: correction.phrasing }),
+      // Cleanup copies the casing and punctuation of hand-edited examples, which were written
+      // the way the user just corrected away, so they go with the old phrasing.
+      ...(correction.phrasing && { phrasing: correction.phrasing, examples: [] }),
       corrected: true,
     };
   });
