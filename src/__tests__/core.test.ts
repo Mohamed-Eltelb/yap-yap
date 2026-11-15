@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -25,7 +25,7 @@ import {
 } from '../services/providers/engine';
 import { parseDictionaryImportText } from '../components/DictionaryView';
 import { HistoryItem } from '../types/app';
-import { assignHistoryIds, parseHistoryImport } from '../services/historyImport';
+import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from '../services/historyImport';
 import { matchShortcut, needsMenuMask } from '../../electron/shortcutMatch';
 import { UiohookKey as Key } from 'uiohook-napi';
 
@@ -700,7 +700,8 @@ describe('Multi-Provider Engine', () => {
     const corrections = { Messaging: { tone: 'Professional', since: at(10) } };
     const casual = { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase' };
     const professional = { ...casual, tone: 'Professional' };
-    const history = [
+    type Item = { mode: 'dictate'; createdAt: string; writingSample: typeof casual; writingCorrection?: boolean; writingCorrectedAt?: string };
+    const history: Item[] = [
       ...Array.from({ length: 4 }, (_, index) => ({ mode: 'dictate' as const, createdAt: at(20 + index), writingSample: professional })),
       // Dictated before the correction, edited by hand after it.
       { mode: 'dictate' as const, createdAt: at(1), writingSample: casual, writingCorrection: true, writingCorrectedAt: at(30) },
@@ -1010,5 +1011,59 @@ describe('Corrections made in the destination after a paste', () => {
     expect(await watchPasteCorrections(pasted, read, options)).toEqual(['Supabase']);
     expect(await watchPasteCorrections(pasted, async () => ({ field: 'a', text: 'something else' }), options)).toEqual([]);
     expect(await watchPasteCorrections(pasted, async () => undefined, options)).toEqual([]);
+  });
+});
+
+describe('personalization quick fixes', () => {
+  it('reads style replies wrapped in reasoning text and keeps tones to the known list', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content: '<think>hmm {}</think>Here it is: {"category":"Messaging","tone":"casual","phrasing":"Lowercase"}' } }] }),
+    }));
+    expect(await detectWritingStyle('see you soon', provider)).toEqual({ category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase' });
+    expect(parseWritingSample({ category: 'Email', tone: 'Casual, friendly', phrasing: 'x' })?.tone).toBe('Casual');
+    expect(parseWritingSample({ category: 'Email', tone: 'grumpy', phrasing: 'x' })?.tone).toBe('Neutral');
+  });
+
+  it('puts the newest hand edit first, by edit time', () => {
+    const sample = (phrasing: string) => ({ category: 'Email', tone: 'Neutral', phrasing });
+    const [profile] = buildWritingProfiles([
+      { mode: 'dictate', writingSample: sample('Recent'), writingCorrection: true, writingCorrectedAt: '2026-01-01T00:00:00Z', text: 'recent' },
+      { mode: 'dictate', writingSample: sample('Old dictation'), writingCorrection: true, writingCorrectedAt: '2026-02-01T00:00:00Z', text: 'old' },
+    ]);
+    expect(profile.phrasing.startsWith('Old dictation')).toBe(true);
+    expect(profile.examples).toEqual(['old', 'recent']);
+  });
+
+  it('keeps a capital only for words written mid-sentence before', () => {
+    expect(fitToSurroundingText('The end', 'The plan is fine and')).toBe(' the end');
+    expect(fitToSurroundingText('Can we go', 'We love Canada and')).toBe(' can we go');
+    expect(fitToSurroundingText('Sam said hi', 'I met Sam and')).toBe(' Sam said hi');
+  });
+
+  it('treats rules that differ only by a final period as one', () => {
+    expect(parseWritingPreferences(['Use British spelling.', 'use british spelling'])).toEqual(['Use British spelling.']);
+  });
+
+  it('sends the user’s own dictionary words before learned ones', () => {
+    const entries = [
+      { word: 'tomorrow', source: 'auto' as const },
+      { word: 'Supabase', source: 'manual' as const },
+    ];
+    expect(dictionaryWordsFor(entries, true)).toEqual(['Supabase', 'tomorrow']);
+    expect(dictionaryWordsFor(entries, false)).toEqual(['Supabase']);
+  });
+
+  it('skips history entries that were already imported', () => {
+    const existing = [{ createdAt: '2026-01-01T00:00:00.000Z', text: 'Hello' }];
+    const items = [
+      { createdAt: '2026-01-01T00:00:00Z', text: 'Hello ' },
+      { createdAt: '2026-01-02T00:00:00Z', text: 'New' },
+      { createdAt: '2026-01-02T00:00:00Z', text: 'New' },
+    ];
+    expect(skipDuplicateHistory(items, existing)).toEqual([items[1]]);
   });
 });

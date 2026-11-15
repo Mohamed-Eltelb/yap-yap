@@ -28,6 +28,24 @@ export function assignHistoryIds(
   });
 }
 
+/**
+ * Leaves out entries already in History (same time and text), and repeats within the file, so
+ * importing the same export twice does not double what the app learned.
+ */
+export function skipDuplicateHistory<T extends Pick<HistoryItem, 'createdAt' | 'text'>>(
+  items: readonly T[],
+  existing: readonly Pick<HistoryItem, 'createdAt' | 'text'>[],
+): T[] {
+  const key = (item: Pick<HistoryItem, 'createdAt' | 'text'>) => `${Date.parse(item.createdAt) || item.createdAt}\n${item.text.trim()}`;
+  const seen = new Set(existing.map(key));
+  return items.filter((item) => {
+    const itemKey = key(item);
+    if (seen.has(itemKey)) return false;
+    seen.add(itemKey);
+    return true;
+  });
+}
+
 export function parseHistoryImport(source: string, defaultProvider: ProviderId): HistoryItem[] {
   const data: unknown = JSON.parse(source);
   if (!Array.isArray(data)) throw new Error('Choose a Yap Yap history JSON file.');

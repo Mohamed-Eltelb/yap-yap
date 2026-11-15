@@ -10,8 +10,8 @@ import { Sidebar } from './components/Sidebar';
 import { getPreferredLanguageVariants } from './data/languages';
 import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
-import { assignHistoryIds, parseHistoryImport } from './services/historyImport';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, forgetWritingStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -384,9 +384,7 @@ export function App() {
       });
 
       try {
-        const dictWords = appState.dictionary
-          .filter((entry) => appState.settings.personalizationEnabled || entry.source === 'manual')
-          .map((entry) => entry.word);
+        const dictWords = dictionaryWordsFor(appState.dictionary, appState.settings.personalizationEnabled);
         const rawText = await transcribeAudio(audioBlob, sttProvider, {
           dictionaryWords: dictWords,
           languageVariants: getPreferredLanguageVariants(appState.settings.languageVariants),
@@ -546,6 +544,9 @@ export function App() {
                     model: usedModel,
                     category,
                     outcome: undefined,
+                    // The text is the model's again, not the user's hand edit.
+                    writingCorrection: undefined,
+                    writingCorrectedAt: undefined,
                   }
                 : h
             ),
@@ -1045,9 +1046,7 @@ export function App() {
         {
           targetLanguages: appState.settings.translationTargets,
           targetLanguage: item.targetLanguage,
-          dictionaryWords: appState.dictionary
-            .filter((entry) => appState.settings.personalizationEnabled || entry.source === 'manual')
-            .map((entry) => entry.word),
+          dictionaryWords: dictionaryWordsFor(appState.dictionary, appState.settings.personalizationEnabled),
           smartCleanup: appState.settings.smartCleanup,
           writingStyles,
           writingPreferences: item.mode === 'dictate' && appState.settings.personalizationEnabled
@@ -1075,6 +1074,9 @@ export function App() {
                 wpm: nextWpm,
                 providerId: llmId,
                 model: llm.llmModel,
+                // The text is the model's again, not the user's hand edit.
+                writingCorrection: undefined,
+                writingCorrectedAt: undefined,
               }
             : h
         ),
@@ -1127,8 +1129,13 @@ export function App() {
       showToast('No valid history entries found in this file.');
       return;
     }
+    const fresh = skipDuplicateHistory(imported, appState.history);
+    if (fresh.length === 0) {
+      showToast('These history entries are already imported.');
+      return;
+    }
     setAppState((prev) => {
-      const normalized = assignHistoryIds(imported, prev.history.map((item) => item.id));
+      const normalized = assignHistoryIds(skipDuplicateHistory(fresh, prev.history), prev.history.map((item) => item.id));
 
       const merged = [...normalized, ...prev.history].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -1138,7 +1145,8 @@ export function App() {
         history: filterByRetention(merged, prev.settings.historyRetention),
       };
     });
-    showToast(`Imported ${imported.length} history entries`);
+    const skipped = imported.length - fresh.length;
+    showToast(`Imported ${fresh.length} history entries${skipped ? ` (${skipped} already imported)` : ''}`);
   };
 
   const handleEditHistoryItem = (id: string, newText: string) => {

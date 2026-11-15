@@ -69,9 +69,32 @@ export function fitToSurroundingText(text: string, before: string | undefined, p
   const keepCapital = !first
     || /^I(?:['’]|$)/.test(first)
     || /^\p{Lu}{2,}/u.test(first)
-    || before!.includes(first)
+    || isWrittenMidSentence(first, before!)
     || properNouns.some((noun) => noun.split(/\s+/)[0] === first);
   return lead + (keepCapital ? text : text[0].toLocaleLowerCase() + text.slice(1));
+}
+
+/**
+ * Dictionary words for the recognizer and cleanup, the user's own first. Prompts keep only the
+ * first few dozen, so learned words must never push out words the user added.
+ */
+export function dictionaryWordsFor(
+  entries: readonly { word: string; source: 'auto' | 'manual' }[],
+  includeLearned: boolean,
+): string[] {
+  const manual = entries.filter((entry) => entry.source === 'manual');
+  const learned = includeLearned ? entries.filter((entry) => entry.source !== 'manual') : [];
+  return [...manual, ...learned].map((entry) => entry.word);
+}
+
+/** Whether the word appears whole and capitalized somewhere other than a sentence start, like a name. */
+function isWrittenMidSentence(word: string, text: string): boolean {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const match of text.matchAll(new RegExp(`(?<![\\p{L}\\p{M}'’-])${escaped}(?![\\p{L}\\p{M}'’-])`, 'gu'))) {
+    const preceding = text.slice(0, match.index).replace(/["'(\[{“‘\s]+$/u, '');
+    if (preceding && !/[.!?…。！？\n]$/u.test(preceding)) return true;
+  }
+  return false;
 }
 
 export function categoryForDestination(destination?: { application?: string; domain?: string }): WritingCategory | undefined {
@@ -95,12 +118,17 @@ export function parseWritingSample(value: unknown): WritingSample | undefined {
   const sample = value as Record<string, unknown>;
   const key = writingCategoryKey(readLabel(sample.category, 48));
   const category = WRITING_CATEGORIES.find((name) => writingCategoryKey(name) === key);
-  const tone = readLabel(sample.tone, 72);
+  // Tones are one fixed list, so "casual" and "Casual" count as one vote. Older free-text tones
+  // ("Casual, friendly") keep their leading tone, or read as Neutral.
+  const label = readLabel(sample.tone, 72);
+  const tone = label && (knownTone(label)
+    ?? WRITING_TONES.find((name) => label.toLowerCase().startsWith(name.toLowerCase()))
+    ?? 'Neutral');
   const phrasing = readLabel(sample.phrasing, 120);
   if (category && tone && phrasing) return { category, tone, phrasing };
 }
 
-type ProfileEntry = Pick<HistoryItem, 'mode' | 'writingSample' | 'writingCorrection'> & { text?: string };
+type ProfileEntry = Pick<HistoryItem, 'mode' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'> & { text?: string };
 
 export interface WritingProfile extends WritingSample {
   count: number;
@@ -153,7 +181,8 @@ export function parseWritingPreferences(value: unknown): string[] {
     if (typeof line !== 'string') continue;
     const { text, category } = readWritingRule(cleanWritingRule(line));
     const rule = writeWritingRule(text, category);
-    const key = rule.toLowerCase();
+    // A final period does not make a different rule.
+    const key = rule.toLowerCase().replace(/[.\s]+$/u, '');
     if (!rule || seen.has(key)) continue;
     if (rules.length >= MAX_WRITING_PREFERENCE_RULES || length + rule.length + 1 > MAX_WRITING_PREFERENCES_LENGTH) break;
     seen.add(key);
@@ -167,20 +196,22 @@ export function parseWritingPreferences(value: unknown): string[] {
 const CORRECTION_WEIGHT = 3;
 
 export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingProfile[] {
-  const groups = new Map<string, { sample: WritingSample; corrected: boolean; text?: string }[]>();
+  const groups = new Map<string, { sample: WritingSample; corrected: boolean; correctedAt: number; text?: string }[]>();
   for (const item of items) {
     if (item.mode !== 'dictate') continue;
     const sample = parseWritingSample(item.writingSample);
     if (!sample) continue;
     const group = groups.get(sample.category) ?? [];
-    group.push({ sample, corrected: item.writingCorrection === true, text: item.text });
+    const correctedAt = (item.writingCorrectedAt && Date.parse(item.writingCorrectedAt)) || 0;
+    group.push({ sample, corrected: item.writingCorrection === true, correctedAt, text: item.text });
     groups.set(sample.category, group);
   }
 
   return [...groups].map(([category, entries]) => {
     // History is newest first. A hand correction counts as three dictations, the same weight as in
     // personalizationScore, so it leads without stopping the category from learning.
-    const corrected = entries.filter((entry) => entry.corrected);
+    // Newest edit first: editing an old dictation today makes it the newest correction.
+    const corrected = entries.filter((entry) => entry.corrected).sort((a, b) => b.correctedAt - a.correctedAt);
     const votes = new Map<string, number>();
     for (const { sample, corrected: isCorrection } of entries) {
       votes.set(sample.tone, (votes.get(sample.tone) ?? 0) + (isCorrection ? CORRECTION_WEIGHT : 1));

@@ -818,7 +818,7 @@ export function SettingsModal({
                               onPointerLeave={settings.personalizationEnabled ? () => setHighlightedCat(null) : undefined}
                               onFocus={settings.personalizationEnabled ? () => setHighlightedCat(item.category) : undefined}
                               onBlur={settings.personalizationEnabled ? () => setHighlightedCat(null) : undefined}
-                              aria-describedby={settings.personalizationEnabled ? `style-${item.category}` : undefined}
+                              aria-describedby={settings.personalizationEnabled ? `style-${item.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined}
                               role={settings.personalizationEnabled ? 'button' : undefined}
                               aria-haspopup={settings.personalizationEnabled ? 'dialog' : undefined}
                               aria-label={settings.personalizationEnabled ? `${item.category}, ${item.percent}%. Open its learned style` : undefined}
@@ -831,7 +831,7 @@ export function SettingsModal({
                               className="yy-personalization-row group/row relative yy-personalization-columns grid items-center gap-2 rounded-lg px-2 py-2.5 text-[12.5px] text-[var(--text-secondary)] data-[highlighted=true]:bg-[var(--bg-hover)] data-[highlighted=true]:text-[var(--text-primary)]"
                             >
                               {settings.personalizationEnabled && (
-                                <div id={`style-${item.category}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
+                                <div id={`style-${item.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
                                   <span className="block font-medium">{item.category}</span>
                                   {item.tone} · {item.phrasing}
                                 </div>

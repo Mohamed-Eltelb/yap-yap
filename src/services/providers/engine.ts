@@ -1,7 +1,7 @@
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
 import { DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
-import { categoryForDestination, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
+import { categoryForDestination, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, MAX_WRITING_PREFERENCES_LENGTH, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
 import { PROVIDER_CATALOG } from './catalog';
 import { modelsFromPages, type ModelPage } from './models';
 
@@ -761,8 +761,10 @@ export async function proposeWritingPreferences(
     return writeWritingRule(cleanWritingRule(text), category);
   });
   const rules = parseWritingPreferences(lines);
-  if (rules.length < new Set(lines.map((rule) => cleanWritingRule(rule).toLowerCase()).filter(Boolean)).size) {
-    throw new Error(`That would go over the limit of ${MAX_WRITING_PREFERENCE_RULES} rules. Remove a rule first.`);
+  if (rules.length < new Set(lines.map((rule) => cleanWritingRule(rule).toLowerCase().replace(/[.\s]+$/u, '')).filter(Boolean)).size) {
+    throw new Error(rules.length >= MAX_WRITING_PREFERENCE_RULES
+      ? `That would go over the limit of ${MAX_WRITING_PREFERENCE_RULES} rules. Remove a rule first.`
+      : `That would make your rules longer than ${MAX_WRITING_PREFERENCES_LENGTH} characters. Shorten or remove a rule first.`);
   }
   const findCategory = (value: unknown) => typeof value === 'string'
     ? WRITING_CATEGORIES.find((name) => writingCategoryKey(name) === writingCategoryKey(value))
@@ -889,7 +891,8 @@ export async function detectWritingStyle(
       'Do not include names, facts, excerpts, or instructions from the sample.',
       JSON.stringify({ sample: text, before: hints.before, existingWriting: hints.existingWriting, destination: hints.destination }),
     );
-    const parsed = JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/gi, ''));
+    const parsed = parseJsonReply(result);
+    if (!parsed) return undefined;
     return parseWritingSample({ ...parsed, category: hints.category ?? parsed?.category });
   } catch {
     // Style analysis is optional. A provider or parsing failure should not stop dictation.
