@@ -214,14 +214,15 @@ export function parseStyleCorrections(value: unknown): StyleCorrections {
     const category = WRITING_CATEGORIES.find((name) => writingCategoryKey(name) === writingCategoryKey(key));
     if (!category || !entry || typeof entry !== 'object') continue;
     const fields = entry as Record<string, unknown>;
-    const tone = readLabel(fields.tone, 72);
+    // Only known tones, as everywhere else a tone is chosen.
+    const tone = knownTone(fields.tone);
     const phrasing = readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH);
     if (!tone && !phrasing) continue;
     const since = typeof fields.since === 'string' && !Number.isNaN(Date.parse(fields.since)) ? fields.since : undefined;
     const rejectedFields = (fields.rejected && typeof fields.rejected === 'object' ? fields.rejected : {}) as Record<string, unknown>;
     const readList = (list: unknown, limit: number) => (Array.isArray(list) ? list : [])
       .map((item) => readLabel(item, limit)).filter(Boolean).slice(-MAX_REJECTED_STYLES);
-    const tones = readList(rejectedFields.tones, 72);
+    const tones = readList(rejectedFields.tones, 72).flatMap((value) => knownTone(value) ?? []);
     const phrasings = readList(rejectedFields.phrasings, MAX_CORRECTED_PHRASING_LENGTH);
     corrections[category] = {
       ...(tone && { tone }),
@@ -231,6 +232,12 @@ export function parseStyleCorrections(value: unknown): StyleCorrections {
     };
   }
   return corrections;
+}
+
+/** The tone in its usual spelling, if it is one of the known tones. */
+function knownTone(value: unknown): string | undefined {
+  const label = readLabel(value, 72).toLowerCase();
+  return WRITING_TONES.find((tone) => tone.toLowerCase() === label);
 }
 
 /** How many turned-down styles each correction remembers. */
@@ -266,23 +273,30 @@ export function mergeStyleCorrections(saved: StyleCorrections, changes: StyleCor
 /** Dictations a corrected category needs after the correction before an update is suggested. */
 export const STYLE_UPDATE_MIN_SAMPLES = 5;
 
+/** A style learned after a correction, and whether it came from a hand edit. */
+export type StyleSampleSinceCorrection = WritingSample & { corrected?: boolean };
+
 /**
- * For each corrected category, the styles learned from dictations made after the correction,
- * newest first. Only categories with enough of them to judge are included.
+ * For each corrected category, the styles learned from dictations made or hand-edited after the
+ * correction, newest first. Only categories with enough of them to judge are included.
  */
 export function samplesSinceCorrection(
-  history: readonly Pick<HistoryItem, 'mode' | 'createdAt' | 'writingSample'>[],
+  history: readonly Pick<HistoryItem, 'mode' | 'createdAt' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>[],
   corrections: StyleCorrections,
-): Record<string, WritingSample[]> {
-  const result: Record<string, WritingSample[]> = {};
+): Record<string, StyleSampleSinceCorrection[]> {
+  const result: Record<string, StyleSampleSinceCorrection[]> = {};
   for (const [category, correction] of Object.entries(corrections)) {
     const since = correction.since ? Date.parse(correction.since) : NaN;
     if (Number.isNaN(since)) continue;
     const samples = history.flatMap((item) => {
       const sample = item.mode === 'dictate' ? parseWritingSample(item.writingSample) : undefined;
-      return sample?.category === category && Date.parse(item.createdAt) > since ? [sample] : [];
+      if (sample?.category !== category) return [];
+      // A hand edit made now to an older dictation is recent writing too.
+      const time = (value: string | undefined) => (value && Date.parse(value)) || 0;
+      const at = Math.max(time(item.createdAt), time(item.writingCorrectedAt));
+      return at > since ? [{ ...sample, ...(item.writingCorrection && { corrected: true }) }] : [];
     });
-    if (samples.length >= STYLE_UPDATE_MIN_SAMPLES) result[category] = samples.slice(0, 12);
+    if (samples.length >= STYLE_UPDATE_MIN_SAMPLES) result[category] = samples;
   }
   return result;
 }
@@ -311,7 +325,7 @@ export function applyStyleCorrections<T extends WritingProfile>(
 
 /** What forgetting removed, so it can be put back. */
 export interface ForgottenStyles {
-  samples: Record<string, Pick<HistoryItem, 'writingSample' | 'writingCorrection'>>;
+  samples: Record<string, Pick<HistoryItem, 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>>;
   styleCorrections: StyleCorrections;
 }
 
@@ -319,7 +333,7 @@ export interface ForgottenStyles {
  * Forgets the learned style for the given categories, or for all of them. The dictated text
  * stays in History; only the style samples and the user's corrections for those categories go.
  */
-export function forgetWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection'>>(
+export function forgetWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>>(
   history: readonly T[],
   corrections: StyleCorrections,
   categories?: readonly string[],
@@ -328,8 +342,8 @@ export function forgetWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingS
   const forgotten: ForgottenStyles = { samples: {}, styleCorrections: {} };
   const nextHistory = history.map((item) => {
     if (!matches(item.writingSample?.category)) return item;
-    forgotten.samples[item.id] = { writingSample: item.writingSample, writingCorrection: item.writingCorrection };
-    const { writingSample: _sample, writingCorrection: _correction, ...rest } = item;
+    forgotten.samples[item.id] = { writingSample: item.writingSample, writingCorrection: item.writingCorrection, writingCorrectedAt: item.writingCorrectedAt };
+    const { writingSample: _sample, writingCorrection: _correction, writingCorrectedAt: _correctedAt, ...rest } = item;
     return rest as T;
   });
   const styleCorrections: StyleCorrections = {};
@@ -341,7 +355,7 @@ export function forgetWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingS
 }
 
 /** Puts forgotten styles back. Items deleted since then stay deleted. */
-export function restoreWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection'>>(
+export function restoreWritingStyles<T extends Pick<HistoryItem, 'id' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>>(
   history: readonly T[],
   corrections: StyleCorrections,
   forgotten: ForgottenStyles,

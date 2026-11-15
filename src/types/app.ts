@@ -65,6 +65,8 @@ export interface HistoryItem {
   isSample?: boolean;
   writingSample?: WritingSample;
   writingCorrection?: boolean;
+  /** When the user edited this dictation by hand. Later than createdAt for an older dictation. */
+  writingCorrectedAt?: string;
   /** Set when a recording produced no transcript. The audio is kept so it can be retried. */
   outcome?: 'silent' | 'cancelled';
   /** Site or app the dictation was written into. */

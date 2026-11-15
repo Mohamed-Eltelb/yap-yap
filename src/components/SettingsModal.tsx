@@ -16,13 +16,12 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences, type ForgottenStyles } from '../services/personalization';
+import { parseWritingPreferences, type ForgottenStyles, type StyleSampleSinceCorrection } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
   SettingsModalTab,
   SettingsState,
-  WritingSample,
 } from '../types/app';
 import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
@@ -45,7 +44,7 @@ interface Props {
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
   /** Styles learned since each correction, for suggesting an update. */
-  recentStyleSamples: Record<string, WritingSample[]>;
+  recentStyleSamples: Record<string, StyleSampleSinceCorrection[]>;
   /** Forgets the learned style for one category and returns what to restore on Undo. */
   onForgetLearnedStyle: (categories: string[]) => ForgottenStyles;
   onRestoreLearnedStyle: (forgotten: ForgottenStyles) => void;

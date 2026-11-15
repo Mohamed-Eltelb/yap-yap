@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
 import { proposeWritingPreferences, suggestStyleUpdate } from '../services/providers/engine';
-import { mergeStyleCorrections, parseWritingPreferences, rejectStyles, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
-import type { ProviderConfig, StyleCorrections, WritingSample } from '../types/app';
+import { mergeStyleCorrections, parseWritingPreferences, rejectStyles, STYLE_UPDATE_MIN_SAMPLES, type StyleSampleSinceCorrection, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
+import type { ProviderConfig, StyleCorrections } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
 
@@ -22,11 +22,11 @@ interface Props {
   /** Rules and styles are applied by AI cleanup, so they do nothing while it is off. */
   cleanupEnabled: boolean;
   onSave: (changes: Saved) => void;
-  /** Forgets what was learned for a category and returns what Undo puts back. */
   /** A category to bring into view when the editor opens. */
   focusCategory?: string;
   /** Styles learned since each correction, newest first. */
-  recentSamples?: Record<string, WritingSample[]>;
+  recentSamples?: Record<string, StyleSampleSinceCorrection[]>;
+  /** Forgets what was learned for a category and returns what Undo puts back. */
   onForgetStyle: (category: string) => ForgottenStyles;
   onRestoreStyle: (forgotten: ForgottenStyles) => void;
   onClose: () => void;
@@ -90,7 +90,11 @@ export function PersonalizationEditor({
       for (const [category, samples] of Object.entries(recentSamples)) {
         const correction = styleCorrections[category];
         if (!correction) continue;
-        const key = `${category}|${correction.since}|${samples.length}|${JSON.stringify(correction.rejected ?? {})}`;
+        // Asks again only after 5 more dictations, or for another provider or correction.
+        const key = [
+          category, correction.since, Math.floor(samples.length / STYLE_UPDATE_MIN_SAMPLES),
+          JSON.stringify(correction.rejected ?? {}), provider.id, provider.llmModel,
+        ].join('|');
         if (!checkedUpdates.has(key)) checkedUpdates.set(key, suggestStyleUpdate(provider, correction, samples));
         const update = await checkedUpdates.get(key);
         if (open && update) setUpdates((current) => ({ ...current, [category]: { ...update, since: correction.since } }));
@@ -157,8 +161,16 @@ export function PersonalizationEditor({
         ...correction,
       };
     }
+    // Save exactly what the review showed: saved rules keep their text and order, minus the
+    // removed ones, and new rules follow. The AI may also reorder or recase rules; that is not saved.
+    const proposedKeys = new Set(change.rules.map(ruleKey));
+    const savedKeys = new Set(rules.map(ruleKey));
+    const nextRules = [
+      ...rules.filter((rule) => proposedKeys.has(ruleKey(rule))),
+      ...change.rules.filter((rule) => !savedKeys.has(ruleKey(rule))),
+    ];
     save({
-      writingPreferences: change.rules.join('\n'),
+      writingPreferences: nextRules.join('\n'),
       styleCorrections: mergeStyleCorrections(styleCorrections, styles, new Date().toISOString()),
     }, 'Changes saved.');
   };
@@ -178,12 +190,15 @@ export function PersonalizationEditor({
       if (call !== latestCall.current) return;
       const current = new Set(rules.map(ruleKey));
       const rulesUnchanged = next.rules.length === rules.length && next.rules.every((rule) => current.has(ruleKey(rule)));
+      // Part of a request can be about a place with nothing learned yet, even when the rest changes something.
+      const unlearnedNote = next.unlearned.length
+        ? `Yap Yap hasn’t learned a style for ${listCategories(next.unlearned)} yet. It will after you dictate there a few times, and then you can correct it here.`
+        : undefined;
       if (rulesUnchanged && Object.keys(next.styles).length === 0) {
-        setNotice(next.unlearned.length
-          ? `Yap Yap hasn’t learned a style for ${listCategories(next.unlearned)} yet. It will after you dictate there a few times, and then you can correct it here.`
-          : 'Nothing to change for that. Your rules and learned style already match it.');
+        setNotice(unlearnedNote ?? 'Nothing to change for that. Your rules and learned style already match it.');
       } else {
         setProposal(next);
+        setNotice(unlearnedNote);
         setRequest('');
       }
     } catch (failure) {

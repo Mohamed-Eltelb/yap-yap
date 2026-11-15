@@ -695,6 +695,34 @@ describe('Multi-Provider Engine', () => {
     await expect(suggestStyleUpdate(provider, corrections.Messaging, mixed)).resolves.toBeUndefined();
   });
 
+  it('counts hand edits made after a correction, with the extra weight they get when learning', async () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes)).toISOString();
+    const corrections = { Messaging: { tone: 'Professional', since: at(10) } };
+    const casual = { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase' };
+    const professional = { ...casual, tone: 'Professional' };
+    const history = [
+      ...Array.from({ length: 4 }, (_, index) => ({ mode: 'dictate' as const, createdAt: at(20 + index), writingSample: professional })),
+      // Dictated before the correction, edited by hand after it.
+      { mode: 'dictate' as const, createdAt: at(1), writingSample: casual, writingCorrection: true, writingCorrectedAt: at(30) },
+      // Dictated before and never edited: not counted.
+      { mode: 'dictate' as const, createdAt: at(2), writingSample: casual },
+    ];
+    const recent = samplesSinceCorrection(history, corrections).Messaging;
+    expect(recent).toHaveLength(5);
+    expect(recent.filter((sample) => sample.corrected)).toHaveLength(1);
+    // 4 Professional against one edit worth 3: no clear majority for Casual (3 of 7), so no suggestion.
+    await expect(suggestStyleUpdate({ ...createDefaultProviders().groq, apiKey: 'test' }, corrections.Messaging, recent)).resolves.toBeUndefined();
+
+    // Forget and Undo carry the edit time too.
+    const items = history.map((item, index) => ({ ...item, id: String(index) }));
+    const forgotten = forgetWritingStyles(items, {}, ['Messaging']);
+    expect(forgotten.history[4]).not.toHaveProperty('writingCorrectedAt');
+    expect(restoreWritingStyles(forgotten.history, {}, forgotten.forgotten).history[4].writingCorrectedAt).toBe(at(30));
+    // Unknown tones are dropped when corrections are loaded.
+    expect(parseStyleCorrections({ Messaging: { tone: 'grumpy', phrasing: 'Lowercase', rejected: { tones: ['casual', 'Sleepy'] } } }))
+      .toEqual({ Messaging: { phrasing: 'Lowercase', rejected: { tones: ['Casual'] } } });
+  });
+
   it('never suggests a style the user already turned down', async () => {
     const correction = rejectStyles(
       { tone: 'Professional', phrasing: 'Standard punctuation', since: '2026-01-01T00:00:00.000Z' },

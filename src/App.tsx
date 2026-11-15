@@ -243,13 +243,17 @@ export function App() {
 
   /** Forgets the learned style for some categories, or all, and returns what it removed. */
   const forgetLearnedStyle = useCallback((categories?: string[]): ForgottenStyles => {
-    const { forgotten } = forgetWritingStyles(appState.history, appState.settings.styleCorrections, categories);
+    // Filled from the state the update actually applies to, so Undo puts back exactly what was
+    // removed, even if a new style sample was saved in between. React runs the update before
+    // the page renders again, and Undo can only be pressed after that.
+    const forgotten: ForgottenStyles = { samples: {}, styleCorrections: {} };
     setAppState((prev) => {
       const next = forgetWritingStyles(prev.history, prev.settings.styleCorrections, categories);
+      Object.assign(forgotten, next.forgotten);
       return { ...prev, history: next.history, settings: { ...prev.settings, styleCorrections: next.styleCorrections } };
     });
     return forgotten;
-  }, [appState.history, appState.settings.styleCorrections]);
+  }, []);
 
   const restoreLearnedStyle = useCallback((forgotten: ForgottenStyles) => {
     setAppState((prev) => {
@@ -1207,7 +1211,7 @@ export function App() {
           return {
             ...prev,
             history: prev.history.map((item) => item.id === id && item.text === trimmed
-              ? { ...item, writingSample: sample, writingCorrection: true }
+              ? { ...item, writingSample: sample, writingCorrection: true, writingCorrectedAt: new Date().toISOString() }
               : item),
           };
         });

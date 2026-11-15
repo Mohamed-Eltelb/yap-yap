@@ -57,6 +57,8 @@ export function parseHistoryImport(source: string, defaultProvider: ProviderId):
       category: categories.has(item.category) ? item.category : classifyTranscriptCategory(text, mode),
       writingSample: mode === 'dictate' ? parseWritingSample(item.writingSample) : undefined,
       writingCorrection: mode === 'dictate' && item.writingCorrection === true,
+      writingCorrectedAt: mode === 'dictate' && item.writingCorrection === true && typeof item.writingCorrectedAt === 'string'
+        && Number.isFinite(Date.parse(item.writingCorrectedAt)) ? new Date(item.writingCorrectedAt).toISOString() : undefined,
       writingSource: mode === 'dictate' && typeof item.writingSource === 'string' ? item.writingSource.trim().toLowerCase().slice(0, 100) || undefined : undefined,
       audioDataUrl: typeof item.audioDataUrl === 'string' && /^data:audio\/[\w.+-]+(?:;codecs=[\w.-]+)?;base64,[a-z0-9+/=]+$/i.test(item.audioDataUrl)
         ? item.audioDataUrl
