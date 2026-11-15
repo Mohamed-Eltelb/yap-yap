@@ -60,7 +60,8 @@
     "icon": "public/icons/app.png",
     "npmRebuild": false,
     "asarUnpack": [
-      "node_modules/loudness/impl/windows/*.exe"
+      "node_modules/loudness/impl/windows/*.exe",
+      "node_modules/koffi/**/*"
     ],
     "directories": {
       "output": "release"
@@ -71,7 +72,13 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": "native/windows/build/yapyap-keys.dll",
+          "to": "yapyap-keys.dll"
+        }
+      ]
     },
     "mac": {
       "target": "dmg",
