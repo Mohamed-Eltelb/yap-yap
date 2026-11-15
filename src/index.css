@@ -878,6 +878,23 @@ textarea,
   border-top: 1px solid var(--border-subtle);
 }
 
+/* A new rule for a place Yap Yap cannot recognize, waiting for the user to choose where. */
+.yy-pref-rules li.yy-pref-unplaced {
+  align-items: center;
+}
+
+.yy-pref-unplaced small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.yy-pref-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .yy-pref-rules li > span {
   flex: 1;
   min-width: 0;

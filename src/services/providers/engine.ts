@@ -719,11 +719,17 @@ function parseJsonReply(reply: string): Record<string, unknown> | undefined {
  * updated list of saved writing rules, plus corrections to the styles the app learned. Nothing
  * is saved here: the caller shows the result first.
  */
+/** A requested rule for a place Yap Yap cannot recognize, as the user named it. */
+export interface UnplacedRule {
+  text: string;
+  place: string;
+}
+
 export async function proposeWritingPreferences(
   provider: ProviderConfig,
   current: { rules: readonly string[]; profiles: readonly WritingProfile[] },
   request: string,
-): Promise<{ rules: string[]; styles: StyleCorrections; unlearned: string[] }> {
+): Promise<{ rules: string[]; styles: StyleCorrections; unlearned: string[]; unplaced: UnplacedRule[] }> {
   const reply = await callLlm(
     provider,
     'You maintain how a dictation app writes for its user: a list of writing rules the user set, and the styles the app learned from their dictation (learnedStyles, one per kind of place). Update them according to the user’s request.' +
@@ -755,19 +761,23 @@ export async function proposeWritingPreferences(
     throw new Error('The AI reply could not be read. Try again.');
   }
   // A plain string is accepted as a rule for everywhere, since smaller models drop the object.
-  const lines = parsed.rules.map((rule: unknown) => {
-    if (typeof rule === 'string') return rule;
+  // Rules for a place Yap Yap cannot recognize wait for the user to say where they apply, so a
+  // rule is never quietly widened to everywhere.
+  const unplaced: UnplacedRule[] = [];
+  const lines = parsed.rules.flatMap((rule: unknown): string[] => {
+    if (typeof rule === 'string') return [rule];
     const { text, where } = (rule ?? {}) as { text?: unknown; where?: unknown };
     if (typeof text !== 'string') throw new Error('The AI reply could not be read. Try again.');
     const place = typeof where === 'string' ? where.trim() : '';
-    // An app or site name ("Slack") becomes its kind of place. A place Yap Yap cannot recognize
-    // is reported, never quietly widened to everywhere.
+    // An app or site name ("Slack") becomes its kind of place.
     const named = sourceKey(place);
     const category = readWritingRule(`[${place}] ${cleanWritingRule(text)}`).category ?? (named ? builtInCategory(named) : undefined);
     if (!category && place && !/^(everywhere|all|any)$/i.test(place)) {
-      throw new Error(`Yap Yap can't tell when you're writing in "${place.slice(0, 40)}". Name a kind of place, like Messaging or Email.`);
+      const ruleText = cleanWritingRule(text);
+      if (ruleText) unplaced.push({ text: ruleText, place: place.slice(0, 40) });
+      return [];
     }
-    return writeWritingRule(cleanWritingRule(text), category);
+    return [writeWritingRule(cleanWritingRule(text), category)];
   });
   const rules = parseWritingPreferences(lines);
   if (rules.length < new Set(lines.map((rule) => cleanWritingRule(rule).toLowerCase().replace(/[.\s]+$/u, '')).filter(Boolean)).size) {
@@ -810,7 +820,7 @@ export async function proposeWritingPreferences(
     }
     if (correction.tone || correction.phrasing) styles[category] = correction;
   }
-  return { rules, styles, unlearned: [...unlearned] };
+  return { rules, styles, unlearned: [...unlearned], unplaced };
 }
 
 /**

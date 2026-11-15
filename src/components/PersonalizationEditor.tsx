@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, LoaderCircle, Minus, Plus, X } from 'lucide-react';
-import { proposeWritingPreferences, suggestStyleUpdate } from '../services/providers/engine';
-import { mergeStyleCorrections, parseWritingPreferences, rejectStyles, STYLE_UPDATE_MIN_SAMPLES, type StyleSampleSinceCorrection, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
+import { proposeWritingPreferences, suggestStyleUpdate, type UnplacedRule } from '../services/providers/engine';
+import { mergeStyleCorrections, parseWritingPreferences, rejectStyles, WRITING_CATEGORIES, writeWritingRule, type WritingCategory, STYLE_UPDATE_MIN_SAMPLES, type StyleSampleSinceCorrection, readWritingRule, type ForgottenStyles, type WritingProfile } from '../services/personalization';
 import type { ProviderConfig, StyleCorrections } from '../types/app';
 import { CategoryIcon } from './CategoryIcon';
 import { SettingsSubdialog } from './SettingsSubdialog';
+import { SelectMenu } from './SelectMenu';
 
 interface Saved {
   writingPreferences: string;
@@ -48,6 +49,14 @@ const listCategories =(names: readonly string[]) => new Intl.ListFormat('en', { 
 /** Rules that differ only by case or a final period are the same rule. */
 const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
 
+/** A requested rule waiting for the user to say where it applies. */
+type PlacedRule = UnplacedRule & { category?: WritingCategory | typeof EVERYWHERE };
+const EVERYWHERE = 'everywhere';
+const placeOptions = [
+  { value: EVERYWHERE, label: 'Everywhere' },
+  ...WRITING_CATEGORIES.map((category) => ({ value: category, label: category })),
+];
+
 const describeStyle = (style: { tone: string; phrasing: string }) =>
   `${style.tone} tone.${style.phrasing ? ` ${style.phrasing.replace(/[.\s]*$/u, '.')}` : ''}`;
 
@@ -64,7 +73,7 @@ export function PersonalizationEditor({
   const [request, setRequest] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [proposal, setProposal] = useState<{ rules: string[]; styles: StyleCorrections }>();
+  const [proposal, setProposal] = useState<{ rules: string[]; styles: StyleCorrections; unplaced?: PlacedRule[] }>();
   const [notice, setNotice] = useState<string>();
   /** Puts back the last change. */
   const [undo, setUndo] = useState<() => void>();
@@ -149,7 +158,7 @@ export function PersonalizationEditor({
    * habit the user corrected is never suggested back to them. Styles for a category that is no
    * longer learned are dropped, since they would apply unseen once it is learned again.
    */
-  const saveProposal = (change: { rules: string[]; styles: StyleCorrections }) => {
+  const saveProposal = (change: { rules: string[]; styles: StyleCorrections; unplaced?: PlacedRule[] }) => {
     const styles: StyleCorrections = {};
     for (const [category, correction] of Object.entries(change.styles)) {
       const profile = profiles.find((item) => item.category === category);
@@ -169,9 +178,11 @@ export function PersonalizationEditor({
     const nextRules = [
       ...rules.filter((rule) => proposedKeys.has(ruleKey(rule))),
       ...change.rules.filter((rule) => !savedKeys.has(ruleKey(rule))),
+      ...(change.unplaced ?? []).flatMap(({ text, category }) =>
+        category ? [writeWritingRule(text, category === EVERYWHERE ? undefined : category)] : []),
     ];
     save({
-      writingPreferences: nextRules.join('\n'),
+      writingPreferences: parseWritingPreferences(nextRules).join('\n'),
       styleCorrections: mergeStyleCorrections(styleCorrections, styles, new Date().toISOString()),
     }, 'Changes saved.');
   };
@@ -195,7 +206,7 @@ export function PersonalizationEditor({
       const unlearnedNote = next.unlearned.length
         ? `Yap Yap hasn’t learned a style for ${listCategories(next.unlearned)} yet. It will after you dictate there a few times, and then you can correct it here.`
         : undefined;
-      if (rulesUnchanged && Object.keys(next.styles).length === 0) {
+      if (rulesUnchanged && Object.keys(next.styles).length === 0 && next.unplaced.length === 0) {
         setNotice(unlearnedNote ?? 'Nothing to change for that. Your rules and learned style already match it.');
       } else {
         setProposal(next);
@@ -220,7 +231,13 @@ export function PersonalizationEditor({
     ...rules.map((text) => ({ text, change: proposed && !proposed.has(ruleKey(text)) ? 'removed' as const : undefined })),
     ...(proposal?.rules ?? []).filter((text) => !saved.has(ruleKey(text))).map((text) => ({ text, change: 'added' as const })),
   ];
-  const rulesChanged = rows.some((row) => row.change);
+  const unplaced = proposal?.unplaced ?? [];
+  const placeUnplaced = (index: number, category: PlacedRule['category']) => setProposal((current) => current && {
+    ...current,
+    unplaced: current.unplaced?.map((rule, at) => at === index ? { ...rule, category } : rule),
+  });
+  const waitingForPlace = unplaced.some((rule) => !rule.category);
+  const rulesChanged = rows.some((row) => row.change) || unplaced.length > 0;
   const stylesChanged = Object.keys(proposal?.styles ?? {}).length > 0;
   // Row actions wait while a change is prepared or reviewed, so Save never works from an old list.
   const idle = !proposal && !busy;
@@ -244,7 +261,7 @@ export function PersonalizationEditor({
             <h3 id={rulesHeadingId}>Your rules</h3>
             <p>Yap Yap always follows these. A rule for one kind of place applies when Yap Yap can tell you're writing there.</p>
           </div>
-          {rows.length > 0 ? (
+          {rows.length > 0 || unplaced.length > 0 ? (
             <ul className="yy-pref-rules" data-review={rulesChanged ? '' : undefined} aria-labelledby={rulesHeadingId}>
               {rows.map(({ text, change }) => (
                 <li key={`${change ?? 'saved'}-${text}`} data-change={change}>
@@ -269,6 +286,24 @@ export function PersonalizationEditor({
                       <X aria-hidden="true" size={14} />
                     </button>
                   )}
+                </li>
+              ))}
+              {unplaced.map((rule, index) => (
+                <li key={`unplaced-${index}-${rule.text}`} data-change="added" className="yy-pref-unplaced">
+                  <Plus aria-hidden="true" size={14} className="yy-pref-mark" />
+                  <span>
+                    <span className="sr-only">New rule: </span>
+                    {rule.text}
+                    <small>Yap Yap can’t tell when you’re in “{rule.place}”. Choose where this applies.</small>
+                  </span>
+                  <SelectMenu
+                    quiet
+                    label={`Where “${rule.text}” applies`}
+                    placeholder="Choose where"
+                    value={rule.category ?? ''}
+                    options={placeOptions}
+                    onChange={(category) => placeUnplaced(index, category as PlacedRule['category'])}
+                  />
                 </li>
               ))}
             </ul>
@@ -385,7 +420,9 @@ export function PersonalizationEditor({
         {proposal && (
           <div className="yy-pref-actions">
             <span>
-              {rulesChanged && proposal.rules.length === 0 ? 'This removes all your rules.' : 'Review the change before saving.'}
+              {waitingForPlace
+                ? 'Choose where each new rule applies.'
+                : rulesChanged && proposal.rules.length === 0 && unplaced.length === 0 ? 'This removes all your rules.' : 'Review the change before saving.'}
             </span>
             <button type="button" className="yy-pref-button" onClick={() => { setProposal(undefined); input.current?.focus(); }}>
               Discard
@@ -394,6 +431,7 @@ export function PersonalizationEditor({
               type="button"
               className="yy-pref-button"
               data-primary
+              disabled={waitingForPlace}
               onClick={() => saveProposal(proposal)}
             >
               Save

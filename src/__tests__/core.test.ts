@@ -639,7 +639,7 @@ describe('Multi-Provider Engine', () => {
       count: 2, corrections: 0, examples: [],
     }];
     const current = { rules: ['Use straight quotes.'], profiles };
-    const rulesOnly = (rules: string[]) => ({ rules, styles: {}, unlearned: [] });
+    const rulesOnly = (rules: string[]) => ({ rules, styles: {}, unlearned: [], unplaced: [] });
 
     await expect(proposeWritingPreferences(provider, current, 'Avoid em dashes'))
       .resolves.toEqual(rulesOnly(['Use straight quotes.', 'Avoid em dashes.']));
@@ -663,11 +663,13 @@ describe('Multi-Provider Engine', () => {
       rules: ['Use straight quotes.'],
       styles: { Messaging: { phrasing: 'Standard capitalization, concise, standard punctuation' } },
       unlearned: ['Spreadsheets'],
+      unplaced: [],
     });
     await expect(proposeWritingPreferences(provider, current, 'Be friendly in emails and on social media')).resolves.toEqual({
       rules: ['Use straight quotes.'],
       styles: { Email: { tone: 'Friendly' } },
       unlearned: ['Social platforms'],
+      unplaced: [],
     });
   });
 
@@ -1284,10 +1286,12 @@ describe('where a requested rule applies', () => {
     return proposeWritingPreferences({ ...createDefaultProviders().groq, apiKey: 'test' }, { rules: [], profiles: [] }, 'no period');
   };
 
-  it('turns an app name into its kind of place and reports places it cannot tell', async () => {
+  it('turns an app name into its kind of place and holds rules for places it cannot tell', async () => {
     expect((await ask('Slack')).rules).toEqual(['[Messaging] No final period.']);
     expect((await ask('everywhere')).rules).toEqual(['No final period.']);
-    await expect(ask('my cousin')).rejects.toThrow('can\u2019t tell'.replace('\u2019', "'"));
+    const unknown = await ask('my cousin');
+    expect(unknown.rules).toEqual([]);
+    expect(unknown.unplaced).toEqual([{ text: 'No final period.', place: 'my cousin' }]);
   });
 });
 
