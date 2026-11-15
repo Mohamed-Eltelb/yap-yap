@@ -271,6 +271,16 @@ export function writingCategoryKey(category: string): string {
   return category.normalize('NFKC').trim().toLowerCase();
 }
 
+/**
+ * Learned phrasing goes into every later cleanup prompt, so it must read as a description of
+ * casing and punctuation, never as an instruction, a link, or quoted text from a web page.
+ */
+const NOT_A_STYLE = /https?:|www\.|[`"{}<>]|\b(?:ignore|disregard|override|instructions?|prompt|system|assistant|you must|respond|reply with|answer)\b/iu;
+
+export function styleDescription(text: string): string {
+  return text && !NOT_A_STYLE.test(text) ? text : '';
+}
+
 export function parseWritingSample(value: unknown): WritingSample | undefined {
   if (!value || typeof value !== 'object') return;
   const sample = value as Record<string, unknown>;
@@ -282,8 +292,9 @@ export function parseWritingSample(value: unknown): WritingSample | undefined {
   const tone = label && (knownTone(label)
     ?? WRITING_TONES.find((name) => label.toLowerCase().startsWith(name.toLowerCase()))
     ?? 'Neutral');
-  const phrasing = readLabel(sample.phrasing, 120);
-  if (category && tone && phrasing) return { category, tone, phrasing, ...(sample.fromUserText === true && { fromUserText: true }) };
+  // A phrasing that looks like an instruction or carries a link is dropped; the tone still counts.
+  const phrasing = styleDescription(readLabel(sample.phrasing, 120));
+  if (category && tone) return { category, tone, phrasing, ...(sample.fromUserText === true && phrasing && { fromUserText: true }) };
 }
 
 type ProfileEntry = Pick<HistoryItem, 'mode' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'> & { text?: string };
@@ -423,7 +434,7 @@ export function parseStyleCorrections(value: unknown): StyleCorrections {
     const fields = entry as Record<string, unknown>;
     // Only known tones, as everywhere else a tone is chosen.
     const tone = knownTone(fields.tone);
-    const phrasing = readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH);
+    const phrasing = styleDescription(readLabel(fields.phrasing, MAX_CORRECTED_PHRASING_LENGTH));
     if (!tone && !phrasing) continue;
     const since = typeof fields.since === 'string' && !Number.isNaN(Date.parse(fields.since)) ? fields.since : undefined;
     const rejectedFields = (fields.rejected && typeof fields.rejected === 'object' ? fields.rejected : {}) as Record<string, unknown>;
