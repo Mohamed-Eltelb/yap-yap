@@ -107,6 +107,13 @@ describe('Shortcut prefixes', () => {
     expect(startsShortcut(bindings, new Map([[Key.AltRight, 1], [Key.X, 2]]), true)).toBe(false);
   });
 
+  it('does not start a shortcut on its second key alone', () => {
+    const chords = [{ keys: [[Key.AltRight], [Key.ShiftRight]] }, { keys: [[Key.AltRight], [Key.Space]] }];
+    expect(startsShortcut(chords, new Map([[Key.Space, 1]]), true)).toBe(false);
+    expect(startsShortcut(chords, new Map([[Key.ShiftRight, 1]]), true)).toBe(false);
+    expect(startsShortcut(chords, new Map([[Key.AltRight, 1], [Key.Space, 2]]), true)).toBe(true);
+  });
+
   it('starts a shortcut on an AltGr press', () => {
     const altGr = new Map([[Key.Ctrl, 100], [Key.AltRight, 105]]);
     expect(startsShortcut(bindings, altGr, true)).toBe(true);

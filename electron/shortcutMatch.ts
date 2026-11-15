@@ -21,7 +21,10 @@ function isAltGrCtrl(pressed: ReadonlyMap<number, number>, windows: boolean): bo
   return windows && alt !== undefined && ctrl !== undefined && alt >= ctrl && alt - ctrl <= 15;
 }
 
-/** True when every pressed key belongs to one shortcut, so the keys may still become it. */
+/**
+ * True when the keys may still become a shortcut: its first key is down and every
+ * pressed key belongs to it. Space or Shift alone must not count for Right Alt+Space.
+ */
 export function startsShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,
@@ -30,6 +33,7 @@ export function startsShortcut<T extends { keys: number[][] }>(
   const ignore = isAltGrCtrl(pressed, windows) ? UiohookKey.Ctrl : undefined;
   const keys = [...pressed.keys()].filter((key) => key !== ignore);
   return keys.length > 0 && bindings.some((binding) =>
+    binding.keys[0]?.some((key) => pressed.has(key)) &&
     keys.every((key) => binding.keys.some((options) => options.includes(key))));
 }
 
