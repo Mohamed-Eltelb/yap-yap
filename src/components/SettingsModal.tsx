@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences, type ForgottenStyles, type StyleSampleSinceCorrection } from '../services/personalization';
+import { parseWritingPreferences, type DestinationEntry, type ForgottenStyles, type SourceChoice, type StyleSampleSinceCorrection } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -30,6 +30,7 @@ import { SelectMenu } from './SelectMenu';
 import { ProviderSettings } from './ProviderSettings';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
+import { SourceCategoriesDialog } from './SourceCategoriesDialog';
 
 interface Props {
   open: boolean;
@@ -50,6 +51,8 @@ interface Props {
   onRestoreLearnedStyle: (forgotten: ForgottenStyles) => void;
   /** Forgets every learned style and correction. Rules stay. */
   onResetLearnedStyle: () => void;
+  /** Apps and sites the user dictated into or set a kind of place for. */
+  destinations: DestinationEntry[];
   stats: InsightsStats;
   toast: string | null;
 }
@@ -141,6 +144,7 @@ export function SettingsModal({
   onForgetLearnedStyle,
   onRestoreLearnedStyle,
   onResetLearnedStyle,
+  destinations,
   stats,
   toast,
 }: Props) {
@@ -153,6 +157,14 @@ export function SettingsModal({
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const chosenSources = destinations.filter((entry) => entry.choice).length;
+  const sourcesSummary = destinations.length
+    ? [
+        `${destinations.length} ${destinations.length === 1 ? 'app or site' : 'apps and sites'}`,
+        chosenSources > 0 && `${chosenSources} set by you`,
+      ].filter(Boolean).join(' · ')
+    : 'Choose what kind of place an app or site is, or stop learning there.';
   /** The category to show first when the editor opens from a report row. */
   const [editorCategory, setEditorCategory] = useState<string>();
   const openPreferencesEditor = (category?: string) => {
@@ -723,6 +735,23 @@ export function SettingsModal({
                   </div>
                 )}
 
+                {settings.personalizationEnabled && (
+                  <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-medium">Apps and sites</h3>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">{sourcesSummary}</p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setSourcesOpen(true)}
+                      className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--border-strong)] px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                      {destinations.length ? 'Manage' : 'Add'}
+                    </button>
+                  </div>
+                )}
+
                 <div data-personalization-disabled={!settings.personalizationEnabled} className="yy-personalization-panel rounded-[18px] p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-[var(--text-secondary)]">
@@ -1007,6 +1036,14 @@ export function SettingsModal({
             </button>
           </div>
         </SettingsSubdialog>
+      )}
+      {open && activeTab === 'personalization' && sourcesOpen && (
+        <SourceCategoriesDialog
+          destinations={destinations}
+          choices={settings.sourceCategories as Record<string, SourceChoice>}
+          onChange={(sourceCategories) => onUpdateSettings({ sourceCategories })}
+          onClose={() => setSourcesOpen(false)}
+        />
       )}
       {open && activeTab === 'personalization' && preferencesEditorOpen && (
         <PersonalizationEditor

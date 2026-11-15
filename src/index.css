@@ -1453,6 +1453,72 @@ textarea,
   gap: 10px;
 }
 
+/* Apps and sites */
+.yy-source-body {
+  gap: 8px;
+}
+
+.yy-source-name {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.yy-source-name > span {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yy-source-name small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.yy-source-empty,
+.yy-source-error {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-source-error {
+  color: #dc2626;
+}
+
+.yy-source-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.yy-source-add input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.yy-source-add input::placeholder {
+  color: var(--text-secondary);
+}
+
+.yy-source-add input:focus-visible,
+.yy-source-add button:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+.yy-source-add button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .yy-variant-row {
   display: flex;
   align-items: center;

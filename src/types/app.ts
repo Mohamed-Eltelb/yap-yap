@@ -135,6 +135,11 @@ export interface SettingsState {
   styleCorrections: StyleCorrections;
   /** Learned style samples whose History items are gone. Kept until the user resets learned style. */
   retainedStyleSamples: RetainedStyleSample[];
+  /**
+   * The user's category for an app or site (by domain or app name), or "off" to not learn style
+   * there. Wins over the built-in rules and over what was learned.
+   */
+  sourceCategories: Record<string, string>;
   contextAwareness: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;

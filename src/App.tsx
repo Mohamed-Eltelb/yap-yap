@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetRetainedStyles, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -355,6 +355,11 @@ export function App() {
   );
 
   const learnedSources = useMemo(() => buildSourceCategories(learningHistory), [learningHistory]);
+  // Apps and sites for the list in Personalization, with what Yap Yap would pick for each.
+  const destinations = useMemo(
+    () => listDestinations(completedHistory, learnedSources, appState.settings.sourceCategories as Record<string, SourceChoice>),
+    [completedHistory, learnedSources, appState.settings.sourceCategories]
+  );
 
   // Whatever removes dictations from History (delete, clear, retention), their learned style stays.
   const previousHistoryRef = useRef<HistoryItem[] | null>(null);
@@ -511,9 +516,11 @@ export function App() {
             let writingStyles: typeof stats.categoryBreakdown | undefined;
             let knownCategory: string | undefined;
             if (mode === 'dictate' && appState.settings.personalizationEnabled) {
-              // Only the built-in app and site rules (or the retried item's own category) override the
-              // model when learning; a learned guess must stay open to correction.
-              const fixedCategory = categoryForDestination(location) ?? retried?.writingSample?.category;
+              // The user's choice for this app or site wins. After it, only the built-in rules (or the
+              // retried item's own category) override the model; a learned guess stays open to correction.
+              const choice = source ? appState.settings.sourceCategories[source] : undefined;
+              const chosenCategory = choice && choice !== DONT_LEARN ? choice : undefined;
+              const fixedCategory = chosenCategory ?? categoryForDestination(location) ?? retried?.writingSample?.category;
               knownCategory = fixedCategory ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
                 ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
@@ -526,7 +533,8 @@ export function App() {
                     ...appState.history.slice(0, 30).map((item) => item.text),
                   ])
                 : undefined;
-              learnStyle = () => detectWritingStyle(rawText, styleProvider, {
+              // "Don't learn here": the dictation is still cleaned up, but teaches nothing.
+              if (choice !== DONT_LEARN) learnStyle = () => detectWritingStyle(rawText, styleProvider, {
                 category: fixedCategory,
                 destination: location,
                 existingWriting,
@@ -1456,6 +1464,7 @@ export function App() {
         recentStyleSamples={recentStyleSamples}
         onForgetLearnedStyle={forgetLearnedStyle}
         onRestoreLearnedStyle={restoreLearnedStyle}
+        destinations={destinations}
         onResetLearnedStyle={() => {
           forgetLearnedStyle();
           showToast('Learned style reset');

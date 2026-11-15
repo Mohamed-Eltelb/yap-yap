@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   writingPreferences: '',
   styleCorrections: {},
   retainedStyleSamples: [],
+  sourceCategories: {},
   contextAwareness: true,
   floatingHud: true,
   historyRetention: 'forever',

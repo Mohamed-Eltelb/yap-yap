@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, builtInCategory, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -1173,5 +1173,31 @@ describe('learned style outlives History', () => {
     expect(forgotten.retained.map((sample) => sample.id)).toEqual(['m']);
     expect(restoreRetainedStyles(forgotten.retained, forgotten.forgotten)).toEqual(retained);
     expect(forgetRetainedStyles(retained).retained).toEqual([]);
+  });
+});
+
+describe('apps and sites the user sets', () => {
+  it('keeps only valid choices and clean keys', () => {
+    expect(parseSourceCategories({ 'https://www.Notion.so/page': 'document editors', slack: 'off', odd: 'Nowhere', '': 'Email' }))
+      .toEqual({ 'notion.so': 'Document editors', slack: 'off' });
+    expect(parseSourceCategories('bad')).toEqual({});
+    const saved = getInitialState();
+    expect(sanitizeLoadedState({ ...saved, settings: { ...saved.settings, sourceCategories: { 'x.app': 'Email' } } }).settings.sourceCategories)
+      .toEqual({ 'x.app': 'Email' });
+  });
+
+  it('lists apps and sites with what Yap Yap would pick and the user’s choice', () => {
+    const learned = new Map([['tool.app', 'Project management']]);
+    const list = listDestinations(
+      [{ writingSource: 'tool.app' }, { writingSource: 'tool.app' }, { writingSource: 'mail.google.com' }],
+      learned,
+      { 'notion.so': 'Messaging' },
+    );
+    expect(list).toEqual([
+      { key: 'tool.app', automatic: 'Project management', builtIn: false, choice: undefined, uses: 2 },
+      { key: 'mail.google.com', automatic: 'Email', builtIn: true, choice: undefined, uses: 1 },
+      { key: 'notion.so', automatic: 'Document editors', builtIn: true, choice: 'Messaging', uses: 0 },
+    ]);
+    expect(builtInCategory('slack')).toBe('Messaging');
   });
 });

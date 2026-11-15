@@ -38,6 +38,67 @@ export interface WritingDestination {
   domain?: string;
 }
 
+/** A user's choice for an app or site: a category, or "off" to not learn style there. */
+export const DONT_LEARN = 'off';
+export type SourceChoice = WritingCategory | typeof DONT_LEARN;
+const MAX_SOURCE_CHOICES = 200;
+
+/** Saved app and site choices, keeping known categories and clean keys only. */
+export function parseSourceCategories(value: unknown): Record<string, SourceChoice> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const choices: Record<string, SourceChoice> = {};
+  for (const [rawKey, rawChoice] of Object.entries(value).slice(0, MAX_SOURCE_CHOICES)) {
+    const key = sourceKey(rawKey);
+    const choice = rawChoice === DONT_LEARN
+      ? DONT_LEARN
+      : WRITING_CATEGORIES.find((name) => typeof rawChoice === 'string' && writingCategoryKey(name) === writingCategoryKey(rawChoice));
+    if (key && choice) choices[key] = choice;
+  }
+  return choices;
+}
+
+/** The key an app or site is stored under, from what the user typed or what was captured. */
+export function sourceKey(value: string): string | undefined {
+  const text = value.trim().toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^www\./, '')
+    .slice(0, 100)
+    .trim();
+  return text || undefined;
+}
+
+/** The category the built-in rules give an app or site key, if any. */
+export function builtInCategory(key: string): WritingCategory | undefined {
+  const looksLikeDomain = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(key);
+  return looksLikeDomain ? categoryForDestination({ domain: key }) : categoryForDestination({ application: key });
+}
+
+export interface DestinationEntry {
+  key: string;
+  /** What Yap Yap would pick without the user's choice. */
+  automatic?: string;
+  /** Whether that comes from the built-in rules rather than earlier dictations. */
+  builtIn: boolean;
+  choice?: SourceChoice;
+  uses: number;
+}
+
+/** Apps and sites the user dictated into or set a choice for, most used first. */
+export function listDestinations(
+  items: readonly Pick<HistoryItem, 'writingSource'>[],
+  learned: ReadonlyMap<string, string>,
+  choices: Readonly<Record<string, SourceChoice>>,
+): DestinationEntry[] {
+  const uses = new Map<string, number>();
+  for (const item of items) if (item.writingSource) uses.set(item.writingSource, (uses.get(item.writingSource) ?? 0) + 1);
+  for (const key of Object.keys(choices)) if (!uses.has(key)) uses.set(key, 0);
+  return [...uses].map(([key, count]) => {
+    const builtIn = builtInCategory(key);
+    return { key, automatic: builtIn ?? learned.get(key), builtIn: !!builtIn, choice: choices[key], uses: count };
+  }).sort((a, b) => b.uses - a.uses || a.key.localeCompare(b.key));
+}
+
 /** Stable name for where a dictation went: the site in a browser, otherwise the app. */
 /** Browsers host every kind of site, so without a domain the browser alone says nothing. */
 const BROWSER_APPS = /^(?:google chrome|chromium|chrome|microsoft edge|msedge|edge|(?:mozilla )?firefox|brave(?: browser)?|vivaldi|opera(?: gx)?|arc|comet|zen(?: browser)?|safari)$/i;
