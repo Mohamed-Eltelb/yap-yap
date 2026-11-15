@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, readyStyles, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -525,8 +525,8 @@ export function App() {
               const fixedCategory = chosenCategory ?? categoryForDestination(location) ?? retried?.writingSample?.category;
               knownCategory = fixedCategory ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
-                ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
-                : stats.categoryBreakdown;
+                ? readyStyles(stats.categoryBreakdown).filter((item) => item.category === knownCategory)
+                : readyStyles(stats.categoryBreakdown);
               const styleProvider = llmProvider;
               // Text the user wrote before the caret, without Yap Yap's own earlier pastes.
               const existingWriting = shareText
@@ -1133,7 +1133,7 @@ export function App() {
 
     try {
       const writingStyles = item.mode === 'dictate' && appState.settings.personalizationEnabled
-        ? stats.categoryBreakdown.filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
+        ? readyStyles(stats.categoryBreakdown).filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
         : undefined;
       const processed = await processTranscriptWithLlm(
         item.rawText,

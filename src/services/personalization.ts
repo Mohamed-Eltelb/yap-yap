@@ -564,6 +564,17 @@ export function applyStyleCorrections<T extends WritingProfile>(
   });
 }
 
+/** Dictations a category needs before its learned style shapes cleanup. */
+export const MIN_STYLE_SAMPLES = 3;
+
+/**
+ * Learned styles sure enough to apply: at least MIN_STYLE_SAMPLES dictations, a hand correction,
+ * or a style the user set. One odd dictation in a new category then changes nothing.
+ */
+export function readyStyles<T extends WritingProfile & { corrected?: boolean }>(profiles: readonly T[]): T[] {
+  return profiles.filter((profile) => profile.corrected || profile.corrections > 0 || profile.count >= MIN_STYLE_SAMPLES);
+}
+
 /** What forgetting removed, so it can be put back. */
 export interface ForgottenStyles {
   samples: Record<string, Pick<HistoryItem, 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'>>;

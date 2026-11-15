@@ -1,4 +1,4 @@
-import { applyStyleCorrections, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, readyStyles, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -795,6 +795,12 @@ describe('Multi-Provider Engine', () => {
       { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points', fromUserText: true } },
     ]);
     expect(profile.phrasing).toBe('Sentence case, no exclamation points; Full punctuation');
+  });
+
+  it('applies a learned style only after enough dictations, a correction, or a user-set style', () => {
+    const profile = (count: number, corrections = 0, corrected?: boolean) => ({ category: 'Email', tone: 'Formal', phrasing: '', count, corrections, examples: [], ...(corrected && { corrected }) });
+    expect(readyStyles([profile(1), profile(2)])).toEqual([]);
+    expect(readyStyles([profile(3), profile(1, 1), profile(1, 0, true)])).toHaveLength(3);
   });
 
   it('uses a style learned from a paste edit only once another sample agrees', () => {
