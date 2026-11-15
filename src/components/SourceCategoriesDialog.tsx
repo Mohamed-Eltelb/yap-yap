@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
+import { AppWindow, Globe } from 'lucide-react';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SelectMenu } from './SelectMenu';
 import {
   builtInCategory,
   DONT_LEARN,
+  isWebsiteKey,
   sourceKey,
   sourceLabel,
   WRITING_CATEGORIES,
@@ -88,6 +90,9 @@ export function SourceCategoriesDialog({ destinations, choices, onChange, onClos
                   : 'Pick a kind of place';
           return (
             <div className="yy-variant-row yy-source-row" key={entry.key}>
+              {isWebsiteKey(entry.key)
+                ? <Globe className="yy-source-icon" size={16} aria-label="Website" role="img" />
+                : <AppWindow className="yy-source-icon" size={16} aria-label="App" role="img" />}
               <span className="yy-source-name">
                 <span title={entry.key}>{sourceLabel(entry.key)}</span>
                 <small>{detail}</small>

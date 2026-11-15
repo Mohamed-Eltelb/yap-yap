@@ -1458,8 +1458,14 @@ textarea,
   gap: 8px;
 }
 
+.yy-source-icon {
+  flex: none;
+  color: var(--text-secondary);
+}
+
 .yy-source-name {
   display: grid;
+  flex: 1;
   min-width: 0;
   gap: 1px;
 }

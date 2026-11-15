@@ -70,10 +70,14 @@ export function sourceKey(value: string): string | undefined {
   return text || undefined;
 }
 
+/** Whether an app or site key is a website (a domain) rather than an app name. */
+export function isWebsiteKey(key: string): boolean {
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(key);
+}
+
 /** The category the built-in rules give an app or site key, if any. */
 export function builtInCategory(key: string): WritingCategory | undefined {
-  const looksLikeDomain = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(key);
-  return looksLikeDomain ? categoryForDestination({ domain: key }) : categoryForDestination({ application: key });
+  return isWebsiteKey(key) ? categoryForDestination({ domain: key }) : categoryForDestination({ application: key });
 }
 
 export interface DestinationEntry {
@@ -138,7 +142,7 @@ const SOURCE_NAMES: Record<string, string> = {
 
 /** How an app or site key reads in the list: sites as they are, apps in title case. */
 export function sourceLabel(key: string): string {
-  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(key)) return key;
+  if (isWebsiteKey(key)) return key;
   return SOURCE_NAMES[key] ?? key.replace(/(^|[\s-])(\p{Ll})/gu, (_, lead: string, letter: string) => lead + letter.toUpperCase());
 }
 
