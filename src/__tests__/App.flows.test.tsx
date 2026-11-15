@@ -139,6 +139,26 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(lastSaved().history[0]).toMatchObject({ text: 'Hey Sam. See you soon.', writingSource: 'mail.google.com', writingSample: { category: 'Email' } }));
   });
 
+  it('drops a dictation cancelled while it is still processing', async () => {
+    seed();
+    let finish: (text: string) => void = () => undefined;
+    engine.transcribeAudio.mockReturnValueOnce(new Promise<string>((resolve) => { finish = resolve; }));
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(engine.transcribeAudio).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'cancel' }); });
+    await act(async () => {
+      finish('hey sam see you soon');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(desktop.api.pasteText).not.toHaveBeenCalled();
+    expect(lastSaved().history).toHaveLength(0);
+  });
+
   it('does not apply a style learned from a single dictation', async () => {
     seed({ history: [dictation(sample('Email'))] });
     await dictate();

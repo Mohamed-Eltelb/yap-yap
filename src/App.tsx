@@ -102,6 +102,7 @@ export function App() {
   const mutedForRecording = useRef(false);
   const muteTimer = useRef<number | null>(null);
   const lastTriggerTimeRef = useRef<number>(0);
+  const processingRunRef = useRef(0);
   const busyNoticeTimer = useRef<number | undefined>(undefined);
   const hudRef = useRef<HudState>(hud);
   const openedTargetsDuringRecording = useRef(false);
@@ -421,6 +422,9 @@ export function App() {
       }
 
       const llmSelection = appState.settings.activeLlmProvider;
+      // Cancelling while this runs starts a new run, and this one then stops without a trace.
+      const run = ++processingRunRef.current;
+      const dropped = () => run !== processingRunRef.current;
 
       setHud({
         status: 'processing',
@@ -434,6 +438,7 @@ export function App() {
           dictionaryWords: dictWords,
           languageVariants: getPreferredLanguageVariants(appState.settings.languageVariants),
         });
+        if (dropped()) return;
 
         if (!rawText) {
           playInteractionSound('error', appState.settings.interactionSounds);
@@ -471,6 +476,7 @@ export function App() {
         // App and site always set the tone. Text near the caret stays on the device unless
         // context awareness is on.
         const destination = mode === 'dictate' || mode === 'translate' ? await destinationProbe : undefined;
+        if (dropped()) return;
         const location = destination && { application: destination.application, domain: destination.domain };
         // Style learning covers dictation only.
         // A retry has no live destination, so it keeps the one the dictation went to.
@@ -572,6 +578,7 @@ export function App() {
                 },
               }
             );
+            if (dropped()) return;
             finalText = processed.finalText || rawText;
             answer = processed.answer;
             if (mode !== 'dictate') {
@@ -696,6 +703,7 @@ export function App() {
 
         const desktop = window.yapyap;
         const delivered = mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
+        if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
         const pasted = await deliverDictationResult(
           mode,
@@ -745,6 +753,7 @@ export function App() {
           questionText: mode === 'ask' ? rawText : undefined,
         });
       } catch (err) {
+        if (dropped()) return;
         retryAudioRef.current = [
           audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste,
         ];
@@ -773,8 +782,10 @@ export function App() {
     const destinationProbe = currentMode === 'dictate' || currentMode === 'translate'
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
     setHud((current) => ({ ...current, status: 'processing' }));
+    const run = processingRunRef.current;
     try {
       const { blob, durationMs, dataUrl, mimeType } = await session.stop();
+      if (run !== processingRunRef.current) return;
       const targets = appState.settings.translationTargets;
       const selectedTarget = currentMode === 'translate'
         ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
@@ -797,6 +808,12 @@ export function App() {
   const recordingSinceRef = useRef(0);
 
   const cancelRecording = useCallback(() => {
+    // Cancelling a dictation still being processed drops it: no paste, no history entry.
+    if (hudRef.current.status === 'processing') {
+      processingRunRef.current += 1;
+      setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+      return;
+    }
     retryAudioRef.current = null;
     recorderStartRef.current = null;
     const session = recorderRef.current;
