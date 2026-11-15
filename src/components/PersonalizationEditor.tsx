@@ -26,10 +26,11 @@ interface Props {
   onOpenProviders: () => void;
 }
 
+/** Short labels keep the chips on one line. A click fills in the full request. */
 const suggestions = [
-  'No period at the end of chat messages',
-  'Write numbers as digits',
-  'Use British spelling',
+  { label: 'No period in chats', request: 'No period at the end of chat messages' },
+  { label: 'Numbers as digits', request: 'Write numbers as digits' },
+  { label: 'British spelling', request: 'Use British spelling' },
 ];
 
 /** Rules that differ only by case or a final period are the same rule. */
@@ -219,6 +220,8 @@ export function PersonalizationEditor({
           )}
         </section>
 
+        {/* Stays at the bottom of the dialog while the lists scroll behind it. */}
+        <div className="yy-pref-dock">
         {proposal && (
           <div className="yy-pref-actions">
             <span>
@@ -261,6 +264,25 @@ export function PersonalizationEditor({
           )}
         </div>
 
+        {provider && !request && !proposal && !busy && (
+          <div className="yy-pref-suggestions">
+            {suggestions.map(({ label, request: text }) => (
+              <button
+                key={label}
+                type="button"
+                title={text}
+                onClick={() => {
+                  setRequest(text);
+                  setError(undefined);
+                  input.current?.focus();
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {provider ? (
           <form className="yy-pref-composer" onSubmit={(event) => void submit(event)}>
             <label htmlFor={inputId} className="sr-only">Add a rule or tell Yap Yap what it got wrong</label>
@@ -297,24 +319,7 @@ export function PersonalizationEditor({
         )}
 
         {error && <p role="alert" className="yy-pref-error">{error}</p>}
-
-        {provider && !request && !proposal && !busy && (
-          <div className="yy-pref-suggestions">
-            {suggestions.map((text) => (
-              <button
-                key={text}
-                type="button"
-                onClick={() => {
-                  setRequest(text);
-                  setError(undefined);
-                  input.current?.focus();
-                }}
-              >
-                {text}
-              </button>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
     </SettingsSubdialog>
   );

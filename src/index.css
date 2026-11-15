@@ -829,9 +829,30 @@ textarea,
   --pref-removed: #b91c1c;
   display: grid;
   gap: 10px;
-  padding: 4px 22px 20px;
+  padding: 4px 22px 0;
   font-size: 13.5px;
   line-height: 1.5;
+}
+
+/* Review actions and the request box stay pinned to the bottom; the lists scroll behind. */
+.yy-pref-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin: 0 -22px;
+  padding: 10px 22px 20px;
+  background: var(--bg-modal);
+}
+
+/* A short fade above the dock so scrolled content does not end in a hard edge. */
+.yy-pref-dock::before {
+  position: absolute;
+  inset: -16px 0 100%;
+  background: linear-gradient(to bottom, transparent, var(--bg-modal));
+  content: '';
+  pointer-events: none;
 }
 
 .dark .yy-pref-editor {
