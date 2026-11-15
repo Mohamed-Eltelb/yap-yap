@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, isStyleEdit, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyStyleCorrections, buildSourceCategories, categoryForDestination, dictionaryWordsFor, forgetWritingStyles, isStyleEdit, userWrittenText, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -345,6 +345,9 @@ export function App() {
     void window.yapyap?.setSystemMute(false).catch(console.warn);
   }, []);
 
+  /** What Yap Yap pasted lately, so its own output at the caret is never learned as the user's writing. */
+  const ownDeliveriesRef = useRef<string[]>([]);
+
   const processAudioPipeline = useCallback(
     async (
       audioBlob: Blob,
@@ -481,11 +484,18 @@ export function App() {
                 ? stats.categoryBreakdown.filter((item) => item.category === knownCategory)
                 : stats.categoryBreakdown;
               const styleProvider = llmProvider;
+              // Text the user wrote before the caret, without Yap Yap's own earlier pastes.
+              const existingWriting = shareText
+                ? userWrittenText(destination?.textBefore, [
+                    ...ownDeliveriesRef.current,
+                    ...appState.history.slice(0, 30).map((item) => item.text),
+                  ])
+                : undefined;
               learnStyle = () => detectWritingStyle(rawText, styleProvider, {
                 category: fixedCategory,
                 destination: location,
-                existingWriting: shareText ? destination?.textBefore?.trim() || undefined : undefined,
-              });
+                existingWriting,
+              }).then((sample) => sample && existingWriting ? { ...sample, fromUserText: true } : sample);
             }
             const processed = await processTranscriptWithLlm(
               rawText,
@@ -615,6 +625,7 @@ export function App() {
 
         const desktop = window.yapyap;
         const delivered = mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
+        ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
         const pasted = await deliverDictationResult(
           mode,
           delivered,

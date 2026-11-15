@@ -503,7 +503,7 @@ export async function processTranscriptWithLlm(
   const styles = (options.writingStyles ?? []).map((style) => ({
     context: style.category,
     tone: style.tone,
-    phrasing: style.phrasing,
+    phrasing: style.phrasing || undefined,
     correctedExamples: style.examples.length ? style.examples : undefined,
   }));
   const styleClause = styles.length
@@ -816,7 +816,7 @@ export async function suggestStyleUpdate(
   if (recent.length === 0) return;
   // The newest dozen is enough to judge. A hand edit counts as three dictations, as it does when
   // the style is learned, so it is repeated in what is weighed.
-  const weighed = recent.slice(0, 12).flatMap((sample) => Array<WritingSample>(sample.corrected ? 3 : 1).fill(sample));
+  const weighed = recent.slice(0, 12).flatMap((sample) => Array<StyleSampleSinceCorrection>(sample.corrected ? 3 : 1).fill(sample));
   const suggestion: { tone?: string; phrasing?: string } = {};
   const rejectedTones = new Set((correction.rejected?.tones ?? []).map((tone) => tone.toLowerCase()));
   const rejectedPhrasings = correction.rejected?.phrasings ?? [];
@@ -834,7 +834,9 @@ export async function suggestStyleUpdate(
   }
 
   // Phrasing is free text, so the model judges whether it really contradicts the correction.
-  if (correction.phrasing) {
+  // Only the user's own writing counts; speech output says nothing about their habits.
+  const written = weighed.filter((sample) => sample.corrected || sample.fromUserText);
+  if (correction.phrasing && written.length >= 3) {
     try {
       const reply = await callLlm(
         provider,
@@ -849,7 +851,7 @@ export async function suggestStyleUpdate(
         '\nReturn only JSON: {"closest": "correction"}, {"closest": "rejected"}, or {"closest": "new", "phrasing": "..."}.' +
         ' "phrasing" describes how the user writes now, in the same style as the descriptions, for example "Lowercase, no punctuation": casing and punctuation only, in English, at most 10 words.' +
         ' It describes the recent writing, never the correction, and never explains the difference.',
-        JSON.stringify({ correction: correction.phrasing, rejected: rejectedPhrasings, recent: weighed.map(({ phrasing }) => phrasing) }),
+        JSON.stringify({ correction: correction.phrasing, rejected: rejectedPhrasings, recent: written.map(({ phrasing }) => phrasing) }),
       );
       const parsed = parseJsonReply(reply);
       const phrasing = typeof parsed?.phrasing === 'string' ? parsed.phrasing.replace(/\s+/gu, ' ').trim().replace(/[.\s]+$/u, '') : '';

@@ -48,7 +48,8 @@ const listCategories =(names: readonly string[]) => new Intl.ListFormat('en', { 
 /** Rules that differ only by case or a final period are the same rule. */
 const ruleKey = (rule: string) => rule.toLowerCase().replace(/[.\s]+$/u, '');
 
-const describeStyle = (style: { tone: string; phrasing: string }) => `${style.tone} tone. ${style.phrasing.replace(/[.\s]*$/u, '.')}`;
+const describeStyle = (style: { tone: string; phrasing: string }) =>
+  `${style.tone} tone.${style.phrasing ? ` ${style.phrasing.replace(/[.\s]*$/u, '.')}` : ''}`;
 
 export function PersonalizationEditor({
   preferences, profiles, styleCorrections, provider, cleanupEnabled, focusCategory, recentSamples, onSave, onForgetStyle, onRestoreStyle, onClose, onOpenProviders,

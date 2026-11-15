@@ -1,4 +1,4 @@
-import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, forgetWritingStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -673,7 +673,7 @@ describe('Multi-Provider Engine', () => {
 
   it('suggests updating a correction only after enough new dictations disagree', async () => {
     const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes)).toISOString();
-    const sample = { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase, no punctuation' };
+    const sample = { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase, no punctuation', fromUserText: true };
     const corrections = { Messaging: { tone: 'Neutral', phrasing: 'Standard punctuation', since: at(10) } };
     const history = Array.from({ length: 7 }, (_, index) => ({ mode: 'dictate' as const, createdAt: at(20 - index * 2), writingSample: sample }));
     // Dictations before the correction (minutes 8 and 10) do not count, so 5 remain.
@@ -735,7 +735,7 @@ describe('Multi-Provider Engine', () => {
     expect(parseStyleCorrections({ Messaging: { ...correction, rejected: { phrasings: many } } }).Messaging.rejected)
       .toEqual({ phrasings: many.slice(-5) });
 
-    const recent = Array.from({ length: 5 }, () => ({ category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation' }));
+    const recent = Array.from({ length: 5 }, () => ({ category: 'Messaging', tone: 'Casual', phrasing: 'no punctuation', fromUserText: true }));
     const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
     const reply = (content: string) => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content } }] }) });
     const fetchMock = vi.fn().mockResolvedValue(reply('{"closest": "new", "phrasing": "No punctuation."}'));
@@ -788,9 +788,9 @@ describe('Multi-Provider Engine', () => {
 
   it('joins learned phrasings without stray periods', () => {
     const [profile] = buildWritingProfiles([
-      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points.' } },
-      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Full punctuation' } },
-      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points' } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points.', fromUserText: true } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Full punctuation', fromUserText: true } },
+      { mode: 'dictate', writingSample: { category: 'Email', tone: 'Formal', phrasing: 'Sentence case, no exclamation points', fromUserText: true } },
     ]);
     expect(profile.phrasing).toBe('Sentence case, no exclamation points; Full punctuation');
   });
@@ -944,8 +944,9 @@ it('keeps categories to the fixed set and lets hand corrections lead the profile
     { mode: 'ask', writingSample: messaging },
   ]);
   expect(profiles).toEqual([
-    { category: 'Email', tone: 'Formal', phrasing: 'Full sentences; Concise', count: 3, corrections: 1, examples: ['Dear Sam, thank you.'] },
-    { category: 'Messaging', tone: 'Casual', phrasing: 'Lowercase', count: 1, corrections: 0, examples: [] },
+    // Plain dictations teach tone only: their phrasing describes the speech recognizer, not the user.
+    { category: 'Email', tone: 'Formal', phrasing: 'Full sentences', count: 3, corrections: 1, examples: ['Dear Sam, thank you.'] },
+    { category: 'Messaging', tone: 'Casual', phrasing: '', count: 1, corrections: 0, examples: [] },
   ]);
   // A correction counts as three dictations, so enough new dictations still move the style.
   const later = buildWritingProfiles([
@@ -1087,5 +1088,40 @@ describe('learning from hand edits', () => {
     expect(extractCorrections('Recieve it now', 'Recieve it now', 'Receive it now')).toEqual([]);
     expect(extractCorrections('deploy to versel now', 'deploy to versel now', 'deploy to Vercel now')).toEqual(['Vercel']);
     expect(extractCorrections('use super base here', 'use super base here', 'use Supabase here')).toEqual(['Supabase']);
+  });
+});
+
+describe('learning from the user’s own writing', () => {
+  it('takes phrasing from text the user wrote, with tone following recent dictations', () => {
+    const own = (phrasing: string) => ({ category: 'Email', tone: 'Formal', phrasing, fromUserText: true });
+    const speech = { category: 'Email', tone: 'Friendly', phrasing: 'Whisper style' };
+    const [profile] = buildWritingProfiles([
+      { mode: 'dictate', writingSample: own('Lowercase') },
+      { mode: 'dictate', writingSample: own('Sentence case') },
+      { mode: 'dictate', writingSample: own('Sentence case') },
+      { mode: 'dictate', writingSample: speech },
+    ]);
+    expect(profile.phrasing).toBe('Sentence case; Lowercase');
+    // 60 old Friendly dictations fall outside the newest 50, which are Formal.
+    const [recent] = buildWritingProfiles([
+      ...Array.from({ length: 50 }, () => ({ mode: 'dictate' as const, writingSample: own('Sentence case') })),
+      ...Array.from({ length: 60 }, () => ({ mode: 'dictate' as const, writingSample: speech })),
+    ]);
+    expect(recent.tone).toBe('Formal');
+    expect(parseWritingSample(own('x'))?.fromUserText).toBe(true);
+  });
+
+  it('never learns Yap Yap’s own pastes as the user’s writing', () => {
+    expect(userWrittenText('Hi Sam,\nThanks for the quick reply on this.', [])).toBe('Hi Sam,\nThanks for the quick reply on this.');
+    expect(userWrittenText('Hi Sam,\nPasted by the app earlier today.', ['Pasted by the app earlier today.'])).toBeUndefined();
+    expect(userWrittenText(undefined, [])).toBeUndefined();
+  });
+
+  it('does not ask about phrasing drift without the user’s own writing', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const recent = Array.from({ length: 5 }, () => ({ category: 'Messaging', tone: 'Neutral', phrasing: 'Lowercase' }));
+    await expect(suggestStyleUpdate({ ...createDefaultProviders().groq, apiKey: 'test' }, { tone: 'Neutral', phrasing: 'Standard' }, recent)).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

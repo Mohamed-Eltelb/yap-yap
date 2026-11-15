@@ -77,6 +77,11 @@ export interface WritingSample {
   category: string;
   tone: string;
   phrasing: string;
+  /**
+   * The phrasing was read from text the user wrote at the destination. Otherwise it describes the
+   * speech recognizer's output, so only the tone and category count.
+   */
+  fromUserText?: boolean;
 }
 
 export interface DictionaryEntry {

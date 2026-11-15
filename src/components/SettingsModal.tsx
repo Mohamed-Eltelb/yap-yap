@@ -689,7 +689,7 @@ export function SettingsModal({
                       <Info aria-hidden="true" className="size-3.5" />
                     </button>
                     <div id="personalization-tooltip" role="tooltip" className="yy-personalization-tooltip invisible absolute left-0 top-full z-20 mt-1 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-hover:visible group-focus-within:visible">
-                      Yap Yap learns your tone and phrasing per category through your configured AI provider. Transcripts you correct in History, including short excerpts of them, guide future formatting in the same category.
+                      Yap Yap learns your tone per category through your configured AI provider. Casing and punctuation are learned only from your own writing: transcripts you correct in History and, with context awareness on, text you already wrote in the app. Short excerpts of corrected transcripts guide future formatting in the same category.
                     </div>
                   </div>
                 </div>
@@ -833,7 +833,7 @@ export function SettingsModal({
                               {settings.personalizationEnabled && (
                                 <div id={`style-${item.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} role="tooltip" className="yy-personalization-tooltip pointer-events-none invisible absolute left-2 top-full z-20 w-60 rounded-lg p-2.5 text-xs leading-relaxed shadow-lg group-data-[highlighted=true]/row:visible">
                                   <span className="block font-medium">{item.category}</span>
-                                  {item.tone} · {item.phrasing}
+                                  {item.tone}{item.phrasing && ` · ${item.phrasing}`}
                                 </div>
                               )}
                               <div className="min-w-0">

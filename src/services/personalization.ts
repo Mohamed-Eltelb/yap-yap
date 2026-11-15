@@ -127,6 +127,20 @@ export function isStyleEdit(before: string, after: string): boolean {
   return false;
 }
 
+/**
+ * Text at the destination with Yap Yap's own earlier pastes taken out, so the app never learns
+ * its own output as the user's writing. Returns nothing when too little of the user's text is left.
+ */
+export function userWrittenText(textBefore: string | undefined, ownTexts: readonly string[]): string | undefined {
+  let text = textBefore ?? '';
+  for (const own of ownTexts) {
+    const trimmed = own.trim();
+    if (trimmed.length >= 3) text = text.split(trimmed).join('\n');
+  }
+  text = text.replace(/\n{2,}/gu, '\n').trim();
+  return text.replace(/\s+/gu, '').length >= 20 ? text : undefined;
+}
+
 /** Whether the word appears whole and capitalized somewhere other than a sentence start, like a name. */
 function isWrittenMidSentence(word: string, text: string): boolean {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -165,7 +179,7 @@ export function parseWritingSample(value: unknown): WritingSample | undefined {
     ?? WRITING_TONES.find((name) => label.toLowerCase().startsWith(name.toLowerCase()))
     ?? 'Neutral');
   const phrasing = readLabel(sample.phrasing, 120);
-  if (category && tone && phrasing) return { category, tone, phrasing };
+  if (category && tone && phrasing) return { category, tone, phrasing, ...(sample.fromUserText === true && { fromUserText: true }) };
 }
 
 type ProfileEntry = Pick<HistoryItem, 'mode' | 'writingSample' | 'writingCorrection' | 'writingCorrectedAt'> & { text?: string };
@@ -234,6 +248,10 @@ export function parseWritingPreferences(value: unknown): string[] {
 
 /** How many plain dictations one hand correction is worth. */
 const CORRECTION_WEIGHT = 3;
+/** The newest dictations that vote on a category's tone. */
+const TONE_WINDOW = 50;
+/** The newest samples of the user's own writing that vote on phrasing. */
+const PHRASING_WINDOW = 10;
 
 export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingProfile[] {
   const groups = new Map<string, { sample: WritingSample; corrected: boolean; correctedAt: number; text?: string }[]>();
@@ -252,15 +270,29 @@ export function buildWritingProfiles(items: readonly ProfileEntry[]): WritingPro
     // personalizationScore, so it leads without stopping the category from learning.
     // Newest edit first: editing an old dictation today makes it the newest correction.
     const corrected = entries.filter((entry) => entry.corrected).sort((a, b) => b.correctedAt - a.correctedAt);
+    // Tone follows recent habits: only the newest dictations vote, so a change in how the user
+    // writes shows up instead of being outvoted by years of old samples.
     const votes = new Map<string, number>();
-    for (const { sample, corrected: isCorrection } of entries) {
+    for (const { sample, corrected: isCorrection } of entries.slice(0, TONE_WINDOW)) {
       votes.set(sample.tone, (votes.get(sample.tone) ?? 0) + (isCorrection ? CORRECTION_WEIGHT : 1));
     }
     const tone = [...votes].sort((a, b) => b[1] - a[1])[0][0];
-    // The newest correction's phrasing comes first, then the newest learned ones.
-    // A final period would read as "x.; y" once two phrasings are joined.
-    const phrasings = [...corrected.slice(0, 1), ...entries]
-      .map(({ sample }) => sample.phrasing.replace(/[.\s]+$/u, '')).filter(Boolean);
+    // Casing and punctuation are learned only from text the user wrote: hand edits and text
+    // already at the destination. Speech output describes the recognizer, not the user.
+    // The newest correction comes first, then the most common recent phrasing (newest on a tie),
+    // so one dictation does not swing it. A final period would read as "x.; y" once joined.
+    const plain = (entry: { sample: WritingSample }) => entry.sample.phrasing.replace(/[.\s]+$/u, '');
+    const written = entries.filter((entry) => entry.corrected || entry.sample.fromUserText).slice(0, PHRASING_WINDOW);
+    const tally = new Map<string, { text: string; count: number; newest: number }>();
+    written.forEach((entry, index) => {
+      const text = plain(entry);
+      if (!text) return;
+      const key = writingCategoryKey(text);
+      const seen = tally.get(key);
+      tally.set(key, { text: seen?.text ?? text, count: (seen?.count ?? 0) + (entry.corrected ? CORRECTION_WEIGHT : 1), newest: seen?.newest ?? index });
+    });
+    const common = [...tally.values()].sort((a, b) => b.count - a.count || a.newest - b.newest).map((item) => item.text);
+    const phrasings = [...corrected.slice(0, 1).map(plain), ...common].filter(Boolean);
     const phrasing = [...new Map(phrasings.map((text) => [writingCategoryKey(text), text])).values()]
       .slice(0, 2).join('; ');
     return {
