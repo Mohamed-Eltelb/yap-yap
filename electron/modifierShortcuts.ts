@@ -2,7 +2,8 @@ import { appendFile } from 'node:fs';
 import { UiohookKey, uIOhook } from 'uiohook-napi';
 import type { ShortcutPhase } from './hudActions';
 import { ShortcutFlow, type AppStatus } from './shortcutFlow';
-import { isMenuKey, matchShortcut, needsMenuMask, startsShortcut } from './shortcutMatch';
+import { isMenuKey, matchShortcut, needsMenuMask, startsShortcut, swallowedKeys } from './shortcutMatch';
+import { setWindowsSwallowedKeys, startWindowsKeyHook, stopWindowsKeyHook } from './windowsKeyHook';
 
 export type { ShortcutPhase };
 
@@ -84,10 +85,21 @@ export function registerModifierShortcuts(
   pressed.clear();
   menuHeld = false;
   if (!running) {
-    uIOhook.start();
+    // On Windows Yap Yap's own hook watches keys, so it can swallow Right Alt.
+    nativeHook = process.platform === 'win32' && startWindowsKeyHook((down, code, time) => {
+      if (down) handleKeyDown(code, time);
+      else handleKeyUp(code, time);
+    });
+    if (!nativeHook) uIOhook.start();
     running = true;
   }
+  swallowed = nativeHook ? swallowedKeys(bindings).leads : [];
+  if (nativeHook) setWindowsSwallowedKeys(swallowedKeys(bindings));
 }
+
+let nativeHook = false;
+// Keys other apps never see, so they need no menu mask.
+let swallowed: number[] = [];
 
 let menuHeld = false;
 
@@ -117,7 +129,12 @@ function maskMenu() {
   }, 15);
 }
 
-uIOhook.on('keydown', ({ keycode, time }) => {
+function unmaskedMenuKeys(): boolean {
+  if (swallowed.length === 0) return needsMenuMask(pressed);
+  return needsMenuMask(new Map([...pressed].filter(([key]) => !swallowed.includes(key))));
+}
+
+function handleKeyDown(keycode: number, time: number) {
   // Holding a key repeats its key-down, and a repeated Alt re-arms the app's menu.
   const repeat = pressed.has(keycode);
   remember(`down ${keycode} t=${time}${repeat ? ' repeat' : ''} masking=${maskMenus}`);
@@ -129,25 +146,31 @@ uIOhook.on('keydown', ({ keycode, time }) => {
     if (maskMenus) flow.keyDown(startsShortcut(bindings, pressed, windows), pending ? bindings.indexOf(pending) : undefined);
   }
   // The hook cannot block keys, so stop the focused app from also acting on the shortcut.
-  menuHeld = needsMenuMask(pressed);
+  menuHeld = unmaskedMenuKeys();
   if (pending && maskMenus && process.platform === 'win32' && menuHeld && (!repeat || isMenuKey(keycode))) {
     maskMenu();
   }
-});
+}
 
-uIOhook.on('keyup', ({ keycode, time }) => {
+function handleKeyUp(keycode: number, time: number) {
   remember(`up ${keycode} t=${time}`);
   if (keycode === maskKey || !pressed.delete(keycode)) return;
-  menuHeld = needsMenuMask(pressed);
+  menuHeld = unmaskedMenuKeys();
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.
   if (pressed.size > 0) return;
   pending = undefined;
   if (maskMenus) flow.allReleased();
   else flow.reset();
-});
+}
+
+uIOhook.on('keydown', ({ keycode, time }) => handleKeyDown(keycode, time));
+uIOhook.on('keyup', ({ keycode, time }) => handleKeyUp(keycode, time));
 
 export function stopModifierShortcuts() {
-  if (running) uIOhook.stop();
+  if (running && nativeHook) stopWindowsKeyHook();
+  else if (running) uIOhook.stop();
+  nativeHook = false;
+  swallowed = [];
   running = false;
   pending = undefined;
   pressed.clear();

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UiohookKey as Key } from 'uiohook-napi';
 import { ShortcutFlow, type AppStatus, type FlowOutput } from '../../electron/shortcutFlow';
-import { startsShortcut } from '../../electron/shortcutMatch';
+import { startsShortcut, swallowedKeys } from '../../electron/shortcutMatch';
 
 function setup(status: AppStatus = 'idle') {
   const outputs: FlowOutput[] = [];
@@ -118,5 +118,16 @@ describe('Shortcut prefixes', () => {
     const altGr = new Map([[Key.Ctrl, 100], [Key.AltRight, 105]]);
     expect(startsShortcut(bindings, altGr, true)).toBe(true);
     expect(startsShortcut(bindings, altGr, false)).toBe(false);
+  });
+});
+
+describe('Keys the Windows hook swallows', () => {
+  it('swallows Right Alt and its chord keys', () => {
+    const bindings = [{ keys: [[Key.AltRight]] }, { keys: [[Key.AltRight], [Key.ShiftRight]] }, { keys: [[Key.AltRight], [Key.Space]] }];
+    expect(swallowedKeys(bindings)).toEqual({ leads: [3640], chords: [54, 57] });
+  });
+
+  it('swallows nothing when no shortcut starts with Right Alt', () => {
+    expect(swallowedKeys([{ keys: [[Key.Ctrl], [Key.Shift]] }])).toEqual({ leads: [], chords: [] });
   });
 });

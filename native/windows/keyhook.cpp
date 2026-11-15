@@ -58,8 +58,10 @@ bool swallow(bool down, DWORD scan, DWORD flags) {
 }
 
 LRESULT CALLBACK hookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-  if (nCode == HC_ACTION) {
-    const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+  const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+  // Simulated keys (Yap Yap's own paste and menu mask) are neither swallowed nor
+  // reported: they carry no scan code and are never a shortcut press.
+  if (nCode == HC_ACTION && !(key->flags & LLKHF_INJECTED)) {
     const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
     const bool swallowed = swallow(down, key->scanCode, key->flags);
     {

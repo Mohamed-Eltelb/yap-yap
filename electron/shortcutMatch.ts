@@ -37,6 +37,20 @@ export function startsShortcut<T extends { keys: number[][] }>(
     keys.every((key) => binding.keys.some((options) => options.includes(key))));
 }
 
+/**
+ * The keys Yap Yap's own Windows hook swallows: Right Alt when it starts a shortcut,
+ * and the other keys of those shortcuts while it is held.
+ */
+export function swallowedKeys(bindings: { keys: number[][] }[]): { leads: number[]; chords: number[] } {
+  const owned = bindings.filter(({ keys }) => keys[0]?.includes(UiohookKey.AltRight));
+  if (owned.length === 0) return { leads: [], chords: [] };
+  const chords = new Set<number>();
+  for (const { keys } of owned) {
+    for (const options of keys.slice(1)) for (const key of options) if (key !== UiohookKey.AltRight) chords.add(key);
+  }
+  return { leads: [UiohookKey.AltRight], chords: [...chords] };
+}
+
 export function matchShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,
