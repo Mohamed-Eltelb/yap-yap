@@ -5,6 +5,7 @@ import {
   builtInCategory,
   DONT_LEARN,
   sourceKey,
+  sourceLabel,
   WRITING_CATEGORIES,
   type DestinationEntry,
   type SourceChoice,
@@ -50,7 +51,7 @@ export function SourceCategoriesDialog({ destinations, choices, onChange, onClos
     const key = sourceKey(draft);
     if (!key) return;
     if (rows.some((entry) => entry.key === key)) {
-      setError(`${key} is already in the list.`);
+      setError(`${sourceLabel(key)} is already in the list.`);
       return;
     }
     setPending((keys) => [key, ...keys]);
@@ -88,12 +89,12 @@ export function SourceCategoriesDialog({ destinations, choices, onChange, onClos
           return (
             <div className="yy-variant-row yy-source-row" key={entry.key}>
               <span className="yy-source-name">
-                <span>{entry.key}</span>
+                <span title={entry.key}>{sourceLabel(entry.key)}</span>
                 <small>{detail}</small>
               </span>
               <SelectMenu
                 quiet
-                label={`Kind of place for ${entry.key}`}
+                label={`Kind of place for ${sourceLabel(entry.key)}`}
                 value={entry.choice ?? AUTOMATIC}
                 options={options}
                 onChange={(value) => choose(entry.key, value)}

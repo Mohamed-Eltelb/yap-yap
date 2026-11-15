@@ -1,4 +1,4 @@
-import { applyStyleCorrections, builtInCategory, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyStyleCorrections, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -1199,5 +1199,38 @@ describe('apps and sites the user sets', () => {
       { key: 'notion.so', automatic: 'Document editors', builtIn: true, choice: 'Messaging', uses: 0 },
     ]);
     expect(builtInCategory('slack')).toBe('Messaging');
+  });
+});
+
+describe('apps and sites list cleanup', () => {
+  it('never learns Windows itself or keeps trademark marks in names', () => {
+    expect(destinationKey({ application: 'Microsoft® Windows® Operating System' })).toBeUndefined();
+    expect(destinationKey({ application: 'Microsoft® StickyNotes' })).toBe('microsoft stickynotes');
+    expect(learnableSource('microsoft® windows® operating system')).toBeUndefined();
+    const list = listDestinations([
+      { writingSource: 'microsoft® windows® operating system' },
+      { writingSource: 'microsoft® windows® operating system' },
+    ], new Map(), {});
+    expect(list).toEqual([]);
+  });
+
+  it('shows tidy names', () => {
+    expect(sourceLabel('microsoft phone link')).toBe('Microsoft Phone Link');
+    expect(sourceLabel('chatgpt')).toBe('ChatGPT');
+    expect(sourceLabel('microsoft stickynotes')).toBe('Microsoft Sticky Notes');
+    expect(sourceLabel('app.slack.com')).toBe('app.slack.com');
+  });
+
+  it('recognizes more apps without learning', () => {
+    expect(builtInCategory('antigravity')).toBe('Development tools');
+    expect(builtInCategory('codex')).toBe('Development tools');
+    expect(builtInCategory('microsoft phone link')).toBe('Messaging');
+    expect(builtInCategory('microsoft stickynotes')).toBe('Document editors');
+  });
+
+  it('hides unknown places used only once', () => {
+    const list = listDestinations([{ writingSource: 'auth.hackclub.com' }, { writingSource: 'discord' }], new Map(), {});
+    expect(list.map((entry) => entry.key)).toEqual(['discord']);
+    expect(listDestinations([{ writingSource: 'auth.hackclub.com' }], new Map(), { 'auth.hackclub.com': 'off' })).toHaveLength(1);
   });
 });

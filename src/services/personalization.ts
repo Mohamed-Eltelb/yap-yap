@@ -26,11 +26,11 @@ const destinationRules: [WritingCategory, domain: RegExp, application: RegExp][]
   ['Presentations', /^slides\.google\.com$|(^|\.)(canva\.com|gamma\.app|pitch\.com|powerpoint\.cloud\.microsoft)$/, /powerpoint|keynote/],
   ['AI assistants', /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|perplexity\.ai|grok\.com|deepseek\.com|poe\.com|mistral\.ai)$|^(gemini|aistudio)\.google\.com$|^copilot\.microsoft\.com$/, /chatgpt|claude|copilot|perplexity/],
   ['Email', /^mail\.|(^|\.)(outlook\.(live|office|office365)\.com|proton\.me|fastmail\.com|superhuman\.com)$/, /outlook|thunderbird|^mail$|spark/],
-  ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|slack\.com|messenger\.com)$|^teams\.(microsoft|live)\.com$|^(messages|chat)\.google\.com$/, /slack|discord|whatsapp|telegram|teams|signal|messages|messenger/],
+  ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|slack\.com|messenger\.com)$|^teams\.(microsoft|live)\.com$|^(messages|chat)\.google\.com$/, /slack|discord|whatsapp|telegram|teams|signal|messages|messenger|phone link/],
   ['Social platforms', /(^|\.)(x\.com|twitter\.com|linkedin\.com|facebook\.com|instagram\.com|reddit\.com|threads\.(net|com)|bsky\.app|tiktok\.com|youtube\.com|mastodon\.social)$/, /^$/],
   ['Project management', /(^|\.)(linear\.app|atlassian\.net|trello\.com|asana\.com|clickup\.com|monday\.com|basecamp\.com)$/, /linear|jira|trello|asana|clickup/],
-  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|warp/],
-  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer/],
+  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|warp|antigravity|codex/],
+  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer|sticky ?notes/],
 ];
 
 export interface WritingDestination {
@@ -60,6 +60,8 @@ export function parseSourceCategories(value: unknown): Record<string, SourceChoi
 /** The key an app or site is stored under, from what the user typed or what was captured. */
 export function sourceKey(value: string): string | undefined {
   const text = value.trim().toLowerCase()
+    .replace(/[®™©]/gu, '')
+    .replace(/\s+/gu, ' ')
     .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
     .replace(/[/?#].*$/, '')
     .replace(/^www\./, '')
@@ -91,11 +93,16 @@ export function listDestinations(
   choices: Readonly<Record<string, SourceChoice>>,
 ): DestinationEntry[] {
   const uses = new Map<string, number>();
-  for (const item of items) if (item.writingSource) uses.set(item.writingSource, (uses.get(item.writingSource) ?? 0) + 1);
+  for (const item of items) {
+    const key = learnableSource(item.writingSource);
+    if (key) uses.set(key, (uses.get(key) ?? 0) + 1);
+  }
   for (const key of Object.keys(choices)) if (!uses.has(key)) uses.set(key, 0);
-  return [...uses].map(([key, count]) => {
+  return [...uses].flatMap(([key, count]) => {
     const builtIn = builtInCategory(key);
-    return { key, automatic: builtIn ?? learned.get(key), builtIn: !!builtIn, choice: choices[key], uses: count };
+    const entry = { key, automatic: builtIn ?? learned.get(key), builtIn: !!builtIn, choice: choices[key], uses: count };
+    // A place used once and unknown (a sign-in page, say) is noise until it comes up again.
+    return entry.choice || builtIn || count >= 2 ? [entry] : [];
   }).sort((a, b) => b.uses - a.uses || a.key.localeCompare(b.key));
 }
 
@@ -103,11 +110,36 @@ export function listDestinations(
 /** Browsers host every kind of site, so without a domain the browser alone says nothing. */
 const BROWSER_APPS = /^(?:google chrome|chromium|chrome|microsoft edge|msedge|edge|(?:mozilla )?firefox|brave(?: browser)?|vivaldi|opera(?: gx)?|arc|comet|zen(?: browser)?|safari)$/i;
 
+/**
+ * The operating system's own surfaces (Start menu, search, file manager) are not a kind of place
+ * the user writes in, so nothing is learned or remembered for them.
+ */
+const SYSTEM_APPS = /^(?:microsoft windows operating system|windows explorer|file explorer|explorer|windows shell experience host|shellexperiencehost|startmenuexperiencehost|searchhost|searchapp|search|windows search|finder|spotlight|dock|systemuiserver|loginwindow)$/;
+
+/** A stored app or site key, cleaned, or nothing when it is a browser or system surface. */
+export function learnableSource(value: string | undefined): string | undefined {
+  const key = value ? sourceKey(value) : undefined;
+  return key && !SYSTEM_APPS.test(key) && !BROWSER_APPS.test(key) ? key : undefined;
+}
+
 export function destinationKey(destination?: Partial<WritingDestination>): string | undefined {
   const domain = destination?.domain?.trim();
-  const application = destination?.application?.trim();
-  if (!domain && application && BROWSER_APPS.test(application)) return undefined;
-  return (domain || application)?.toLowerCase().replace(/^www\./, '').slice(0, 100) || undefined;
+  if (domain) return sourceKey(domain);
+  return learnableSource(destination?.application);
+}
+
+/** Brand names that title case would get wrong. */
+const SOURCE_NAMES: Record<string, string> = {
+  chatgpt: 'ChatGPT', onenote: 'OneNote', powerpoint: 'PowerPoint', whatsapp: 'WhatsApp', linkedin: 'LinkedIn',
+  github: 'GitHub', 'github desktop': 'GitHub Desktop', 'visual studio code': 'Visual Studio Code', vscode: 'VS Code',
+  intellij: 'IntelliJ', 'intellij idea': 'IntelliJ IDEA', pycharm: 'PyCharm', webstorm: 'WebStorm', iterm: 'iTerm',
+  'microsoft stickynotes': 'Microsoft Sticky Notes', stickynotes: 'Sticky Notes', textedit: 'TextEdit', clickup: 'ClickUp',
+};
+
+/** How an app or site key reads in the list: sites as they are, apps in title case. */
+export function sourceLabel(key: string): string {
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(key)) return key;
+  return SOURCE_NAMES[key] ?? key.replace(/(^|[\s-])(\p{Ll})/gu, (_, lead: string, letter: string) => lead + letter.toUpperCase());
 }
 
 /** Samples a destination needs, mostly agreeing, before its category is trusted without asking the model. */
@@ -118,10 +150,11 @@ export function buildSourceCategories(items: readonly Pick<HistoryItem, 'writing
   const votes = new Map<string, Map<string, number>>();
   for (const item of items) {
     const category = parseWritingSample(item.writingSample)?.category;
-    if (!category || !item.writingSource) continue;
-    const tally = votes.get(item.writingSource) ?? new Map<string, number>();
+    const source = learnableSource(item.writingSource);
+    if (!category || !source) continue;
+    const tally = votes.get(source) ?? new Map<string, number>();
     tally.set(category, (tally.get(category) ?? 0) + 1);
-    votes.set(item.writingSource, tally);
+    votes.set(source, tally);
   }
   // One early guess must not decide a destination forever: trust it only after several
   // samples, two thirds of them agreeing.
