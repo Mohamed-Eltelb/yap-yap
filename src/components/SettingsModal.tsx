@@ -743,7 +743,7 @@ export function SettingsModal({
                         <summary aria-label="Personalization options" className="grid size-8 cursor-pointer list-none place-items-center rounded-lg hover:bg-[var(--bg-hover)]">
                           <MoreHorizontal aria-hidden="true" size={16} />
                         </summary>
-                        <div className="absolute right-0 top-full z-10 mt-1 grid overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] py-1 text-sm shadow-lg">
+                        <div className="absolute right-0 top-full z-10 mt-1 grid overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-modal)] text-sm shadow-lg">
                           {(stats.categoryBreakdown.length > 0 || Object.keys(settings.styleCorrections).length > 0) && (
                             <button
                               type="button"

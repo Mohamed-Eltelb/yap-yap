@@ -221,7 +221,7 @@ export function HistoryView({
             {headerMenuOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 top-9 z-40 w-52 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-xl py-1.5 text-[13px]"
+                className="absolute right-0 top-9 z-40 w-52 overflow-hidden rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-xl text-[13px]"
               >
                 <button
                   type="button"
@@ -247,7 +247,7 @@ export function HistoryView({
                 </button>
                 {history.length > 0 && (
                   <>
-                    <div className="my-1 border-t border-[var(--border-subtle)]" />
+                    <div className="border-t border-[var(--border-subtle)]" />
                     <button
                       type="button"
                       onClick={() => {
@@ -495,7 +495,7 @@ export function HistoryView({
                             {isMenuOpen && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 top-9 z-40 w-44 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl py-1.5 text-[13px]"
+                                className="absolute right-0 top-9 z-40 w-44 overflow-hidden rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl text-[13px]"
                               >
                                 {hasAnswer && item.audioDataUrl && (
                                   <button
@@ -541,7 +541,7 @@ export function HistoryView({
                                   <Download className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
                                   <span>Download audio</span>
                                 </button>
-                                <div className="my-1 border-t border-[var(--border-subtle)]" />
+                                <div className="border-t border-[var(--border-subtle)]" />
                                 <button
                                   type="button"
                                   onClick={() => {
