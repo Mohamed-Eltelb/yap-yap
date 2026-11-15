@@ -610,6 +610,8 @@ export function App() {
                     // The text is the model's again, not the user's hand edit.
                     writingCorrection: undefined,
                     writingCorrectedAt: undefined,
+                    // A recording first cancelled or silent has no destination yet.
+                    writingSource: h.writingSource ?? source,
                   }
                 : h
             ),

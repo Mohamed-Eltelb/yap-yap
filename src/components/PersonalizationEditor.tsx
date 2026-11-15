@@ -231,6 +231,8 @@ export function PersonalizationEditor({
       title="Writing preferences"
       description="How Yap Yap writes for you when it cleans up your dictation. Ask for a change in your own words."
       onClose={onClose}
+      // Escape backs out of a change waiting for review first, so it is never lost unseen.
+      onEscape={proposal ? () => { setProposal(undefined); input.current?.focus(); } : onClose}
     >
       <div className="yy-pref-editor">
         {!cleanupEnabled && (

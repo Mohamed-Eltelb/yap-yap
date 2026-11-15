@@ -181,9 +181,13 @@ export function SettingsModal({
     learnedStyles > correctedStyles && `${learnedStyles - correctedStyles} learned ${learnedStyles - correctedStyles === 1 ? 'style' : 'styles'}`,
   ].filter(Boolean).join(' · ');
   const activeLlm = settings.activeLlmProvider;
-  const editorProvider = activeLlm !== 'none' && PROVIDER_CATALOG[activeLlm].supportsLlm && isProviderConfigured(providers[activeLlm])
-    ? providers[activeLlm]
-    : undefined;
+  // The same provider cleanup uses: the selected one, or another set-up AI provider when the
+  // selected one has no key yet.
+  const editorProvider = activeLlm === 'none'
+    ? undefined
+    : PROVIDER_CATALOG[activeLlm].supportsLlm && isProviderConfigured(providers[activeLlm])
+      ? providers[activeLlm]
+      : Object.values(providers).find((provider) => PROVIDER_CATALOG[provider.id].supportsLlm && isProviderConfigured(provider));
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   const shortcutEditorOpen = open && activeTab === 'settings';

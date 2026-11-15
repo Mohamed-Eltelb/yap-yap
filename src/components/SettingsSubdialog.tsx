@@ -1,11 +1,13 @@
 import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
-export function SettingsSubdialog({ title, description, children, onClose, wide }: {
+export function SettingsSubdialog({ title, description, children, onClose, onEscape = onClose, wide }: {
   title: string;
   description: string;
   children: ReactNode;
   onClose: () => void;
+  /** What Escape does. Closes the dialog unless the content has something to back out of first. */
+  onEscape?: () => void;
   /** Room for longer text, such as a list of sentences. */
   wide?: boolean;
 }) {
@@ -33,7 +35,7 @@ export function SettingsSubdialog({ title, description, children, onClose, wide 
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        onEscape();
       }}
       onClick={(event) => {
         if (event.target !== event.currentTarget) return;
