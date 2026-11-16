@@ -1,13 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Check, Feather, Minus, MoreHorizontal, Pencil, Search, Sparkle, Trash2, Upload, X } from 'lucide-react';
 import { DictionaryEntry } from '../types/app';
+import { readHeardAs } from '../services/personalization';
 import { WindowControls } from './YapLogo';
 
 interface Props {
   entries: DictionaryEntry[];
-  onAddWord: (word: string, source?: 'auto' | 'manual') => void;
+  onAddWord: (word: string, source?: 'auto' | 'manual', heardAs?: string) => void;
   onImportWords: (words: string[]) => void;
-  onEditWord: (id: string, word: string) => void;
+  onEditWord: (id: string, word: string, heardAs?: string) => void;
   onDeleteWords: (ids: readonly string[]) => void;
 }
 
@@ -40,7 +41,9 @@ export function DictionaryView({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [wordForm, setWordForm] = useState<'add' | DictionaryEntry | null>(null);
   const [newWord, setNewWord] = useState('');
+  const [heardAs, setHeardAs] = useState('');
   const [wordError, setWordError] = useState('');
+  const [heardAsError, setHeardAsError] = useState('');
   const editingEntry = wordForm === 'add' ? null : wordForm;
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +85,9 @@ export function DictionaryView({
   const openWordForm = (form: 'add' | DictionaryEntry) => {
     setMenuId(null);
     setNewWord(form === 'add' ? '' : form.word);
+    setHeardAs(form === 'add' ? '' : form.heardAs ?? '');
     setWordError('');
+    setHeardAsError('');
     setWordForm(form);
   };
 
@@ -94,8 +99,18 @@ export function DictionaryView({
       setWordError('This word is already in your dictionary.');
       return;
     }
-    if (editingEntry) onEditWord(editingEntry.id, cleaned);
-    else onAddWord(cleaned, 'manual');
+    const heard = readHeardAs(heardAs);
+    if (heard && heard.toLowerCase() === cleaned.toLowerCase()) {
+      setHeardAsError('Enter how Yap Yap gets it wrong, not the word itself.');
+      return;
+    }
+    if (heard && entries.some((entry) => entry.id !== editingEntry?.id
+      && (entry.word.toLowerCase() === heard.toLowerCase() || entry.heardAs?.toLowerCase() === heard.toLowerCase()))) {
+      setHeardAsError('Another word in your dictionary already uses this spelling.');
+      return;
+    }
+    if (editingEntry) onEditWord(editingEntry.id, cleaned, heard);
+    else onAddWord(cleaned, 'manual', heard);
     setWordForm(null);
   };
 
@@ -236,7 +251,10 @@ export function DictionaryView({
               return (
                 <li key={entry.id} className="yy-dictionary-word group relative flex min-w-0 items-center gap-2 px-3 rounded-xl" data-selected={checked}>
                   <Icon aria-hidden="true" size={13} className={entry.source === 'auto' ? 'yy-dictionary-auto shrink-0' : 'yy-dictionary-manual shrink-0'} />
-                  <span dir="auto" data-tooltip={entry.word} className="flex-1 min-w-0 truncate text-sm">{entry.word}</span>
+                  <span dir="auto" data-tooltip={entry.heardAs ? `${entry.word}, replaces “${entry.heardAs}”` : entry.word} className="flex-1 min-w-0 truncate text-sm">
+                    {entry.word}
+                    {entry.heardAs && <span className="yy-dictionary-heard"><span className="sr-only">, replaces </span>{entry.heardAs}</span>}
+                  </span>
                   <div className="flex shrink-0 items-center gap-2" onBlur={(event) => {
                     if (menuOpen && !event.currentTarget.contains(event.relatedTarget)) setMenuId(null);
                   }}>
@@ -311,6 +329,24 @@ export function DictionaryView({
             />
 
             {wordError && <p id="dictionary-word-error" role="alert" className="yy-dictionary-word-error mt-2 text-sm">{wordError}</p>}
+
+            <label htmlFor="dictionary-heard-as" className="mt-4 block text-[13px] font-medium text-[var(--text-primary)]">
+              Often written as <span className="font-normal text-[var(--text-secondary)]">(optional)</span>
+            </label>
+            <input
+              id="dictionary-heard-as"
+              type="text"
+              maxLength={60}
+              value={heardAs}
+              onChange={(e) => { setHeardAs(e.target.value); setHeardAsError(''); }}
+              placeholder="For example: hand of"
+              aria-invalid={Boolean(heardAsError)}
+              aria-describedby={heardAsError ? 'dictionary-heard-as-error' : 'dictionary-heard-as-help'}
+              className="mt-1.5 w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
+            />
+            {heardAsError
+              ? <p id="dictionary-heard-as-error" role="alert" className="yy-dictionary-word-error mt-2 text-sm">{heardAsError}</p>
+              : <p id="dictionary-heard-as-help" className="mt-1.5 text-xs text-[var(--text-secondary)]">A spelling Yap Yap keeps getting wrong. It is always replaced with your word.</p>}
 
             <input
               ref={fileInputRef}

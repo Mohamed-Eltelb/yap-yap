@@ -6,7 +6,7 @@ import {
 } from '../data/seedData';
 import { createDefaultProviders, PROVIDER_CATALOG } from './providers/catalog';
 import { assignHistoryIds } from './historyImport';
-import { parseRetainedStyles, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
+import { parseRetainedStyles, readHeardAs, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
 import {
   DictionaryEntry,
   HistoryItem,
@@ -231,9 +231,12 @@ export function sanitizeLoadedState(
 
   // Strip any legacy sample dictionary items (d1..d8)
   const realDictionary = Array.isArray(raw.dictionary)
-    ? raw.dictionary.filter(
-        (entry) => entry && !LEGACY_SEED_DICT_IDS.has(String(entry.id))
-      )
+    ? raw.dictionary
+        .filter((entry) => entry && !LEGACY_SEED_DICT_IDS.has(String(entry.id)))
+        .map(({ heardAs, ...entry }) => {
+          const heard = readHeardAs(heardAs);
+          return heard ? { ...entry, heardAs: heard } : entry;
+        })
     : [];
 
   return {

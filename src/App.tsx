@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyStyleCorrections, readyStyles, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, applyStyleCorrections, readyStyles, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -597,6 +597,8 @@ export function App() {
           throw new Error('Select an AI provider in API Keys to use Translate or Ask anything.');
         }
 
+        // Spellings the user said the recognizer gets wrong, fixed with or without cleanup.
+        if (mode === 'dictate') finalText = applyDictionaryReplacements(finalText, appState.dictionary);
         const category = classifyTranscriptCategory(finalText, mode);
         const words = countWords(finalText);
         const wpm = Math.max(
@@ -1215,7 +1217,8 @@ export function App() {
           destinationCategory: item.writingSample?.category,
         }
       );
-      const nextText = processed.finalText || item.text;
+      const cleaned = processed.finalText || item.text;
+      const nextText = item.mode === 'dictate' ? applyDictionaryReplacements(cleaned, appState.dictionary) : cleaned;
       const nextWords = countWords(nextText);
       const nextWpm = Math.max(
         1,
@@ -1379,7 +1382,7 @@ export function App() {
     }
   };
 
-  const handleAddDictionaryWord = (word: string, source: 'auto' | 'manual' = 'manual') => {
+  const handleAddDictionaryWord = (word: string, source: 'auto' | 'manual' = 'manual', heardAs?: string) => {
     const normalized = word.trim();
     if (!normalized) return;
     setAppState((prev) => {
@@ -1394,6 +1397,7 @@ export function App() {
             word: normalized,
             source,
             createdAt: new Date().toISOString(),
+            ...(heardAs && { heardAs }),
           },
           ...prev.dictionary,
         ],
@@ -1402,14 +1406,18 @@ export function App() {
     showToast(`Added "${normalized}" to dictionary`);
   };
 
-  const handleEditDictionaryWord = (id: string, word: string) => {
+  const handleEditDictionaryWord = (id: string, word: string, heardAs?: string) => {
     setAppState((prev) => {
       if (prev.dictionary.some((entry) => entry.id !== id && entry.word.toLowerCase() === word.toLowerCase())) {
         return prev;
       }
       return {
         ...prev,
-        dictionary: prev.dictionary.map((entry) => entry.id === id ? { ...entry, word } : entry),
+        dictionary: prev.dictionary.map((entry) => {
+          if (entry.id !== id) return entry;
+          const { heardAs: _old, ...rest } = entry;
+          return { ...rest, word, ...(heardAs && { heardAs }) };
+        }),
       };
     });
   };

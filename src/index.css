@@ -2121,3 +2121,14 @@ textarea,
 .yy-hud-busy button:hover {
   background: #ffffff40;
 }
+
+/* The spelling a dictionary word replaces, after the word. */
+.yy-dictionary-heard {
+  margin-inline-start: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.yy-dictionary-heard::before {
+  content: "\2190\00a0";
+}

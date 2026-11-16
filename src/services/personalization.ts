@@ -200,6 +200,35 @@ export function dictionaryWordsFor(
   return [...manual, ...learned].map((entry) => entry.word);
 }
 
+/** A heard-as spelling, cleaned up: one line, single spaces, at most 60 characters. */
+export function readHeardAs(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\s+/gu, ' ').trim().slice(0, 60);
+  return text || undefined;
+}
+
+/**
+ * Writes each dictionary word where the text has the spelling the user said it is heard as
+ * ("hand of" becomes "handoff"). One pass, longest first, so one replacement never feeds another.
+ */
+export function applyDictionaryReplacements(
+  text: string,
+  entries: readonly { word: string; heardAs?: string }[],
+): string {
+  const pairs = entries
+    .flatMap((entry) => entry.heardAs && entry.heardAs.toLowerCase() !== entry.word.toLowerCase() ? [{ from: entry.heardAs, to: entry.word }] : [])
+    .sort((a, b) => b.from.length - a.from.length);
+  if (!pairs.length || !text) return text;
+  const pattern = (from: string) => from.split(' ').map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('\\s+');
+  const matcher = new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])(?:${pairs.map(({ from }) => `(${pattern(from)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])`, 'giu');
+  return text.replace(matcher, (match, ...groups) => {
+    const to = pairs[groups.findIndex((group) => typeof group === 'string')].to;
+    // At the start of a sentence the replacement keeps the capital.
+    const capital = match[0] !== match[0].toLocaleLowerCase() && to === to.toLocaleLowerCase();
+    return capital ? to[0].toLocaleUpperCase() + to.slice(1) : to;
+  });
+}
+
 /**
  * Whether a hand edit changed how words are written (casing or punctuation on words the edit
  * kept), not only which words. Fixing a misheard name or adding a sentence is not a style choice.

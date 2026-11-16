@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1724,3 +1724,40 @@ describe('Languages the user speaks', () => {
   });
 });
 
+
+describe('dictionary replacements', () => {
+  const entries = [
+    { word: 'handoff', heardAs: 'hand of' },
+    { word: 'Supabase', heardAs: 'super base' },
+    { word: 'base', heardAs: 'bass' },
+    { word: 'Kubernetes' },
+  ];
+
+  it('writes the word wherever the text has the heard-as spelling', () => {
+    expect(applyDictionaryReplacements('Do the hand of today.', entries)).toBe('Do the handoff today.');
+    expect(applyDictionaryReplacements('Hand of done, then super  base.', entries)).toBe('Handoff done, then Supabase.');
+    expect(applyDictionaryReplacements('A handoff and a hand off.', entries)).toBe('A handoff and a hand off.');
+  });
+
+  it('matches whole words only and never chains one replacement into another', () => {
+    expect(applyDictionaryReplacements('The bassist plays bass.', entries)).toBe('The bassist plays base.');
+    expect(applyDictionaryReplacements('super base', [{ word: 'Supabase', heardAs: 'super base' }, { word: 'Firebase', heardAs: 'Supabase' }])).toBe('Supabase');
+  });
+
+  it('works for any script and leaves text alone without heard-as spellings', () => {
+    expect(applyDictionaryReplacements('قابلت يوسف اليوم', [{ word: 'يوسف', heardAs: 'يوسوف' }])).toBe('قابلت يوسف اليوم');
+    expect(applyDictionaryReplacements('قابلت يوسوف اليوم', [{ word: 'يوسف', heardAs: 'يوسوف' }])).toBe('قابلت يوسف اليوم');
+    expect(applyDictionaryReplacements('Use Kubernetes.', [{ word: 'Kubernetes' }])).toBe('Use Kubernetes.');
+  });
+
+  it('keeps a clean heard-as spelling through saving and loading', () => {
+    const state = sanitizeLoadedState({
+      dictionary: [
+        { id: 'd-a', word: 'handoff', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', heardAs: '  hand\n of ' },
+        { id: 'd-b', word: 'Supabase', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', heardAs: 42 },
+      ],
+    } as never);
+    expect(state.dictionary[0].heardAs).toBe('hand of');
+    expect(state.dictionary[1]).not.toHaveProperty('heardAs');
+  });
+});

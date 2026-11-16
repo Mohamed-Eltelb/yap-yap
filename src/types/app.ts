@@ -104,6 +104,8 @@ export interface DictionaryEntry {
   word: string;
   source: 'auto' | 'manual';
   createdAt: string;
+  /** How the recognizer tends to write the word, such as "hand of" for "handoff". Replaced after cleanup. */
+  heardAs?: string;
 }
 
 /** Per category, only the parts the user corrected. The rest of the style keeps learning. */

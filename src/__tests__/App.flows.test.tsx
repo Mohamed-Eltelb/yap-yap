@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HistoryItem, SettingsState, WritingSample } from '../types/app';
+import type { DictionaryEntry, HistoryItem, SettingsState, WritingSample } from '../types/app';
 
 // Tests stop at the module edges: no microphone, network, sound, or saved store.
 const engine = vi.hoisted(() => ({
@@ -73,11 +73,12 @@ function dictation(writingSample?: WritingSample, extra: Partial<HistoryItem> = 
   } as HistoryItem;
 }
 
-function seed({ settings = {}, history = [] }: { settings?: Partial<SettingsState>; history?: HistoryItem[] } = {}) {
+function seed({ settings = {}, history = [], dictionary = [] }: { settings?: Partial<SettingsState>; history?: HistoryItem[]; dictionary?: DictionaryEntry[] } = {}) {
   const initial = getInitialState();
   store.loaded = {
     ...initial,
     history,
+    dictionary,
     providers: { ...initial.providers, groq: { ...initial.providers.groq, apiKey: 'test-key' } },
     settings: {
       ...initial.settings,
@@ -294,6 +295,29 @@ describe('Dictation flow', () => {
 
     expect(cleanupOptions().destination).toEqual({ domain: 'mail.google.com', application: undefined, textBefore: undefined, textAfter: undefined });
     expect(engine.detectWritingStyle.mock.calls[0][2].existingWriting).toBeUndefined();
+  });
+});
+
+describe('Dictionary replacements', () => {
+  const handoff: DictionaryEntry = { id: 'd-1', word: 'handoff', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', heardAs: 'hand of' };
+
+  it('replaces a heard-as spelling after cleanup, in History and the paste', async () => {
+    seed({ dictionary: [handoff] });
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Hand of is done.' });
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Handoff is done.');
+    expect(engine.transcribeAudio.mock.calls[0][2].dictionaryWords).toEqual(['handoff']);
+    await waitFor(() => expect(lastSaved().history[0].text).toBe('Handoff is done.'));
+  });
+
+  it('replaces a heard-as spelling with cleanup off', async () => {
+    seed({ dictionary: [handoff], settings: { smartCleanup: false } });
+    engine.transcribeAudio.mockResolvedValue('the hand of is done');
+    await dictate();
+
+    expect(engine.processTranscriptWithLlm).not.toHaveBeenCalled();
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('the handoff is done');
   });
 });
 
