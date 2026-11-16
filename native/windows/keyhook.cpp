@@ -81,6 +81,19 @@ bool swallow(bool down, DWORD scan, DWORD flags) {
   return owned;
 }
 
+// -1 asks Windows; tests set 0 or 1 because no key is really down while they run.
+int menuKeyDownOverride = -1;
+
+// The hook misses key-ups sent to windows running as administrator, so Windows' own key
+// state confirms Alt or the Windows key is still down before masking.
+bool menuKeyPhysicallyDown() {
+  if (menuKeyDownOverride >= 0) return menuKeyDownOverride != 0;
+  for (int vk : {VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN}) {
+    if (GetAsyncKeyState(vk) & 0x8000) return true;
+  }
+  return false;
+}
+
 bool isMenuKey(int code) {
   for (int key : kMenuKeys) if (key == code) return true;
   return false;
@@ -102,7 +115,12 @@ bool shouldMask(bool down, DWORD scan, DWORD flags) {
     return false;
   }
   if (!heldMaskKeys.insert(code).second) return false;  // a repeat
-  return !heldMenuKeys.empty();
+  if (heldMenuKeys.empty()) return false;
+  if (!menuKeyPhysicallyDown()) {
+    heldMenuKeys.clear();
+    return false;
+  }
+  return true;
 }
 
 // F24 is on no keyboard and bound by no app, so tapping it does nothing else.
@@ -268,6 +286,10 @@ __declspec(dllexport) int yk_test_event(int down, int scan, int flags) {
 
 __declspec(dllexport) int yk_test_mask(int down, int scan, int flags) {
   return shouldMask(down != 0, static_cast<DWORD>(scan), static_cast<DWORD>(flags)) ? 1 : 0;
+}
+
+__declspec(dllexport) void yk_test_set_menu_key_down(int down) {
+  menuKeyDownOverride = down;
 }
 
 __declspec(dllexport) int yk_test_code(int scan, int flags) {

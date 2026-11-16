@@ -23,6 +23,7 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
   let setKeys: (leads: number[], leadCount: number, chords: number[], chordCount: number) => void;
   let setMasks: (codes: number[], count: number) => void;
   let testMask: (down: number, scan: number, flags: number) => number;
+  let setMenuKeyDown: (down: number) => void;
 
   beforeAll(() => {
     const lib = koffi.load(path.resolve('native/windows/build/yapyap-keys.dll'));
@@ -33,6 +34,7 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
     desktopSwitch = lib.func('void yk_test_desktop_switch()');
     setMasks = lib.func('void yk_set_mask_keys(const int *codes, int count)');
     testMask = lib.func('int yk_test_mask(int down, int scan, int flags)');
+    setMenuKeyDown = lib.func('void yk_test_set_menu_key_down(int down)');
     Callback = koffi.proto('void TestKeyCallback(int down, int code, unsigned int time)');
     start = lib.func('int yk_start(TestKeyCallback *cb)');
     stop = lib.func('void yk_stop()');
@@ -42,6 +44,8 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
     reset();
     setKeys([3640], 1, [54, 57], 2);
     setMasks([53], 1);
+    // Stands in for Windows' own key state, which says no key is down while tests run.
+    setMenuKeyDown(1);
   });
 
   const altDown = () => testEvent(1, ALT, EXTENDED);
@@ -179,6 +183,15 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
     it('forgets held Alt after a desktop switch', () => {
       leftAltDown();
       desktopSwitch();
+      expect(slashDown()).toBe(0);
+    });
+
+    it('does not mask when Windows says Alt was released unseen', () => {
+      leftAltDown();
+      setMenuKeyDown(0);
+      expect(slashDown()).toBe(0);
+      testMask(0, SLASH, KEYUP);
+      setMenuKeyDown(1);
       expect(slashDown()).toBe(0);
     });
 
