@@ -298,6 +298,15 @@ describe('Dictation flow', () => {
   });
 });
 
+describe('Starting styles', () => {
+  it('applies a picked style from the first dictation in that kind of place', async () => {
+    seed({ settings: { styleCorrections: { Messaging: { tone: 'Casual', phrasing: 'all lowercase, light punctuation, no period at the end' } } } });
+    desktop.context = { domain: 'app.slack.com', textBefore: '', textAfter: '' };
+    await dictate();
+    expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: 'all lowercase, light punctuation, no period at the end' })]);
+  });
+});
+
 describe('Dictionary replacements', () => {
   const handoff: DictionaryEntry = { id: 'd-1', word: 'handoff', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', heardAs: 'hand of' };
 

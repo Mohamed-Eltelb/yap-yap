@@ -557,6 +557,35 @@ export function mergeStyleCorrections(saved: StyleCorrections, changes: StyleCor
   return merged;
 }
 
+/** Styles a user can pick for a kind of place before Yap Yap has learned anything there. */
+export const STYLE_PRESETS = [
+  { id: 'formal', label: 'Formal', example: 'Hey Sam. See you soon.', tone: 'Formal', phrasing: 'Capitalized sentences and names, every sentence ends with punctuation' },
+  { id: 'casual', label: 'Casual', example: 'Hey Sam, see you soon', tone: 'Casual', phrasing: 'Capitalized sentences and names, no period after the last sentence' },
+  { id: 'very-casual', label: 'Very casual', example: 'hey sam see you soon', tone: 'Casual', phrasing: 'all lowercase, even names and I, no period after the last sentence' },
+] as const;
+
+export type StylePresetId = (typeof STYLE_PRESETS)[number]['id'];
+
+/** The preset a saved style is, or undefined for a style the user wrote. */
+export function presetOf(correction: StyleCorrections[string] | undefined): StylePresetId | undefined {
+  return STYLE_PRESETS.find((preset) => correction?.tone === preset.tone && correction?.phrasing === preset.phrasing)?.id;
+}
+
+/**
+ * Styles cleanup uses: learned styles with enough dictations, and every style the user set, even
+ * for a kind of place with no dictations yet. A style the user set always wins over what is learned.
+ */
+export function stylesForCleanup<T extends WritingProfile & { corrected?: boolean }>(
+  profiles: readonly T[],
+  corrections: StyleCorrections,
+): (T | WritingProfile & { corrected: true })[] {
+  const set = Object.entries(corrections).flatMap(([category, correction]) =>
+    !profiles.some((profile) => profile.category === category) && (correction.tone || correction.phrasing)
+      ? [{ category, tone: correction.tone ?? 'Neutral', phrasing: correction.phrasing ?? '', count: 0, corrections: 0, examples: [], corrected: true as const }]
+      : []);
+  return [...readyStyles(profiles), ...set];
+}
+
 /** Dictations a corrected category needs after the correction before an update is suggested. */
 export const STYLE_UPDATE_MIN_SAMPLES = 5;
 

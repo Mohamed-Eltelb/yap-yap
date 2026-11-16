@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1759,5 +1759,28 @@ describe('dictionary replacements', () => {
     } as never);
     expect(state.dictionary[0].heardAs).toBe('hand of');
     expect(state.dictionary[1]).not.toHaveProperty('heardAs');
+  });
+});
+
+describe('starting styles', () => {
+  const veryCasual = STYLE_PRESETS.find((preset) => preset.id === 'very-casual')!;
+  const picked = { Messaging: { tone: veryCasual.tone, phrasing: veryCasual.phrasing } };
+
+  it('keeps every preset through saving and recognizes it again', () => {
+    for (const preset of STYLE_PRESETS) {
+      const saved = parseStyleCorrections({ Email: { tone: preset.tone, phrasing: preset.phrasing } });
+      expect(presetOf(saved.Email)).toBe(preset.id);
+    }
+    expect(presetOf({ tone: 'Formal', phrasing: 'Sentence case' })).toBeUndefined();
+  });
+
+  it('sends a picked style before anything is learned there', () => {
+    expect(stylesForCleanup([], picked)).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: veryCasual.phrasing, corrected: true })]);
+  });
+
+  it('keeps a picked style over what is learned, and the learned style once the pick is cleared', () => {
+    const learned = buildWritingProfiles([1, 2, 3].map(() => ({ mode: 'dictate' as const, writingSample: { category: 'Messaging', tone: 'Friendly', phrasing: '' } })));
+    expect(stylesForCleanup(applyStyleCorrections(learned, picked), picked)).toEqual([expect.objectContaining({ category: 'Messaging', tone: 'Casual', phrasing: veryCasual.phrasing })]);
+    expect(stylesForCleanup(applyStyleCorrections(learned, {}), {})).toEqual([expect.objectContaining({ category: 'Messaging', tone: 'Friendly' })]);
   });
 });

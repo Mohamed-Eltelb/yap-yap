@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences, type DestinationEntry, type ForgottenStyles, type SourceChoice, type StyleSampleSinceCorrection } from '../services/personalization';
+import { parseWritingPreferences, presetOf, STYLE_PRESETS, type DestinationEntry, type ForgottenStyles, type SourceChoice, type StyleSampleSinceCorrection } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -31,6 +31,7 @@ import { ProviderSettings } from './ProviderSettings';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SourceCategoriesDialog } from './SourceCategoriesDialog';
+import { StartingStylesDialog } from './StartingStylesDialog';
 
 interface Props {
   open: boolean;
@@ -158,6 +159,7 @@ export function SettingsModal({
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [stylesOpen, setStylesOpen] = useState(false);
   const chosenSources = destinations.filter((entry) => entry.choice).length;
   const sourcesSummary = destinations.length
     ? [
@@ -173,6 +175,13 @@ export function SettingsModal({
     setPreferencesEditorOpen(true);
   };
   const writingRules = parseWritingPreferences(settings.writingPreferences);
+  const pickedStyles = Object.entries(settings.styleCorrections).flatMap(([category, correction]) => {
+    const preset = STYLE_PRESETS.find((item) => item.id === presetOf(correction));
+    return preset ? [`${preset.label} in ${category}`] : [];
+  });
+  const stylesSummary = pickedStyles.length
+    ? pickedStyles.slice(0, 2).join(' · ') + (pickedStyles.length > 2 ? ` · ${pickedStyles.length - 2} more` : '')
+    : 'Pick Formal, Casual, or Very casual for each kind of place, or let Yap Yap learn your style.';
   const correctedStyles = stats.categoryBreakdown.filter((profile) => 'corrected' in profile && profile.corrected).length;
   const learnedStyles = stats.categoryBreakdown.length;
   const preferencesSummary = [
@@ -798,6 +807,23 @@ export function SettingsModal({
                 {settings.personalizationEnabled && (
                   <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
                     <div className="min-w-0">
+                      <h3 className="text-sm font-medium">Writing style</h3>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">{stylesSummary}</p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setStylesOpen(true)}
+                      className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--border-strong)] px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                      Choose
+                    </button>
+                  </div>
+                )}
+
+                {settings.personalizationEnabled && (
+                  <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+                    <div className="min-w-0">
                       <h3 className="text-sm font-medium">Apps and sites</h3>
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">{sourcesSummary}</p>
                     </div>
@@ -1103,6 +1129,14 @@ export function SettingsModal({
             </button>
           </div>
         </SettingsSubdialog>
+      )}
+      {open && activeTab === 'personalization' && stylesOpen && (
+        <StartingStylesDialog
+          corrections={settings.styleCorrections}
+          active={settings.personalizationEnabled && settings.smartCleanup}
+          onChange={(styleCorrections) => onUpdateSettings({ styleCorrections })}
+          onClose={() => setStylesOpen(false)}
+        />
       )}
       {open && activeTab === 'personalization' && sourcesOpen && (
         <SourceCategoriesDialog

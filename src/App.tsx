@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyDictionaryReplacements, applyStyleCorrections, readyStyles, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -523,7 +523,7 @@ export function App() {
           if (hasLlmKey) {
             // The category comes from the app or domain when known, so cleanup needs no
             // classification round trip. Otherwise the cleanup model picks among all profiles.
-            let writingStyles: typeof stats.categoryBreakdown | undefined;
+            let writingStyles: WritingProfile[] | undefined;
             let knownCategory: string | undefined;
             if (mode === 'dictate' && appState.settings.personalizationEnabled) {
               // The user's choice for this app or site wins. After it, only the built-in rules (or the
@@ -533,8 +533,8 @@ export function App() {
               const fixedCategory = chosenCategory ?? categoryForDestination(location) ?? retried?.writingSample?.category;
               knownCategory = fixedCategory ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
-                ? readyStyles(stats.categoryBreakdown).filter((item) => item.category === knownCategory)
-                : readyStyles(stats.categoryBreakdown);
+                ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections).filter((item) => item.category === knownCategory)
+                : stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections);
               const styleProvider = llmProvider;
               // Text the user wrote before the caret, without Yap Yap's own earlier pastes.
               const existingWriting = shareText
@@ -1200,7 +1200,7 @@ export function App() {
 
     try {
       const writingStyles = item.mode === 'dictate' && appState.settings.personalizationEnabled
-        ? readyStyles(stats.categoryBreakdown).filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
+        ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections).filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
         : undefined;
       const processed = await processTranscriptWithLlm(
         item.rawText,
