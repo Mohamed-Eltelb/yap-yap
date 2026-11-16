@@ -549,21 +549,6 @@ describe('Multi-Provider Engine', () => {
     expect(init.headers.Authorization).toBe('Bearer gsk_test_123');
   });
 
-  it('does not steer Whisper toward English when the user also speaks Arabic', async () => {
-    const providers = createDefaultProviders();
-    providers.groq.apiKey = 'gsk_test_123';
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ text: 'مرحبا' }) });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await transcribeAudio(new Blob([new Uint8Array([1])], { type: 'audio/webm' }), providers.groq, {
-      languageVariants: ['English (US)', 'Arabic (Egypt)'],
-    });
-
-    const prompt = String((fetchMock.mock.calls[0][1].body as FormData).get('prompt'));
-    expect(prompt).toMatch(/[؀-ۿ]/);
-    expect(prompt).not.toContain('Speaking');
-  });
-
   it('routes multipart STT uploads through Electron IPC with ElevenLabs scribe_v3 default', async () => {
     const providers = createDefaultProviders();
     providers.elevenlabs.apiKey = 'el_test_key';
@@ -1466,5 +1451,89 @@ describe('Hearing speech in a recording', () => {
 
   it('cannot tell when it barely listened', () => {
     expect(heardSpeech(0, 2)).toBeUndefined();
+  });
+});
+
+describe('Languages the user speaks', () => {
+  const audio = () => new Blob([new Uint8Array([1])], { type: 'audio/webm' });
+  const ok = (body: unknown) => vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+  const withKey = (id: 'groq' | 'deepgram' | 'elevenlabs' | 'gemini') => {
+    const providers = createDefaultProviders();
+    providers[id].apiKey = 'key';
+    return providers[id];
+  };
+  beforeEach(() => vi.stubGlobal('window', undefined));
+
+  it('tells Whisper the one language the user speaks', async () => {
+    const fetchMock = ok({ text: 'مرحبا' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['Arabic'] });
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('language')).toBe('ar');
+  });
+
+  it('primes Whisper only in the languages the user speaks', async () => {
+    const fetchMock = ok({ text: 'hi' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('groq'), {
+      spokenLanguages: ['English', 'Arabic'],
+      languageVariants: ['English (US)', 'Spanish (Mexico)', 'Arabic (Egypt)'],
+    });
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('language')).toBeNull();
+    const prompt = String(form.get('prompt'));
+    expect(prompt).toMatch(/[\u0600-\u06FF]/);
+    expect(prompt).toContain('English');
+    expect(prompt).not.toContain('español');
+  });
+
+  it('leaves Whisper to detect the language on auto-detect', async () => {
+    const fetchMock = ok({ text: 'hi' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: [], languageVariants: ['English (US)', 'Arabic (Egypt)'] });
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('language')).toBeNull();
+    expect(form.get('prompt')).toBeNull();
+  });
+
+  it('tells Deepgram the language, or asks it to detect one', async () => {
+    const fetchMock = ok({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['Arabic'] });
+    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['English', 'Arabic'] });
+    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: [] });
+    const urls = fetchMock.mock.calls.map(([url]) => new URL(url as string).searchParams);
+    expect(urls[0].get('language')).toBe('ar');
+    expect(urls[1].get('detect_language')).toBe('true');
+    expect(urls[2].get('detect_language')).toBe('true');
+  });
+
+  it('tells ElevenLabs the one language the user speaks', async () => {
+    const fetchMock = ok({ text: 'x' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('elevenlabs'), { spokenLanguages: ['Arabic'] });
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('language_code')).toBe('ar');
+  });
+
+  it('tells Gemini the languages and never to translate', async () => {
+    const fetchMock = ok({ candidates: [{ content: { parts: [{ text: 'x' }] } }] });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('gemini'), { spokenLanguages: ['English', 'Arabic'], languageVariants: ['Arabic (Egypt)'] });
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body as string).contents[0].parts[0].text as string;
+    expect(prompt).toContain('Never translate');
+    expect(prompt).toContain('Arabic (Egypt)');
+    expect(prompt).not.toContain('Spanish');
+  });
+
+  it('answers Ask anything in the language the user asked in', async () => {
+    const fetchMock = ok({ choices: [{ message: { content: 'x' } }] });
+    vi.stubGlobal('fetch', fetchMock);
+    const providers = createDefaultProviders();
+    providers.groq.apiKey = 'key';
+    await processTranscriptWithLlm('ما هي عاصمة مصر؟', 'ask', providers.groq, {
+      targetLanguages: [], dictionaryWords: [], smartCleanup: true,
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.messages[0].content).toContain('same language');
   });
 });

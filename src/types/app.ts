@@ -124,6 +124,8 @@ export interface SettingsState {
   interfaceLanguage: string;
   translationTargets: string[];
   languageVariants: string[];
+  /** Languages the user speaks, by name ('Arabic'); empty means auto-detect. */
+  spokenLanguages: string[];
   microphoneId: string;
   interactionSounds: boolean;
   muteWhenDictating: boolean;

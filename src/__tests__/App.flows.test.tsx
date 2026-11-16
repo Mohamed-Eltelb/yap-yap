@@ -208,6 +208,13 @@ describe('Dictation flow', () => {
     expect(vi.mocked(startAudioRecording).mock.calls[0][2]).toEqual({ strongNoiseReduction: true });
   });
 
+  it('transcribes in the languages the user speaks, auto-detecting by default', async () => {
+    expect(getInitialState().settings.spokenLanguages).toEqual([]);
+    seed({ settings: { spokenLanguages: ['Arabic'] } });
+    await dictate();
+    expect(engine.transcribeAudio.mock.calls[0][2]).toMatchObject({ spokenLanguages: ['Arabic'] });
+  });
+
   it('keeps strong noise reduction off by default', () => {
     expect(getInitialState().settings.strongNoiseReduction).toBe(false);
   });

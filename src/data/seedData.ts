@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   interfaceLanguage: 'English (US)',
   translationTargets: ['Arabic (Egypt)', 'English (US)'],
   languageVariants: ['English (US)', 'Arabic (Egypt)'],
+  spokenLanguages: [],
   microphoneId: 'default',
   interactionSounds: true,
   muteWhenDictating: false,

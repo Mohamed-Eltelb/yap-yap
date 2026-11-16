@@ -436,6 +436,7 @@ export function App() {
         const dictWords = dictionaryWordsFor(appState.dictionary, appState.settings.personalizationEnabled);
         const rawText = await transcribeAudio(audioBlob, sttProvider, {
           dictionaryWords: dictWords,
+          spokenLanguages: appState.settings.spokenLanguages,
           languageVariants: getPreferredLanguageVariants(appState.settings.languageVariants),
         });
         if (dropped()) return;
