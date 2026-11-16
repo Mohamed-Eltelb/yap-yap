@@ -976,7 +976,8 @@ export function App() {
             setHud((prev) =>
               prev.status === 'recording' ? { ...prev, levels } : prev
             );
-          }
+          },
+          { strongNoiseReduction: appState.settings.strongNoiseReduction },
         );
         if (recorderStartRef.current !== start) {
           session.cancel();
@@ -1007,6 +1008,7 @@ export function App() {
       appState.settings.interactionSounds,
       appState.settings.microphoneId,
       appState.settings.muteWhenDictating,
+      appState.settings.strongNoiseReduction,
       restoreAudioMute,
       showToast,
       stopAndProcess,

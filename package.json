@@ -19,6 +19,7 @@
     "build:keyhook": "cmd /c native\\windows\\build.cmd"
   },
   "dependencies": {
+    "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "koffi": "^3.3.8",
     "loudness": "^0.4.2",
     "lucide-react": "^1.72.0",

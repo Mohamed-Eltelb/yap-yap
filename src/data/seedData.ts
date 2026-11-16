@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   microphoneId: 'default',
   interactionSounds: true,
   muteWhenDictating: false,
+  strongNoiseReduction: false,
   appearance: 'light',
   launchAtLogin: true,
   autoPaste: true,

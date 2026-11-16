@@ -21,13 +21,51 @@ export function heardSpeech(loudFrames: number, frames: number): boolean | undef
   return frames < FRAMES_TO_JUDGE ? undefined : false;
 }
 
+let rnnoiseWasm: Promise<ArrayBuffer> | undefined;
+
+/**
+ * Runs the microphone through RNNoise, which removes noises the browser's own filter
+ * misses (voices, traffic, dogs). Returns undefined when it can't load, so the caller
+ * records the plain microphone instead.
+ */
+async function rnnoiseStream(audioCtx: AudioContext, source: MediaStreamAudioSourceNode) {
+  try {
+    const { loadRnnoise, RnnoiseWorkletNode } = await import('@sapphi-red/web-noise-suppressor');
+    // Inlined, because the packaged app loads from file://, where fetch can't read files.
+    const [{ default: workletSource }, { default: wasmUrl }, { default: simdUrl }] = await Promise.all([
+      import('@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?raw'),
+      import('@sapphi-red/web-noise-suppressor/rnnoise.wasm?url&inline'),
+      import('@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url&inline'),
+    ]);
+    rnnoiseWasm ??= loadRnnoise({ url: wasmUrl, simdUrl });
+    const wasmBinary = await rnnoiseWasm;
+    const workletUrl = URL.createObjectURL(new Blob([workletSource], { type: 'text/javascript' }));
+    try {
+      await audioCtx.audioWorklet.addModule(workletUrl);
+    } finally {
+      URL.revokeObjectURL(workletUrl);
+    }
+    const rnnoise = new RnnoiseWorkletNode(audioCtx, { wasmBinary, maxChannels: 1 });
+    const output = audioCtx.createMediaStreamDestination();
+    source.connect(rnnoise);
+    rnnoise.connect(output);
+    return { node: rnnoise as AudioNode, stream: output.stream };
+  } catch (error) {
+    rnnoiseWasm = undefined;
+    console.warn('Strong noise reduction is unavailable; recording without it', error);
+    return undefined;
+  }
+}
+
 export async function startAudioRecording(
   deviceId: string | undefined,
-  onLevels: (levels: number[]) => void
+  onLevels: (levels: number[]) => void,
+  { strongNoiseReduction = false }: { strongNoiseReduction?: boolean } = {},
 ): Promise<RecorderSession> {
   const defaultAudioConstraints: MediaTrackConstraints = {
     echoCancellation: true,
-    noiseSuppression: true,
+    // RNNoise replaces the browser's filter; running both muffles the voice.
+    noiseSuppression: !strongNoiseReduction,
   };
 
   let stream: MediaStream;
@@ -56,24 +94,27 @@ export async function startAudioRecording(
   ];
   const mimeType = preferredMimes.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
 
-  const recorder = mimeType
-    ? new MediaRecorder(stream, { mimeType })
-    : new MediaRecorder(stream);
-
-  const chunks: BlobPart[] = [];
-  recorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) chunks.push(e.data);
-  };
 
   // Analyser for live waveform bars
   const AudioCtx =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const audioCtx = new AudioCtx();
+  // RNNoise works on 48 kHz audio.
+  const audioCtx = strongNoiseReduction ? new AudioCtx({ sampleRate: 48000 }) : new AudioCtx();
   const source = audioCtx.createMediaStreamSource(stream);
+  const filtered = strongNoiseReduction ? await rnnoiseStream(audioCtx, source) : undefined;
   const analyser = audioCtx.createAnalyser();
   analyser.fftSize = 64;
-  source.connect(analyser);
+  (filtered?.node ?? source).connect(analyser);
+
+  const recorded = filtered?.stream ?? stream;
+  const recorder = mimeType
+    ? new MediaRecorder(recorded, { mimeType })
+    : new MediaRecorder(recorded);
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
 
   const dataArray = new Uint8Array(analyser.frequencyBinCount);
   const waveform = new Uint8Array(analyser.fftSize);

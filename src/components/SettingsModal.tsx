@@ -617,6 +617,22 @@ export function SettingsModal({
                         onChange={(val) => onUpdateSettings({ muteWhenDictating: val })}
                       />
                     </div>}
+
+                    <div className="py-2.5 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Strong noise reduction
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Removes voices, traffic and other background noise. Use it in noisy places; it can lower accuracy in quiet ones.
+                        </p>
+                      </div>
+                      <Toggle
+                        label="Strong noise reduction"
+                        checked={settings.strongNoiseReduction}
+                        onChange={(val) => onUpdateSettings({ strongNoiseReduction: val })}
+                      />
+                    </div>
                   </div>
                 </div>
 

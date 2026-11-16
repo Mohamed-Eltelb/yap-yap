@@ -202,6 +202,16 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(lastHud()).toMatchObject({ status: 'notice', noticeText: 'No speech detected' }), { timeout: 1500 });
   });
 
+  it('records with strong noise reduction only when it is on', async () => {
+    seed({ settings: { strongNoiseReduction: true } });
+    await dictate();
+    expect(vi.mocked(startAudioRecording).mock.calls[0][2]).toEqual({ strongNoiseReduction: true });
+  });
+
+  it('keeps strong noise reduction off by default', () => {
+    expect(getInitialState().settings.strongNoiseReduction).toBe(false);
+  });
+
   it('closes the shortcut placeholder when no API key is set', async () => {
     seed();
     const loaded = store.loaded as { providers: Record<string, { apiKey: string }> };

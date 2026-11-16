@@ -127,6 +127,8 @@ export interface SettingsState {
   microphoneId: string;
   interactionSounds: boolean;
   muteWhenDictating: boolean;
+  /** Runs the microphone through RNNoise, for noisy places. Off by default. */
+  strongNoiseReduction: boolean;
   appearance: AppearanceMode;
   launchAtLogin: boolean;
   autoPaste: boolean;
