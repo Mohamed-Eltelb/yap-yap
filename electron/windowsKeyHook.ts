@@ -10,6 +10,7 @@ type Library = {
   start: (callback: unknown) => number;
   stop: () => void;
   setKeys: (leads: number[], leadCount: number, chords: number[], chordCount: number) => void;
+  setMasks: (codes: number[], count: number) => void;
   // Registered once and never released: a call from an earlier start may still be on its way.
   callback: unknown;
 };
@@ -37,6 +38,7 @@ function load(): Library {
     start: lib.func('int yk_start(YapYapKeyCallback *cb)'),
     stop: lib.func('void yk_stop()'),
     setKeys: lib.func('void yk_set_keys(const int *leads, int leadCount, const int *chords, int chordCount)'),
+    setMasks: lib.func('void yk_set_mask_keys(const int *codes, int count)'),
     callback: koffi.register((down: number, code: number, time: number) => {
       if (running) onKey?.(down !== 0, code, time);
     }, koffi.pointer(KeyCallback)),
@@ -58,8 +60,11 @@ export function startWindowsKeyHook(handler: (down: boolean, code: number, time:
   }
 }
 
-export function setWindowsSwallowedKeys({ leads, chords }: { leads: number[]; chords: number[] }): void {
-  if (running) library?.setKeys(leads, leads.length, chords, chords.length);
+/** Leads and chords are swallowed; masks get the menu mask key tapped when pressed with Alt or Win. */
+export function setWindowsSwallowedKeys({ leads, chords, masks }: { leads: number[]; chords: number[]; masks: number[] }): void {
+  if (!running) return;
+  library?.setKeys(leads, leads.length, chords, chords.length);
+  library?.setMasks(masks, masks.length);
 }
 
 export function stopWindowsKeyHook(): void {

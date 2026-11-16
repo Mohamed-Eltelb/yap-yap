@@ -314,6 +314,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   globalShortcut.setSuspended(false);
   const modifierShortcuts: Parameters<typeof registerModifierShortcuts>[0] = [];
   const claims: string[] = [];
+  const maskCombos: string[][] = [];
 
   for (const mode of shortcutModes) {
     for (const combo of unique[mode]) {
@@ -325,6 +326,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
         continue;
       }
       if (!accel) continue;
+      maskCombos.push(combo);
       try {
         globalShortcut.register(accel, trigger);
       } catch {
@@ -340,7 +342,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
       },
       onPhase: (phase) => mainWindow?.webContents.send('shortcut:phase', phase),
       onStop: () => mainWindow?.webContents.send('hud:action', { type: 'stop' } satisfies HudAction),
-    });
+    }, maskCombos);
     // uiohook only observes keys, so there the chord is also claimed to keep it from
     // the focused app (Alt+Space would open its window menu). Yap Yap's own Windows
     // hook swallows the chord itself, and a claim would also take Left Alt+Space.

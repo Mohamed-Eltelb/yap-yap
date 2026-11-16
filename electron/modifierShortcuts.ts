@@ -2,7 +2,7 @@ import { appendFile } from 'node:fs';
 import { UiohookKey, uIOhook } from 'uiohook-napi';
 import type { ShortcutPhase } from './hudActions';
 import { ShortcutFlow, type AppStatus } from './shortcutFlow';
-import { isMenuKey, matchShortcut, needsMenuMask, startsShortcut, swallowedKeys } from './shortcutMatch';
+import { isMenuKey, maskKeys, matchShortcut, needsMenuMask, startsShortcut, swallowedKeys } from './shortcutMatch';
 import { KEYS_RESET, setWindowsSwallowedKeys, startWindowsKeyHook, stopWindowsKeyHook } from './windowsKeyHook';
 
 export type { ShortcutPhase };
@@ -68,16 +68,22 @@ export function setMenuMasking(enabled: boolean) {
   syncSwallowedKeys();
 }
 
-/** The shortcut editor records Right Alt, so nothing is swallowed while it is in use. */
+/** The shortcut editor records Right Alt, so nothing is swallowed or masked while it is in use. */
 function syncSwallowedKeys() {
-  const keys = nativeHook && maskMenus ? swallowedKeys(bindings) : { leads: [], chords: [] };
+  const active = nativeHook && maskMenus;
+  const keys = active ? swallowedKeys(bindings) : { leads: [], chords: [] };
   swallowed = keys.leads;
-  if (nativeHook) setWindowsSwallowedKeys(keys);
+  if (nativeHook) setWindowsSwallowedKeys({ ...keys, masks: active ? maskCodes : [] });
 }
 
+/**
+ * maskCombos are the shortcuts Windows' own shortcut system handles. Their Alt or Windows
+ * key still reaches the focused app, so the native hook masks it.
+ */
 export function registerModifierShortcuts(
   shortcuts: { combo: string[]; trigger: () => void }[],
   flowHandlers: FlowHandlers,
+  maskCombos: string[][] = [],
 ) {
   handlers = flowHandlers;
   flow.reset();
@@ -85,7 +91,10 @@ export function registerModifierShortcuts(
     keys: combo.map((key) => resolveKey(key)!),
     trigger,
   }));
-  if (bindings.length === 0) {
+  maskCodes = process.platform === 'win32'
+    ? maskKeys(maskCombos.filter(canHookShortcut).map((combo) => combo.map((key) => resolveKey(key)!)))
+    : [];
+  if (bindings.length === 0 && maskCodes.length === 0) {
     stopModifierShortcuts();
     return;
   }
@@ -99,7 +108,11 @@ export function registerModifierShortcuts(
       else if (down) handleKeyDown(code, time);
       else handleKeyUp(code, time);
     });
-    if (!nativeHook) uIOhook.start();
+    if (!nativeHook) {
+      // uiohook cannot mask in time, so it is only worth starting for hook shortcuts.
+      if (bindings.length === 0) return;
+      uIOhook.start();
+    }
     running = true;
   }
   syncSwallowedKeys();
@@ -116,6 +129,7 @@ function forgetPressedKeys() {
 let nativeHook = false;
 // Keys other apps never see, so they need no menu mask.
 let swallowed: number[] = [];
+let maskCodes: number[] = [];
 
 let menuHeld = false;
 

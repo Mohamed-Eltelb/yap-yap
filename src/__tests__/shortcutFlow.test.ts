@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UiohookKey as Key } from 'uiohook-napi';
 import { ShortcutFlow, type AppStatus, type FlowOutput } from '../../electron/shortcutFlow';
-import { startsShortcut, swallowedKeys } from '../../electron/shortcutMatch';
+import { maskKeys, startsShortcut, swallowedKeys } from '../../electron/shortcutMatch';
 
 function setup(status: AppStatus = 'idle') {
   const outputs: FlowOutput[] = [];
@@ -129,5 +129,19 @@ describe('Keys the Windows hook swallows', () => {
 
   it('swallows nothing when no shortcut starts with Right Alt', () => {
     expect(swallowedKeys([{ keys: [[Key.Ctrl], [Key.Shift]] }])).toEqual({ leads: [], chords: [] });
+  });
+});
+
+describe('Keys the Windows hook masks', () => {
+  it('masks the other keys of Alt and Windows-key shortcuts', () => {
+    expect(maskKeys([
+      [[Key.Alt, Key.AltRight], [Key.Slash]],
+      [[Key.Meta, Key.MetaRight], [Key.Z]],
+      [[Key.Ctrl, Key.CtrlRight], [Key.A]],
+    ])).toEqual([Key.Slash, Key.Z]);
+  });
+
+  it('never masks a modifier', () => {
+    expect(maskKeys([[[Key.Alt], [Key.Shift, Key.ShiftRight], [Key.Slash]]])).toEqual([Key.Slash]);
   });
 });

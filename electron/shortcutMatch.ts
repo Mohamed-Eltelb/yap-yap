@@ -51,6 +51,23 @@ export function swallowedKeys(bindings: { keys: number[][] }[]): { leads: number
   return { leads: [UiohookKey.AltRight], chords: [...chords] };
 }
 
+const modifierKeys: number[] = [
+  ...menuKeys, UiohookKey.Shift, UiohookKey.ShiftRight, UiohookKey.Ctrl, UiohookKey.CtrlRight,
+];
+
+/**
+ * The keys after which Yap Yap's own Windows hook taps the mask key: the other keys of
+ * shortcuts with Alt or the Windows key, which another app would see as a lone menu tap.
+ */
+export function maskKeys(combos: number[][][]): number[] {
+  const keys = new Set<number>();
+  for (const combo of combos) {
+    if (!combo.some((options) => options.some(isMenuKey))) continue;
+    for (const options of combo) for (const key of options) if (!modifierKeys.includes(key)) keys.add(key);
+  }
+  return [...keys];
+}
+
 export function matchShortcut<T extends { keys: number[][] }>(
   bindings: T[],
   pressed: ReadonlyMap<number, number>,
