@@ -1,6 +1,6 @@
 {
   "name": "yap-yap",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Yap Yap — Multi-provider BYOK voice dictation, translation, and AI assistant desktop app.",
   "main": "dist-electron/main.js",
   "author": "Mohamed Eltelb",
