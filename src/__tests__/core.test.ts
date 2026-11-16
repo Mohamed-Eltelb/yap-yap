@@ -1472,10 +1472,13 @@ describe('Languages the user speaks', () => {
     expect(form.get('language')).toBe('ar');
   });
 
-  it('primes Whisper only in the languages the user speaks', async () => {
+  // Newer models don't guess the language the way Whisper does: one request, primed.
+  const strongModel = () => ({ ...withKey('groq'), sttModel: 'gpt-4o-transcribe' });
+
+  it('primes a newer model only in the languages the user speaks', async () => {
     const fetchMock = ok({ text: 'hi' });
     vi.stubGlobal('fetch', fetchMock);
-    await transcribeAudio(audio(), withKey('groq'), {
+    await transcribeAudio(audio(), strongModel(), {
       spokenLanguages: ['English', 'Arabic'],
       languageVariants: ['English (US)', 'Spanish (Mexico)', 'Arabic (Egypt)'],
     });
@@ -1501,13 +1504,63 @@ describe('Languages the user speaks', () => {
     expect(form.get('prompt')).toBeNull();
   });
 
-  it('keeps dictionary words in the Whisper prompt once languages are picked', async () => {
+  it('keeps dictionary words in a newer model\'s prompt once languages are picked', async () => {
     const fetchMock = ok({ text: 'hi' });
     vi.stubGlobal('fetch', fetchMock);
-    await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+    await transcribeAudio(audio(), strongModel(), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const prompt = String((fetchMock.mock.calls[0][1].body as FormData).get('prompt'));
     expect(prompt).toMatch(/[؀-ۿ]/);
     expect(prompt).toContain('Yap Yap');
+  });
+
+  describe('Whisper with several languages', () => {
+    // Replies per forced language, as Whisper's verbose_json: text plus segment confidence.
+    const byLanguage = (replies: Record<string, unknown>) => vi.fn(async (_url: string, init: { body: FormData }) => {
+      const reply = replies[String(init.body.get('language'))];
+      return reply === 'fail'
+        ? { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: 'Rate limited' } }) }
+        : { ok: true, status: 200, text: async () => JSON.stringify(reply) };
+    });
+    const pass = (text: string, ...logprobs: number[]) => ({ text, segments: logprobs.map((avg_logprob) => ({ avg_logprob })) });
+
+    it('transcribes once per language, with no prompt, and keeps English when Whisper is about as sure', async () => {
+      // A real recording: English speech that Whisper's own guess wrote out in Arabic.
+      const fetchMock = byLanguage({ en: pass('Mohamed is going to read.', -0.40), ar: pass('محمد حزب', -0.38) });
+      vi.stubGlobal('fetch', fetchMock);
+      const text = await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+      expect(text).toBe('Mohamed is going to read.');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect(init.body.get('prompt')).toBeNull();
+        expect(init.body.get('response_format')).toBe('verbose_json');
+      }
+    });
+
+    it('keeps the other language when Whisper is clearly surer of it', async () => {
+      vi.stubGlobal('fetch', byLanguage({ en: pass('Peace be upon you', -0.21), ar: pass('السلام عليكم', -0.04) }));
+      expect(await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'] })).toBe('السلام عليكم');
+    });
+
+    it('uses the passes that succeeded when one fails', async () => {
+      vi.stubGlobal('fetch', byLanguage({ en: 'fail', ar: pass('مرحبا', -0.5) }));
+      expect(await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'] })).toBe('مرحبا');
+    });
+
+    it('transcribes the usual way when the server reports no confidence', async () => {
+      const fetchMock = byLanguage({ en: { text: 'hi' }, ar: { text: 'أهلا' }, null: { text: 'hello' } });
+      vi.stubGlobal('fetch', fetchMock);
+      expect(await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'] })).toBe('hello');
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[2][1].body.get('prompt')).toMatch(/[؀-ۿ]/);
+    });
+
+    it('guesses in one request beyond three languages', async () => {
+      const fetchMock = ok({ text: 'hi' });
+      vi.stubGlobal('fetch', fetchMock);
+      await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic', 'French', 'Spanish'] });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('tells Deepgram the one language, or uses Nova-3 multilingual hinted with the user\'s languages', async () => {
