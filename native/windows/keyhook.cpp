@@ -51,9 +51,10 @@ int codeOf(DWORD scan, DWORD flags) {
   if (scan == kAltGrCtrlScan) return kLeftCtrl;
   const int low = static_cast<int>(scan & 0xFF);
   if (!(flags & LLKHF_EXTENDED)) return low;
-  // uiohook gives the arrow keys a different prefix, and NumLock none.
+  // uiohook gives the arrow keys a different prefix, and NumLock and Right Shift
+  // (which Windows marks as extended) none.
   if (low == 0x48 || low == 0x4B || low == 0x4D || low == 0x50) return 0xE000 | low;
-  if (low == 0x45) return low;
+  if (low == 0x45 || low == 0x36) return low;
   return 0xE00 | low;
 }
 

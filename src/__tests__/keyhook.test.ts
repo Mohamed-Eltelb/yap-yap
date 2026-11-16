@@ -69,6 +69,12 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
     expect(testEvent(0, SHIFT, KEYUP)).toBe(1);
   });
 
+  it('swallows Right Shift as Windows reports it', () => {
+    altDown();
+    expect(testEvent(1, SHIFT, EXTENDED)).toBe(1);
+    expect(testEvent(0, SHIFT, EXTENDED | KEYUP)).toBe(1);
+  });
+
   it('passes other keys while a lead is held', () => {
     altDown();
     expect(testEvent(1, Q, 0)).toBe(0);
@@ -114,6 +120,8 @@ describe.runIf(process.platform === 'win32')('Native key hook', () => {
     expect(testCode(0x45, EXTENDED)).toBe(0x45);
     expect(testCode(0x38, EXTENDED)).toBe(0xe38);
     expect(testCode(0x21d, 0)).toBe(29);
+    // Windows marks Right Shift as extended; uiohook does not.
+    expect(testCode(SHIFT, EXTENDED)).toBe(54);
   });
 
   it('starts and stops repeatedly', () => {
