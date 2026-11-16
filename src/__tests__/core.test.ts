@@ -1,6 +1,6 @@
 import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
-import { reservedShortcut } from '../../electron/shortcutBindings';
+import { addCapturedKey, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
@@ -61,6 +61,26 @@ describe('Saved shortcuts', () => {
       translate: [['Right Shift']],
       ask: [['Right Ctrl', 'L']],
     });
+  });
+});
+
+describe('Recording a shortcut', () => {
+  const record = (...events: [string, number][]) => {
+    const pressed = new Map<string, number>();
+    for (const [key, time] of events) addCapturedKey(pressed, key, time);
+    return [...pressed.keys()];
+  };
+
+  it('drops the Ctrl Windows sends with AltGr', () => {
+    expect(record(['Left Ctrl', 100], ['Right Alt', 101], ['Q', 300])).toEqual(['Right Alt', 'Q']);
+  });
+
+  it('keeps a Ctrl the user pressed before Right Alt', () => {
+    expect(record(['Left Ctrl', 100], ['Right Alt', 400], ['Q', 600])).toEqual(['Left Ctrl', 'Right Alt', 'Q']);
+  });
+
+  it('ignores repeats of a held key', () => {
+    expect(record(['Right Alt', 100], ['Right Alt', 600], ['Q', 700])).toEqual(['Right Alt', 'Q']);
   });
 });
 

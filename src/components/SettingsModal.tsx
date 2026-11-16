@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
-import { findShortcutConflict, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
+import { addCapturedKey, findShortcutConflict, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
   Globe,
   HelpCircle,
@@ -255,7 +255,7 @@ export function SettingsModal({
       if (!open || activeTab !== 'settings') setShortcutError(null);
       return;
     }
-    const pressed = new Set<string>();
+    const pressed = new Map<string, number>();
     const onKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -263,13 +263,13 @@ export function SettingsModal({
         setCapturingTarget(null);
         return;
       }
-      pressed.add(formatKeyName(e));
+      addCapturedKey(pressed, formatKeyName(e), e.timeStamp);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (!pressed.size) return;
       e.preventDefault();
       e.stopPropagation();
-      const combo = [...pressed];
+      const combo = [...pressed.keys()];
       const conflict = findShortcutConflict(settings.shortcuts, capturingTarget, combo, window.yapyap?.platform);
       setCapturingTarget(null);
       if (window.yapyap?.platform === 'win32' && reservedShortcut(combo)) {

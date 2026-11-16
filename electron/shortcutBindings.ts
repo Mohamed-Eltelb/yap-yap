@@ -114,3 +114,14 @@ export function reservedShortcut(combo: string[]): boolean {
   if (one && meta) return true;
   return ctrl && alt && others.includes('delete');
 }
+
+/**
+ * Adds a key the shortcut editor saw go down. AltGr layouts send a left Ctrl just before
+ * Right Alt; Yap Yap's own hook drops it, so the editor must not record it either.
+ */
+export function addCapturedKey(pressed: Map<string, number>, key: string, time: number): void {
+  if (pressed.has(key)) return;
+  const ctrlTime = pressed.get('Left Ctrl');
+  if (key === 'Right Alt' && ctrlTime !== undefined && time - ctrlTime <= 50) pressed.delete('Left Ctrl');
+  pressed.set(key, time);
+}
