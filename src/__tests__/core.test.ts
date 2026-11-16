@@ -1,6 +1,6 @@
 import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
-import { addCapturedKey, reservedShortcut } from '../../electron/shortcutBindings';
+import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
@@ -61,6 +61,25 @@ describe('Saved shortcuts', () => {
       translate: [['Right Shift']],
       ask: [['Right Ctrl', 'L']],
     });
+  });
+});
+
+describe('Left and Right Alt shortcuts', () => {
+  const shortcuts = { dictate: [['Left Alt', 'Q']], translate: [], ask: [] };
+  const slot = { mode: 'translate' as const, index: 0 };
+
+  it('tells Left Alt + Q from Right Alt + Q on Windows', () => {
+    expect(findShortcutConflict(shortcuts, slot, ['Right Alt', 'Q'], 'win32')).toBeUndefined();
+    expect(findShortcutConflict(shortcuts, slot, ['Left Alt', 'Q'], 'win32')).toBe('dictate');
+  });
+
+  it('keeps both when loading saved shortcuts on Windows', () => {
+    const saved = { dictate: [['Left Alt', 'Q']], translate: [['Right Alt', 'Q']], ask: [] };
+    expect(removeDuplicateShortcuts(saved, 'win32')).toEqual(saved);
+  });
+
+  it('still counts them as one elsewhere', () => {
+    expect(findShortcutConflict(shortcuts, slot, ['Right Alt', 'Q'], 'darwin')).toBe('dictate');
   });
 });
 

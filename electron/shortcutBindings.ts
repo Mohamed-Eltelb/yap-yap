@@ -44,11 +44,16 @@ function chordSignatures(combo: string[], platform?: string): string[] {
     const name = key === ' ' ? key : key.trim().toLowerCase();
     return Object.hasOwn(aliases, name) ? aliases[name] : name;
   }));
+  // On Windows Yap Yap's own hook hides Right Alt from Windows' shortcut system, so a
+  // Left Alt accelerator never fires for Right Alt and the two can hold different shortcuts.
+  const leftAltOnly = platform === 'win32' && accelerator !== null && combo.includes('Left Alt');
   let chords: string[][] = [[]];
   for (const key of normalized) {
-    const options = Object.hasOwn(sidedModifiers, key)
-      ? sidedModifiers[key as keyof typeof sidedModifiers]
-      : [key];
+    const options = key === 'alt' && leftAltOnly
+      ? ['left alt']
+      : Object.hasOwn(sidedModifiers, key)
+        ? sidedModifiers[key as keyof typeof sidedModifiers]
+        : [key];
     chords = chords.flatMap((chord) => options.map((option) => [...chord, option]));
   }
   return chords.map((chord) => JSON.stringify(chord.sort()));
