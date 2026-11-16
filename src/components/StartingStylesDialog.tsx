@@ -34,10 +34,15 @@ export function StartingStylesDialog({ corrections, active, onChange, onClose }:
     <SettingsSubdialog
       wide
       title="Writing style"
-      description="Pick how Yap Yap writes in each kind of place, starting with your next dictation. Leave a place on “Learn from me” to let it pick up your style as you dictate."
+      description="Pick how Yap Yap writes in each kind of place, starting with your next dictation. A style you pick stays until you change it; Yap Yap suggests an update in Writing preferences if your writing changes. “Learn from me” picks up your style as you dictate."
       onClose={onClose}
     >
       <div className="yy-language-body yy-variant-body yy-source-body">
+        <dl className="yy-style-examples">
+          {STYLE_PRESETS.map((item) => (
+            <div key={item.id}><dt>{item.label}</dt><dd>{item.example}</dd></div>
+          ))}
+        </dl>
         {!active && (
           <p className="yy-pref-note">Styles apply when personalization and AI cleanup are on.</p>
         )}
@@ -48,11 +53,11 @@ export function StartingStylesDialog({ corrections, active, onChange, onClose }:
           const value = preset ?? (custom ? CUSTOM : LEARN);
           const options = [
             { value: LEARN, label: 'Learn from me' },
-            ...STYLE_PRESETS.map((item) => ({ value: item.id, label: `${item.label}: “${item.example}”` })),
+            ...STYLE_PRESETS.map((item) => ({ value: item.id, label: item.label })),
             ...(custom ? [{ value: CUSTOM, label: 'Your own style' }] : []),
           ];
           const detail = preset
-            ? 'Set by you. Yap Yap suggests updates if your writing changes.'
+            ? `“${STYLE_PRESETS.find((item) => item.id === preset)!.example}”`
             : custom
               ? 'Set in Writing preferences'
               : 'Learned as you dictate';

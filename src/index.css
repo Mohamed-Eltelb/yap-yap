@@ -2132,3 +2132,28 @@ textarea,
 .yy-dictionary-heard::before {
   content: "\2190\00a0";
 }
+
+/* What each writing style looks like, above the list of places. */
+.yy-style-examples {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.yy-style-examples > div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+
+.yy-style-examples dt {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.yy-style-examples dd {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
