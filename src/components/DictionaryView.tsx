@@ -7,7 +7,7 @@ import { WindowControls } from './YapLogo';
 interface Props {
   entries: DictionaryEntry[];
   onAddWord: (word: string, source?: 'auto' | 'manual', heardAs?: string) => void;
-  onImportWords: (words: string[]) => void;
+  onImportWords: (words: ImportedWord[]) => void;
   onEditWord: (id: string, word: string, heardAs?: string) => void;
   onDeleteWords: (ids: readonly string[]) => void;
 }
@@ -20,11 +20,64 @@ const filters = [
   { id: 'manual', label: 'Manually-added', Icon: Feather },
 ] as const;
 
-export function parseDictionaryImportText(raw: string): string[] {
-  return raw
-    .split(/[\r\n,;]+/)
-    .map((s) => s.replace(/^["']|["']$/g, '').trim())
-    .filter((s) => s.length > 0);
+export interface ImportedWord {
+  word: string;
+  heardAs?: string;
+}
+
+const unquote = (field: string) => field.trim().replace(/^["']|["']$/g, '').replace(/""/g, '"').trim();
+
+/** Splits one CSV line on commas or semicolons outside quotes. */
+function csvFields(line: string): string[] {
+  const fields: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (const char of line) {
+    if (char === '"') quoted = !quoted;
+    if ((char === ',' || char === ';') && !quoted) {
+      fields.push(current);
+      current = '';
+    } else current += char;
+  }
+  fields.push(current);
+  return fields.map(unquote);
+}
+
+const WORD_HEADER = /^(?:word|words|phrase|term|correct(?: spelling)?|replace(?:ment| with)?|to)$/i;
+const HEARD_HEADER = /^(?:heard as|often written as|misspelling|misspelled|wrong(?: spelling)?|incorrect|from|original)$/i;
+/** "hand of -> handoff" or "hand of → handoff": the wrong spelling, then the word. */
+const ARROW = /\s*(?:->|=>|→)\s*/;
+
+/**
+ * Words from a CSV or text file: one or more per line, split by commas or semicolons. A line
+ * "hand of -> handoff", or a file with a header row naming a word column and a heard-as column,
+ * also sets the spelling each word replaces.
+ */
+export function parseDictionaryImportText(raw: string): ImportedWord[] {
+  const lines = raw.split(/\r?\n/).filter((line) => line.trim());
+  const header = lines.length ? csvFields(lines[0]) : [];
+  const wordColumn = header.findIndex((field) => WORD_HEADER.test(field));
+  const heardColumn = header.findIndex((field) => HEARD_HEADER.test(field));
+  const columns = wordColumn >= 0 && heardColumn >= 0;
+
+  const entries = (columns ? lines.slice(1) : lines).flatMap((line): ImportedWord[] => {
+    if (columns) {
+      const fields = csvFields(line);
+      const word = fields[wordColumn] ?? '';
+      const heardAs = readHeardAs(fields[heardColumn]);
+      return word ? [{ word, ...(heardAs && heardAs.toLowerCase() !== word.toLowerCase() && { heardAs }) }] : [];
+    }
+    const arrow = line.split(ARROW);
+    if (arrow.length === 2) {
+      const word = unquote(arrow[1]);
+      const heardAs = readHeardAs(unquote(arrow[0]));
+      if (word) return [{ word, ...(heardAs && heardAs.toLowerCase() !== word.toLowerCase() && { heardAs }) }];
+    }
+    return csvFields(line).filter(Boolean).map((word) => ({ word }));
+  });
+  // A word listed twice keeps its first spelling to replace.
+  const seen = new Set<string>();
+  return entries.filter(({ word }) => !seen.has(word.toLowerCase()) && seen.add(word.toLowerCase()));
 }
 
 export function DictionaryView({
@@ -357,15 +410,17 @@ export function DictionaryView({
             />
 
             <div className="flex items-center justify-between mt-6">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                hidden={Boolean(editingEntry)}
-                className="not-hidden:inline-flex items-center gap-2 text-[13px] font-medium text-[var(--text-primary)] hover:opacity-75 transition-opacity"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Import CSV</span>
-              </button>
+              {!editingEntry && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="One word per line. To replace a spelling, write it as: hand of -> handoff"
+                  className="-ml-3 inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Upload aria-hidden="true" className="size-4 shrink-0" />
+                  Import CSV
+                </button>
+              )}
 
               <div className="ml-auto flex items-center gap-2">
                 <button

@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -379,11 +379,49 @@ describe('Dictionary CSV/Text Parsing', () => {
     const parsed = parseDictionaryImportText(
       '"apivault.tech", seamless co-op;\nRecyclepen\n\nTabetha'
     );
-    expect(parsed).toEqual([
+    expect(parsed.map((entry) => entry.word)).toEqual([
       'apivault.tech',
       'seamless co-op',
       'Recyclepen',
       'Tabetha',
+    ]);
+    expect(parsed.some((entry) => entry.heardAs)).toBe(false);
+  });
+
+  it('reads replacements written with an arrow', () => {
+    expect(parseDictionaryImportText('hand of -> handoff\nsuper base → Supabase\nKubernetes')).toEqual([
+      { word: 'handoff', heardAs: 'hand of' },
+      { word: 'Supabase', heardAs: 'super base' },
+      { word: 'Kubernetes' },
+    ]);
+  });
+
+  it('reads replacements from a file with a header row, in either column order', () => {
+    expect(parseDictionaryImportText('Misspelling,Word\nhand of,handoff\n,Kubernetes\n"tab, etha",Tabetha')).toEqual([
+      { word: 'handoff', heardAs: 'hand of' },
+      { word: 'Kubernetes' },
+      { word: 'Tabetha', heardAs: 'tab, etha' },
+    ]);
+    expect(parseDictionaryImportText('word;heard as\nhandoff;hand of')).toEqual([{ word: 'handoff', heardAs: 'hand of' }]);
+  });
+
+  it('adds imported words and gives existing ones the spelling they replace', () => {
+    const dictionary = [
+      { id: 'd-1', word: 'handoff', source: 'auto' as const, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'd-2', word: 'Supabase', source: 'manual' as const, createdAt: '2026-01-01T00:00:00.000Z', heardAs: 'super base' },
+    ];
+    const merged = mergeImportedWords(dictionary, [
+      { word: 'Handoff', heardAs: 'hand of' },
+      { word: 'Firebase', heardAs: 'super base' },
+      { word: 'Kubernetes' },
+      { word: 'supabase' },
+    ], '2026-02-01T00:00:00.000Z');
+    expect(merged).toMatchObject({ added: 2, updated: 1 });
+    expect(merged.dictionary.map(({ word, heardAs }) => ({ word, heardAs }))).toEqual([
+      { word: 'Firebase', heardAs: undefined },
+      { word: 'Kubernetes', heardAs: undefined },
+      { word: 'handoff', heardAs: 'hand of' },
+      { word: 'Supabase', heardAs: 'super base' },
     ]);
   });
 });

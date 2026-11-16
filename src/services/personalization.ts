@@ -1,4 +1,4 @@
-import type { HistoryItem, RetainedStyleSample, StyleCorrections, WritingSample } from '../types/app';
+import type { DictionaryEntry, HistoryItem, RetainedStyleSample, StyleCorrections, WritingSample } from '../types/app';
 
 export const WRITING_CATEGORIES = [
   'AI assistants',
@@ -205,6 +205,37 @@ export function readHeardAs(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.replace(/\s+/gu, ' ').trim().slice(0, 60);
   return text || undefined;
+}
+
+/**
+ * Adds imported words to the dictionary. A word already there gains the spelling it replaces if it
+ * has none. A spelling another word already uses, or replaces, is dropped.
+ */
+export function mergeImportedWords(
+  dictionary: readonly DictionaryEntry[],
+  words: readonly { word: string; heardAs?: string }[],
+  createdAt = new Date().toISOString(),
+): { dictionary: DictionaryEntry[]; added: number; updated: number } {
+  let entries = [...dictionary];
+  const additions: DictionaryEntry[] = [];
+  let updated = 0;
+  const same = (a?: string, b?: string) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+  const taken = (heardAs: string, exceptId?: string) => [...entries, ...additions]
+    .some((entry) => entry.id !== exceptId && (same(entry.word, heardAs) || same(entry.heardAs, heardAs)));
+  words.forEach(({ word, heardAs }, index) => {
+    const existing = entries.find((entry) => same(entry.word, word));
+    const usable = heardAs && !same(heardAs, word) && !taken(heardAs, existing?.id) ? heardAs : undefined;
+    if (existing) {
+      if (usable && !existing.heardAs) {
+        entries = entries.map((entry) => entry.id === existing.id ? { ...entry, heardAs: usable } : entry);
+        updated += 1;
+      }
+      return;
+    }
+    if (additions.some((entry) => same(entry.word, word))) return;
+    additions.push({ id: `d-${Date.parse(createdAt)}-${index}`, word, source: 'manual', createdAt, ...(usable && { heardAs: usable }) });
+  });
+  return { dictionary: [...additions, ...entries], added: additions.length, updated };
 }
 
 /**

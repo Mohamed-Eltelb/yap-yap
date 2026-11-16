@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DictationContext } from '../electron/dictationContext';
-import { DictionaryView } from './components/DictionaryView';
+import { DictionaryView, type ImportedWord } from './components/DictionaryView';
 import { DictationHud, HudState } from './components/DictationHud';
 import { HistoryView } from './components/HistoryView';
 import { HomeView } from './components/HomeView';
@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyDictionaryReplacements, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -1422,23 +1422,12 @@ export function App() {
     });
   };
 
-  const handleImportDictionaryWords = (words: string[]) => {
-    setAppState((prev) => {
-      const existing = new Set(prev.dictionary.map((d) => d.word.toLowerCase()));
-      const additions = words
-        .filter((w) => !existing.has(w.toLowerCase()))
-        .map((w, idx) => ({
-          id: `d-${Date.now()}-${idx}`,
-          word: w,
-          source: 'manual' as const,
-          createdAt: new Date().toISOString(),
-        }));
-      return {
-        ...prev,
-        dictionary: [...additions, ...prev.dictionary],
-      };
-    });
-    showToast(`Imported ${words.length} words`);
+  const handleImportDictionaryWords = (words: ImportedWord[]) => {
+    // Counted on the current list for the message; the saved list is merged again in case it changed.
+    const { added, updated } = mergeImportedWords(appState.dictionary, words);
+    setAppState((prev) => ({ ...prev, dictionary: mergeImportedWords(prev.dictionary, words).dictionary }));
+    const parts = [added && `Imported ${added} ${added === 1 ? 'word' : 'words'}`, updated && `added ${updated} ${updated === 1 ? 'replacement' : 'replacements'}`].filter(Boolean);
+    showToast(parts.length ? parts.join(', ') : 'Everything in that file is already in your dictionary');
   };
 
   if (isHudRoute) {
