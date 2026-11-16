@@ -13,7 +13,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, saveKeyHistory, setMenuMasking, stopModifierShortcuts } from './modifierShortcuts';
+import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, saveKeyHistory, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
@@ -313,6 +313,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   // Electron requires shortcut handling to be active when adding registrations.
   globalShortcut.setSuspended(false);
   const modifierShortcuts: Parameters<typeof registerModifierShortcuts>[0] = [];
+  const claims: string[] = [];
 
   for (const mode of shortcutModes) {
     for (const combo of unique[mode]) {
@@ -320,15 +321,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
       if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
         modifierShortcuts.push({ combo, trigger });
-        // The hook only observes keys. Claiming the chord as well keeps it from
-        // reaching the focused app (Alt+Space would open its window menu).
-        if (accel) {
-          try {
-            globalShortcut.register(accel, () => undefined);
-          } catch {
-            // Another app owns it; the hook still triggers the mode.
-          }
-        }
+        if (accel) claims.push(accel);
         continue;
       }
       if (!accel) continue;
@@ -348,6 +341,18 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
       onPhase: (phase) => mainWindow?.webContents.send('shortcut:phase', phase),
       onStop: () => mainWindow?.webContents.send('hud:action', { type: 'stop' } satisfies HudAction),
     });
+    // uiohook only observes keys, so there the chord is also claimed to keep it from
+    // the focused app (Alt+Space would open its window menu). Yap Yap's own Windows
+    // hook swallows the chord itself, and a claim would also take Left Alt+Space.
+    if (!swallowsKeys()) {
+      for (const accel of claims) {
+        try {
+          globalShortcut.register(accel, () => undefined);
+        } catch {
+          // Another app owns it; the hook still triggers the mode.
+        }
+      }
+    }
     return true;
   } catch (error) {
     console.warn('Could not register modifier-only shortcuts', error);

@@ -13,13 +13,16 @@ vi.mock('../../electron/windowsKeyHook', () => ({
 
 describe.runIf(process.platform === 'win32')('Modifier shortcuts on Windows', () => {
   it('lets the shortcut editor see Right Alt, then swallows it again', async () => {
-    const { registerModifierShortcuts, setMenuMasking, stopModifierShortcuts } = await import('../../electron/modifierShortcuts');
+    const { registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } = await import('../../electron/modifierShortcuts');
     registerModifierShortcuts([{ combo: ['Right Alt'], trigger: vi.fn() }], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn() });
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [3640], chords: [] });
+    // Right Alt chords no longer need a global shortcut to keep them from apps.
+    expect(swallowsKeys()).toBe(true);
     setMenuMasking(false);
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [], chords: [] });
     setMenuMasking(true);
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [3640], chords: [] });
     stopModifierShortcuts();
+    expect(swallowsKeys()).toBe(false);
   });
 });

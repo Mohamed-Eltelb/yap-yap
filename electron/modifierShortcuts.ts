@@ -182,6 +182,11 @@ function handleKeyUp(keycode: number, time: number) {
 uIOhook.on('keydown', ({ keycode, time }) => handleKeyDown(keycode, time));
 uIOhook.on('keyup', ({ keycode, time }) => handleKeyUp(keycode, time));
 
+/** True while Yap Yap's own Windows hook keeps Right Alt and its chords from other apps. */
+export function swallowsKeys(): boolean {
+  return running && nativeHook;
+}
+
 export function stopModifierShortcuts() {
   if (running && nativeHook) stopWindowsKeyHook();
   else if (running) uIOhook.stop();
