@@ -298,34 +298,6 @@ const DEEPGRAM_MULTI_CODES = new Set([
   'ja', 'ko', 'fa', 'pl', 'pt', 'ru', 'es', 'tr', 'uk', 'vi',
 ]);
 
-// Each picked language costs one more Whisper request, so beyond this it guesses instead.
-const MAX_LANGUAGE_PASSES = 3;
-// Whisper is confident in English even on other speech, since it is trained to translate
-// into English. Another language must beat English by this much (mean log-probability)
-// to win. On the user's own recordings, Arabic beat English by 0.17 or more, while
-// English speech never let Arabic ahead by more than 0.02.
-const ENGLISH_LEAN = 0.1;
-
-type WhisperPass = { text?: string; segments?: Array<{ avg_logprob?: number }> };
-
-/**
- * The transcript Whisper was most confident in, from one pass per language. Undefined
- * when no pass carries confidence scores, as from a server that leaves them out.
- */
-export function mostConfidentTranscript(passes: Array<WhisperPass & { code: string }>): string | undefined {
-  const score = (pass: WhisperPass & { code: string }) => {
-    const logprobs = (pass.segments ?? [])
-      .map((segment) => segment.avg_logprob)
-      .filter((logprob): logprob is number => typeof logprob === 'number');
-    if (logprobs.length === 0) return -Infinity;
-    const mean = logprobs.reduce((sum, logprob) => sum + logprob, 0) / logprobs.length;
-    return pass.code === 'en' ? mean + ENGLISH_LEAN : mean;
-  };
-  if (passes.length === 0) return undefined;
-  const best = passes.reduce((winner, pass) => score(pass) > score(winner) ? pass : winner);
-  return score(best) === -Infinity ? undefined : best.text ?? '';
-}
-
 export async function transcribeAudio(
   audioBlob: Blob,
   provider: ProviderConfig,
@@ -357,57 +329,34 @@ export async function transcribeAudio(
     const fields: Record<string, string> = {
       model: provider.sttModel || meta.sttModels[0]?.id || 'gpt-transcribe',
     };
-    const promptParts: string[] = [];
     // Whisper reads the prompt as text that came before the audio, not as instructions,
     // and tends to answer in the prompt's language: an English prompt makes it translate
-    // Arabic speech into English. So each language is primed in its own words.
+    // Arabic speech into English. So each language is primed in its own words. The lines
+    // go last: Whisper keeps only the end of a long prompt, and weighs it most.
     // On auto-detect Whisper gets no prompt at all: dictionary words alone are usually
     // English or Latin-script names, and would steer it into translating other speech.
     if (languages.length > 0) {
-      promptParts.push(...languages.map((language) => language.phrase));
-      if (dictHint) promptParts.push(`${dictHint}.`);
-    }
-    if (promptParts.length > 0) {
-      fields.prompt = promptParts.join(' ');
+      fields.prompt = [
+        ...dictHint ? [`${dictHint}.`] : [],
+        ...languages.map((language) => language.phrase),
+      ].join(' ');
     }
     if (onlyLanguage) fields.language = onlyLanguage.code;
 
     const headers: Record<string, string> = {};
     if (key) headers.Authorization = `Bearer ${key}`;
 
-    const transcribe = async (sent: Record<string, string> = fields) => {
-      const res = await performMultipartRequest(
-        `${base}/audio/transcriptions`,
-        headers,
-        audioBlob,
-        `audio.${ext}`,
-        sent
-      );
-      if (!res.ok) {
-        throw new Error(extractErrorMessage(res.text, res.status));
-      }
-      return JSON.parse(res.text) as WhisperPass;
-    };
-
-    // Whisper guesses the language from the sound alone, and often hears short, accented
-    // English as another language, then writes it translated. No prompt prevents that.
-    // So with several languages, Whisper models transcribe once in each, in parallel, and
-    // the result Whisper is most confident in wins. These passes get no prompt: a prompt
-    // shifts the confidence it is judged by. Newer models such as gpt-4o-transcribe
-    // don't need this, and can't report their confidence anyway.
-    if (languages.length >= 2 && languages.length <= MAX_LANGUAGE_PASSES && /whisper/i.test(fields.model)) {
-      const passes = await Promise.allSettled(languages.map(async (language) => ({
-        code: language.code,
-        ...await transcribe({ model: fields.model, language: language.code, response_format: 'verbose_json' }),
-      })));
-      const done = passes.flatMap((pass) => pass.status === 'fulfilled' ? [pass.value] : []);
-      const winner = mostConfidentTranscript(done);
-      if (winner !== undefined) return winner.trim();
-      // No pass could be judged (a server without confidence scores, or every pass
-      // failed): transcribe the usual way instead.
+    const res = await performMultipartRequest(
+      `${base}/audio/transcriptions`,
+      headers,
+      audioBlob,
+      `audio.${ext}`,
+      fields
+    );
+    if (!res.ok) {
+      throw new Error(extractErrorMessage(res.text, res.status));
     }
-
-    const json = await transcribe();
+    const json = JSON.parse(res.text) as { text?: string };
     return (json.text ?? '').trim();
   }
 
@@ -417,7 +366,8 @@ export async function transcribeAudio(
     // Deepgram assumes English unless told otherwise. Nova-3's multilingual mode handles
     // switching languages mid-sentence, and its hints favor the user's languages. Older
     // models can only detect one language for the whole recording.
-    const multilingual = model.startsWith('nova-3');
+    // Nova-3 Pharma is English only, so it has no multilingual mode.
+    const multilingual = model.startsWith('nova-3') && !model.includes('pharma');
     // Deepgram documents language hints for Nova-3 itself, not for its medical model.
     const takesHints = multilingual && !model.includes('medical');
     const plainLanguage: Array<[string, string]> = multilingual
@@ -453,6 +403,8 @@ export async function transcribeAudio(
       buildParams(userLanguage, terms.length > 0),
       buildParams(userLanguage, false),
       buildParams(plainLanguage, false),
+      // Last, as before any language support: an English-only model rejects them all.
+      buildParams([], false),
     ])];
     let res!: Awaited<ReturnType<typeof performRequest>>;
     for (const params of attempts) {
