@@ -1,6 +1,6 @@
 // Yap Yap's Windows keyboard hook. It swallows the keys Yap Yap owns (Right Alt and the
-// keys that complete a shortcut with it) so other apps never see them, and reports every
-// key to Yap Yap. The hook thread decides on its own and never waits for JavaScript: a
+// keys that complete a shortcut with it) so other apps never see them, masks Alt and the
+// Windows key for Yap Yap's other shortcuts, and reports every key to Yap Yap. The hook thread decides on its own and never waits for JavaScript: a
 // slow hook delays all typing, and Windows drops hooks that take too long.
 #include <windows.h>
 #include <condition_variable>
@@ -28,6 +28,11 @@ std::set<int> leads, chords;
 // Keys whose key-down was swallowed. Their repeats and key-up are swallowed too, and
 // nothing else is, so Windows never sees a key go down without coming back up.
 std::set<int> swallowedDowns;
+// Keys that complete a Yap Yap shortcut with Alt or the Windows key. Releasing those alone
+// opens the focused app's menu or the Start menu; a key in between prevents it.
+std::set<int> maskKeys;
+std::set<int> heldMenuKeys, heldMaskKeys;
+const int kMenuKeys[] = {0x38, kRightAlt, 0xE5B, 0xE5C};
 
 // One per start. A notifier from an earlier start may still be waiting for JavaScript,
 // so it keeps its own queue and stop flag and can never take this start's events.
@@ -76,6 +81,39 @@ bool swallow(bool down, DWORD scan, DWORD flags) {
   return owned;
 }
 
+bool isMenuKey(int code) {
+  for (int key : kMenuKeys) if (key == code) return true;
+  return false;
+}
+
+// True on the first real press of a mask key while Alt or the Windows key is held.
+bool shouldMask(bool down, DWORD scan, DWORD flags) {
+  if (flags & LLKHF_INJECTED) return false;
+  const int code = codeOf(scan, flags);
+  std::lock_guard<std::mutex> guard(keysLock);
+  if (isMenuKey(code)) {
+    if (down) heldMenuKeys.insert(code);
+    else heldMenuKeys.erase(code);
+    return false;
+  }
+  if (!maskKeys.count(code)) return false;
+  if (!down) {
+    heldMaskKeys.erase(code);
+    return false;
+  }
+  if (!heldMaskKeys.insert(code).second) return false;  // a repeat
+  return !heldMenuKeys.empty();
+}
+
+// F24 is on no keyboard and bound by no app, so tapping it does nothing else.
+void sendMask() {
+  INPUT inputs[2] = {};
+  inputs[0].type = inputs[1].type = INPUT_KEYBOARD;
+  inputs[0].ki.wVk = inputs[1].ki.wVk = VK_F24;
+  inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+  SendInput(2, inputs, sizeof(INPUT));
+}
+
 void post(int down, int code, unsigned time) {
   std::shared_ptr<Channel> target;
   {
@@ -96,6 +134,8 @@ void forgetHeldKeys() {
   {
     std::lock_guard<std::mutex> guard(keysLock);
     swallowedDowns.clear();
+    heldMenuKeys.clear();
+    heldMaskKeys.clear();
   }
   post(0, kResetCode, GetTickCount());
 }
@@ -106,6 +146,7 @@ LRESULT CALLBACK hookProc(int nCode, WPARAM wParam, LPARAM lParam) {
   // reported: they carry no scan code and are never a shortcut press.
   if (nCode == HC_ACTION && !(key->flags & LLKHF_INJECTED)) {
     const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+    if (shouldMask(down, key->scanCode, key->flags)) sendMask();
     const bool swallowed = swallow(down, key->scanCode, key->flags);
     post(down ? 1 : 0, codeOf(key->scanCode, key->flags), static_cast<unsigned>(key->time));
     if (swallowed) return 1;
@@ -142,6 +183,12 @@ __declspec(dllexport) void yk_set_keys(const int* leadCodes, int leadCount, cons
   for (int i = 0; i < leadCount; i++) leads.insert(leadCodes[i]);
   for (int i = 0; i < chordCount; i++) chords.insert(chordCodes[i]);
   // Keys already swallowed stay tracked so their key-ups are swallowed as well.
+}
+
+__declspec(dllexport) void yk_set_mask_keys(const int* codes, int count) {
+  std::lock_guard<std::mutex> guard(keysLock);
+  maskKeys.clear();
+  for (int i = 0; i < count; i++) maskKeys.insert(codes[i]);
 }
 
 // The callback must stay valid for the life of the process: a notifier from an earlier
@@ -219,6 +266,10 @@ __declspec(dllexport) int yk_test_event(int down, int scan, int flags) {
   return swallow(down != 0, static_cast<DWORD>(scan), static_cast<DWORD>(flags)) ? 1 : 0;
 }
 
+__declspec(dllexport) int yk_test_mask(int down, int scan, int flags) {
+  return shouldMask(down != 0, static_cast<DWORD>(scan), static_cast<DWORD>(flags)) ? 1 : 0;
+}
+
 __declspec(dllexport) int yk_test_code(int scan, int flags) {
   return codeOf(static_cast<DWORD>(scan), static_cast<DWORD>(flags));
 }
@@ -230,6 +281,8 @@ __declspec(dllexport) void yk_test_desktop_switch() {
 __declspec(dllexport) void yk_test_reset() {
   std::lock_guard<std::mutex> guard(keysLock);
   swallowedDowns.clear();
+  heldMenuKeys.clear();
+  heldMaskKeys.clear();
 }
 
 }  // extern "C"
