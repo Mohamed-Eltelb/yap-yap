@@ -46,7 +46,13 @@ async function rnnoiseStream(audioCtx: AudioContext, source: MediaStreamAudioSou
       URL.revokeObjectURL(workletUrl);
     }
     const rnnoise = new RnnoiseWorkletNode(audioCtx, { wasmBinary, maxChannels: 1 });
+    // RNNoise cleans only its first channel. Most microphones deliver two, which left the
+    // second one silent: recordings played in the left ear only. Mixing the microphone
+    // down to one channel first gives a mono recording that plays in both ears.
+    rnnoise.channelCount = 1;
+    rnnoise.channelCountMode = 'explicit';
     const output = audioCtx.createMediaStreamDestination();
+    output.channelCount = 1;
     source.connect(rnnoise);
     rnnoise.connect(output);
     return { node: rnnoise as AudioNode, stream: output.stream };
