@@ -1487,25 +1487,79 @@ describe('Languages the user speaks', () => {
     expect(prompt).not.toContain('español');
   });
 
-  it('leaves Whisper to detect the language on auto-detect', async () => {
+  it('sends Whisper no prompt on auto-detect, not even dictionary words', async () => {
+    // An English-only prompt made Whisper translate Arabic speech into English.
     const fetchMock = ok({ text: 'hi' });
     vi.stubGlobal('fetch', fetchMock);
-    await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: [], languageVariants: ['English (US)', 'Arabic (Egypt)'] });
+    await transcribeAudio(audio(), withKey('groq'), {
+      spokenLanguages: [],
+      dictionaryWords: ['Yap Yap', 'Mohamed'],
+      languageVariants: ['English (US)', 'Arabic (Egypt)'],
+    });
     const form = fetchMock.mock.calls[0][1].body as FormData;
     expect(form.get('language')).toBeNull();
     expect(form.get('prompt')).toBeNull();
   });
 
-  it('tells Deepgram the language, or asks it to detect one', async () => {
+  it('keeps dictionary words in the Whisper prompt once languages are picked', async () => {
+    const fetchMock = ok({ text: 'hi' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('groq'), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+    const prompt = String((fetchMock.mock.calls[0][1].body as FormData).get('prompt'));
+    expect(prompt).toMatch(/[؀-ۿ]/);
+    expect(prompt).toContain('Yap Yap');
+  });
+
+  it('tells Deepgram the one language, or uses Nova-3 multilingual hinted with the user\'s languages', async () => {
     const fetchMock = ok({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } });
     vi.stubGlobal('fetch', fetchMock);
     await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['Arabic'] });
-    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['English', 'Arabic'] });
+    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['English', 'Arabic', 'Urdu'] });
     await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: [] });
     const urls = fetchMock.mock.calls.map(([url]) => new URL(url as string).searchParams);
-    expect(urls[0].get('language')).toBe('ar');
-    expect(urls[1].get('detect_language')).toBe('true');
-    expect(urls[2].get('detect_language')).toBe('true');
+    expect(urls[0].getAll('language')).toEqual(['ar']);
+    expect(urls[1].getAll('language')).toEqual(['multi']);
+    // Urdu isn't a supported multilingual hint, and an unsupported hint fails the request.
+    expect(urls[1].getAll('language_hint')).toEqual(['ar', 'en']);
+    expect(urls[2].getAll('language')).toEqual(['multi']);
+    expect(urls[2].getAll('language_hint')).toEqual([]);
+  });
+
+  it('asks older Deepgram models to detect the language when several are spoken', async () => {
+    const fetchMock = ok({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } });
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = { ...withKey('deepgram'), sttModel: 'nova-2' };
+    await transcribeAudio(audio(), provider, { spokenLanguages: ['English', 'Arabic'] });
+    const params = new URL(fetchMock.mock.calls[0][0] as string).searchParams;
+    expect(params.get('detect_language')).toBe('true');
+    expect(params.get('language')).toBeNull();
+    expect(params.getAll('language_hint')).toEqual([]);
+  });
+
+  it('drops the dictionary terms before the language when Deepgram rejects a request', async () => {
+    const rejected = { ok: false, status: 400, text: async () => JSON.stringify({ err_msg: 'bad request' }) };
+    const accepted = { ok: true, status: 200, text: async () => JSON.stringify({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } }) };
+    const fetchMock = vi.fn().mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+    const [first, second] = fetchMock.mock.calls.map(([url]) => new URL(url as string).searchParams);
+    expect(first.getAll('keyterm')).toEqual(['Yap Yap']);
+    expect(second.getAll('keyterm')).toEqual([]);
+    expect(second.getAll('language_hint')).toEqual(['ar', 'en']);
+  });
+
+  it('falls back to plain multilingual when Deepgram rejects the language too', async () => {
+    const rejected = { ok: false, status: 400, text: async () => JSON.stringify({ err_msg: 'bad request' }) };
+    const accepted = { ok: true, status: 200, text: async () => JSON.stringify({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } }) };
+    const fetchMock = vi.fn().mockResolvedValueOnce(rejected).mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);
+    vi.stubGlobal('fetch', fetchMock);
+    const text = await transcribeAudio(audio(), withKey('deepgram'), { spokenLanguages: ['English', 'Arabic'], dictionaryWords: ['Yap Yap'] });
+    expect(text).toBe('x');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const last = new URL(fetchMock.mock.calls[2][0] as string).searchParams;
+    expect(last.getAll('language')).toEqual(['multi']);
+    expect(last.getAll('language_hint')).toEqual([]);
+    expect(last.getAll('keyterm')).toEqual([]);
   });
 
   it('tells ElevenLabs the one language the user speaks', async () => {

@@ -291,6 +291,13 @@ export async function testProviderConnection(provider: ProviderConfig): Promise<
   }
 }
 
+// Languages Nova-3's multilingual mode accepts as hints, from Deepgram's models and
+// languages overview (af, ar, ... zu), limited to the codes Yap Yap offers.
+const DEEPGRAM_MULTI_CODES = new Set([
+  'af', 'ar', 'zh', 'nl', 'en', 'fr', 'de', 'hi', 'id', 'it',
+  'ja', 'ko', 'fa', 'pl', 'pt', 'ru', 'es', 'tr', 'uk', 'vi',
+]);
+
 export async function transcribeAudio(
   audioBlob: Blob,
   provider: ProviderConfig,
@@ -326,9 +333,12 @@ export async function transcribeAudio(
     // Whisper reads the prompt as text that came before the audio, not as instructions,
     // and tends to answer in the prompt's language: an English prompt makes it translate
     // Arabic speech into English. So each language is primed in its own words.
-    // On auto-detect nothing is primed, so no language is favored.
-    promptParts.push(...languages.map((language) => language.phrase));
-    if (dictHint) promptParts.push(`${dictHint}.`);
+    // On auto-detect Whisper gets no prompt at all: dictionary words alone are usually
+    // English or Latin-script names, and would steer it into translating other speech.
+    if (languages.length > 0) {
+      promptParts.push(...languages.map((language) => language.phrase));
+      if (dictHint) promptParts.push(`${dictHint}.`);
+    }
     if (promptParts.length > 0) {
       fields.prompt = promptParts.join(' ');
     }
@@ -354,36 +364,47 @@ export async function transcribeAudio(
   if (provider.id === 'deepgram') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
     const model = provider.sttModel || 'nova-3';
-    const buildParams = (includeTerms: boolean, fixedLanguage = true) => {
+    // Deepgram assumes English unless told otherwise. Nova-3's multilingual mode handles
+    // switching languages mid-sentence, and its hints favor the user's languages. Older
+    // models can only detect one language for the whole recording.
+    const multilingual = model === 'nova-3' || model === 'nova-3-general';
+    const plainLanguage: Array<[string, string]> = multilingual
+      ? [['language', 'multi']]
+      : [['detect_language', 'true']];
+    const userLanguage: Array<[string, string]> = onlyLanguage
+      ? [['language', onlyLanguage.code]]
+      : multilingual
+        ? [
+          ['language', 'multi'],
+          // A hint Deepgram doesn't support fails the request, so only supported ones go.
+          ...languages
+            .filter((language) => DEEPGRAM_MULTI_CODES.has(language.code))
+            .map((language): [string, string] => ['language_hint', language.code]),
+        ]
+        : plainLanguage;
+    const terms = (options.dictionaryWords ?? []).slice(0, 20);
+    const termName = model.startsWith('nova-3') ? 'keyterm' : 'keywords';
+    const buildParams = (language: Array<[string, string]>, includeTerms: boolean) => {
       const p = new URLSearchParams({
         model,
         smart_format: 'true',
         punctuate: 'true',
       });
-      // Deepgram assumes English unless told otherwise.
-      if (onlyLanguage && fixedLanguage) p.set('language', onlyLanguage.code);
-      else p.set('detect_language', 'true');
-      if (includeTerms) {
-        const paramName = model.startsWith('nova-3') ? 'keyterm' : 'keywords';
-        for (const kw of (options.dictionaryWords ?? []).slice(0, 20)) {
-          p.append(paramName, kw);
-        }
-      }
-      return p;
+      for (const [name, value] of language) p.append(name, value);
+      if (includeTerms) for (const term of terms) p.append(termName, term);
+      return p.toString();
     };
 
-    let res = await performRequest(`${base}/listen?${buildParams(true).toString()}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Token ${key}`,
-        'Content-Type': audioBlob.type || 'audio/webm',
-      },
-      body: audioBlob,
-    });
-    // A model that doesn't support the terms or the language answers 400: retry plainly,
-    // letting Deepgram detect the language.
-    if (!res.ok && res.status === 400 && ((options.dictionaryWords?.length ?? 0) > 0 || onlyLanguage)) {
-      res = await performRequest(`${base}/listen?${buildParams(false, false).toString()}`, {
+    // A model that rejects the terms, the language or a hint answers 400. Drop the terms
+    // first, keeping the language, which matters more; only then fall back to plain.
+    const attempts = [...new Set([
+      buildParams(userLanguage, terms.length > 0),
+      buildParams(userLanguage, false),
+      buildParams(plainLanguage, false),
+    ])];
+    let res!: Awaited<ReturnType<typeof performRequest>>;
+    for (const params of attempts) {
+      res = await performRequest(`${base}/listen?${params}`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${key}`,
@@ -391,6 +412,7 @@ export async function transcribeAudio(
         },
         body: audioBlob,
       });
+      if (res.ok || res.status !== 400) break;
     }
     if (!res.ok) {
       throw new Error(extractErrorMessage(res.text, res.status));
