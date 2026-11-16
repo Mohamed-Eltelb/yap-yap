@@ -25,7 +25,7 @@ import {
 } from '../types/app';
 import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
-import { LanguageVariantsDialog, TranslationTargetsDialog } from './LanguageSettingsDialogs';
+import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
 import { ProviderSettings } from './ProviderSettings';
 import { PersonalizationEditor } from './PersonalizationEditor';
@@ -154,7 +154,7 @@ export function SettingsModal({
   const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[]; reason: 'used' | 'reserved' } | null>(null);
-  const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
+  const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | 'spoken' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -528,6 +528,29 @@ export function SettingsModal({
                           <span className="truncate">
                             {settings.translationTargets.join(', ') || 'Select languages'}
                           </span>
+                          <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="py-2.5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Languages I speak
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            The languages you dictate in, so speech stays in the language you spoke.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Edit languages I speak: ${settings.spokenLanguages.join(', ') || 'Auto-detect'}`}
+                          aria-haspopup="dialog"
+                          onClick={() => setLanguageDialog('spoken')}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
+                        >
+                          <span className="truncate">{settings.spokenLanguages.join(', ') || 'Auto-detect'}</span>
                           <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
                         </button>
                       </div>
@@ -1041,6 +1064,13 @@ export function SettingsModal({
         <TranslationTargetsDialog
           targets={settings.translationTargets}
           onChange={(translationTargets) => onUpdateSettings({ translationTargets })}
+          onClose={() => setLanguageDialog(null)}
+        />
+      )}
+      {languageDialog === 'spoken' && (
+        <SpokenLanguagesDialog
+          languages={settings.spokenLanguages}
+          onChange={(spokenLanguages) => onUpdateSettings({ spokenLanguages })}
           onClose={() => setLanguageDialog(null)}
         />
       )}

@@ -6,6 +6,7 @@ import {
   setLanguageVariant,
   TRANSLATION_LANGUAGES,
 } from '../data/languages';
+import { SPOKEN_LANGUAGES } from '../data/spokenLanguages';
 import { SelectMenu } from './SelectMenu';
 import { SettingsSubdialog } from './SettingsSubdialog';
 
@@ -284,6 +285,41 @@ export function LanguageVariantsDialog({ variants, onChange, onClose }: {
             Variants are available for English, Chinese, Spanish, French, and Portuguese.
             Other languages use standard variants.
           </div>
+        </div>
+      </div>
+    </SettingsSubdialog>
+  );
+}
+
+/** The languages the user speaks. None picked means auto-detect. */
+export function SpokenLanguagesDialog({ languages, onChange, onClose }: {
+  languages: string[];
+  onChange: (languages: string[]) => void;
+  onClose: () => void;
+}) {
+  const toggle = (name: string) => onChange(languages.includes(name)
+    ? languages.filter((language) => language !== name)
+    : [...languages, name]);
+
+  return (
+    <SettingsSubdialog
+      title="Languages I speak"
+      description="Pick the languages you dictate in for the most accurate transcription, or let Yap Yap detect the language each time."
+      onClose={onClose}
+    >
+      <div className="yy-language-body yy-spoken-body">
+        <label className="yy-spoken-row yy-spoken-auto">
+          <input type="checkbox" checked={languages.length === 0} onChange={() => onChange([])} />
+          <span>Auto-detect</span>
+        </label>
+        <div className="yy-spoken-list" role="group" aria-label="Languages">
+          {SPOKEN_LANGUAGES.map(({ name, native }) => (
+            <label className="yy-spoken-row" key={name}>
+              <input type="checkbox" checked={languages.includes(name)} onChange={() => toggle(name)} />
+              <span>{name}</span>
+              {native !== name && <span className="yy-spoken-native">{native}</span>}
+            </label>
+          ))}
         </div>
       </div>
     </SettingsSubdialog>
