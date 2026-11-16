@@ -549,6 +549,21 @@ describe('Multi-Provider Engine', () => {
     expect(init.headers.Authorization).toBe('Bearer gsk_test_123');
   });
 
+  it('does not steer Whisper toward English when the user also speaks Arabic', async () => {
+    const providers = createDefaultProviders();
+    providers.groq.apiKey = 'gsk_test_123';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ text: 'مرحبا' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await transcribeAudio(new Blob([new Uint8Array([1])], { type: 'audio/webm' }), providers.groq, {
+      languageVariants: ['English (US)', 'Arabic (Egypt)'],
+    });
+
+    const prompt = String((fetchMock.mock.calls[0][1].body as FormData).get('prompt'));
+    expect(prompt).toMatch(/[؀-ۿ]/);
+    expect(prompt).not.toContain('Speaking');
+  });
+
   it('routes multipart STT uploads through Electron IPC with ElevenLabs scribe_v3 default', async () => {
     const providers = createDefaultProviders();
     providers.elevenlabs.apiKey = 'el_test_key';

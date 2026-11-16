@@ -106,6 +106,32 @@ async function performRequest(
   return { ok: res.ok, status: res.status, text };
 }
 
+// A short line in each language, so Whisper keeps speech in the language it was spoken in.
+const nativePhrases: Record<string, string> = {
+  arabic: 'أنا بتكلم عربي.',
+  english: 'I speak English.',
+  french: 'Je parle français.',
+  spanish: 'Hablo español.',
+  german: 'Ich spreche Deutsch.',
+  italian: 'Parlo italiano.',
+  portuguese: 'Eu falo português.',
+  turkish: 'Türkçe konuşuyorum.',
+  russian: 'Я говорю по-русски.',
+  hindi: 'मैं हिंदी बोलता हूँ।',
+  urdu: 'میں اردو بولتا ہوں۔',
+  persian: 'من فارسی صحبت می‌کنم.',
+  chinese: '我说中文。',
+  japanese: '日本語を話します。',
+  korean: '한국어를 합니다.',
+};
+
+export function whisperPriming(variants: string[]): string {
+  const phrases = variants
+    .map((variant) => nativePhrases[variant.split(/[\s(]/)[0].toLowerCase()])
+    .filter((phrase): phrase is string => Boolean(phrase));
+  return [...new Set(phrases)].join(' ');
+}
+
 async function performMultipartRequest(
   url: string,
   headers: Record<string, string>,
@@ -320,9 +346,11 @@ export async function transcribeAudio(
     };
     const promptParts: string[] = [];
     // Whisper reads the prompt as text that came before the audio, not as instructions,
-    // so a natural sentence using the terms steers spelling better than a labelled list.
-    if (variantsHint) promptParts.push(`Speaking ${variantsHint}.`);
-    if (dictHint) promptParts.push(`Names and terms: ${dictHint}.`);
+    // and tends to answer in the prompt's language: an English prompt makes it translate
+    // Arabic speech into English. So each language is primed in its own words.
+    const priming = whisperPriming(options.languageVariants ?? []);
+    if (priming) promptParts.push(priming);
+    if (dictHint) promptParts.push(`${dictHint}.`);
     if (promptParts.length > 0) {
       fields.prompt = promptParts.join(' ');
     }
