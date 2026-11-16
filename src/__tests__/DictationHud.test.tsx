@@ -56,3 +56,8 @@ it('tells the user the last dictation is still processing', () => {
   expect(html).toContain('Press Esc or click Cancel to cancel it.');
   expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
 });
+
+it('says no speech was detected', () => {
+  const html = renderHud({ status: 'notice', mode: 'dictate', levels: [], noticeText: 'No speech detected' });
+  expect(html).toContain('No speech detected');
+});

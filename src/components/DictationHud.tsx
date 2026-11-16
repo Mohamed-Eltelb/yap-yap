@@ -5,7 +5,7 @@ import { AnswerMarkdown } from './AnswerMarkdown';
 import { YapLogo } from './YapLogo';
 
 export interface HudState {
-  status: 'idle' | 'armed' | 'recording' | 'processing' | 'cancelled' | 'result' | 'error';
+  status: 'idle' | 'armed' | 'recording' | 'processing' | 'cancelled' | 'notice' | 'result' | 'error';
   mode: DictationMode;
   levels: number[];
   resultText?: string;
@@ -18,6 +18,8 @@ export interface HudState {
   shortcutList?: { mode: DictationMode; combos: string[][] }[];
   /** The shortcut was pressed while this dictation was still processing. */
   busyNotice?: boolean;
+  /** A short note shown in place of a result, such as when nothing was said. */
+  noticeText?: string;
 }
 
 const modeLabels: Record<DictationMode, string> = { dictate: 'Dictate', translate: 'Translate', ask: 'Ask anything' };
@@ -161,6 +163,11 @@ export function DictationHud({
       {hud.status === 'processing' && !hud.busyNotice && (
         <div className="yy-hud-thinking" role="status">
           <span>Thinking</span>
+        </div>
+      )}
+      {hud.status === 'notice' && (
+        <div className="yy-hud-cancelled yy-hud-notice" role="status">
+          <span>{hud.noticeText}</span>
         </div>
       )}
       {hud.status === 'cancelled' && (

@@ -180,7 +180,8 @@ describe('Dictation flow', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 
     expect(engine.transcribeAudio).not.toHaveBeenCalled();
-    expect(lastHud()?.status).toBe('idle');
+    expect(lastHud()?.status).toBe('processing');
+    await waitFor(() => expect(lastHud()).toMatchObject({ status: 'notice', noticeText: 'No speech detected' }), { timeout: 1500 });
   });
 
   it('drops a recording in which nothing was said', async () => {
@@ -197,7 +198,8 @@ describe('Dictation flow', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 
     expect(engine.transcribeAudio).not.toHaveBeenCalled();
-    expect(lastHud()?.status).toBe('idle');
+    expect(lastHud()?.status).toBe('processing');
+    await waitFor(() => expect(lastHud()).toMatchObject({ status: 'notice', noticeText: 'No speech detected' }), { timeout: 1500 });
   });
 
   it('closes the shortcut placeholder when no API key is set', async () => {

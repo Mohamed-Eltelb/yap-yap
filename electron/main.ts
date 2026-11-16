@@ -230,7 +230,7 @@ function updateHudWindow(): void {
     width = 290;
     height = 215;
   }
-  if (state?.status === 'cancelled') width = 260;
+  if (state?.status === 'cancelled' || state?.status === 'notice') width = 260;
   if (state?.status === 'armed' && state.shortcutList) {
     width = 300;
     height = 170;

@@ -788,7 +788,13 @@ export function App() {
       if (run !== processingRunRef.current) return;
       // Stopped right after starting (a double tap) or nothing was said: nothing to report.
       if (blob.size === 0 || durationMs < 500 || heardSpeech === false) {
-        setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+        // Thinking stays up briefly so the box doesn't vanish, then says why nothing came.
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (run !== processingRunRef.current) return;
+        setHud({ status: 'notice', mode: currentMode, levels: Array(20).fill(0.1), noticeText: 'No speech detected' });
+        setTimeout(() => {
+          setHud((current) => current.status === 'notice' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
+        }, 2000);
         return;
       }
       const targets = appState.settings.translationTargets;
@@ -1057,8 +1063,9 @@ export function App() {
       if (modalOpen && document.hasFocus()) return;
       const { status } = hudRef.current;
       if (phase === 'armed') {
-        // An answer, error or Undo on screen stays until a shortcut actually starts.
-        if (status !== 'idle') return;
+        // An answer, error or Undo on screen stays until a shortcut actually starts;
+        // a passing note like "No speech detected" gives way at once.
+        if (status !== 'idle' && status !== 'notice') return;
         setHud({ status: 'armed', mode: 'dictate', levels: Array(20).fill(0.1) });
       } else if (phase === 'list') {
         if (status !== 'armed') return;

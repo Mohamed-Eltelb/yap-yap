@@ -1798,6 +1798,10 @@ textarea,
   white-space: nowrap;
 }
 
+.yy-hud-notice {
+  padding-right: 15px;
+}
+
 .yy-hud-cancelled button {
   padding: 4px 11px;
   border-radius: 999px;
