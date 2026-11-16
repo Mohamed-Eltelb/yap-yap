@@ -90,6 +90,11 @@ describe('Reserved shortcuts', () => {
     expect(reserved(['Left Alt', '/'], ['Right Alt', 'Space'])).toEqual([false, false]);
   });
 
+  it('allows keys that type nothing, alone or with Ctrl', () => {
+    expect(reserved(['Left Ctrl', 'F8'], ['ScrollLock'], ['Pause'], ['Insert'], ['Left Ctrl', 'Home'])).toEqual([false, false, false, false, false]);
+    expect(reserved(['ArrowUp'], ['Backspace'], ['Left Ctrl', 'ArrowLeft'])).toEqual([true, true, true]);
+  });
+
   it('reserves Windows-key shortcuts and Ctrl+Alt+Delete', () => {
     expect(reserved(['Meta', 'D'], ['Left Ctrl', 'Left Alt', 'Delete'])).toEqual([true, true]);
   });

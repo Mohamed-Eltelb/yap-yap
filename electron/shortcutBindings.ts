@@ -86,6 +86,8 @@ export function removeDuplicateShortcuts(shortcuts: ShortcutGroup, platform?: st
 
 const metaNames = ['meta', 'left meta', 'right meta', 'win', 'super', 'cmd', 'command'];
 const leftAltWindowKeys = ['tab', 'f4', 'escape', 'esc', 'space'];
+// Keys that type or edit text. Keys like F8, Scroll Lock or Pause stay free to use.
+const typingKeys = ['space', 'enter', 'tab', 'backspace', 'delete', 'escape', 'esc', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
 
 /**
  * Shortcuts Windows or everyday typing already uses: taking them would break copy and
@@ -101,11 +103,11 @@ export function reservedShortcut(combo: string[]): boolean {
   const meta = keys.some((key) => metaNames.includes(key));
   const others = keys.filter((key) =>
     !/^(left |right )?(alt|ctrl|control|shift)$/.test(key) && !metaNames.includes(key));
-  const ordinary = others.filter((key) => !/^f\d+$/.test(key));
+  const ordinary = others.filter((key) => key.length === 1 || typingKeys.includes(key));
   const one = others.length === 1;
 
   if (one && ordinary.length === 1 && !alt && !ctrl && !shift && !meta) return true;
-  if (one && ctrl && !shift && !alt && !meta) return true;
+  if (one && ordinary.length === 1 && ctrl && !shift && !alt && !meta) return true;
   if (one && ordinary.length === 1 && shift && !ctrl && !alt && !meta) return true;
   if (others.length === 0 && leftAlt && shift && !ctrl && !meta) return true;
   if (one && leftAlt && leftAltWindowKeys.includes(others[0])) return true;
