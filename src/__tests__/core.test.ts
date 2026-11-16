@@ -1643,4 +1643,37 @@ describe('Languages the user speaks', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.messages[0].content).toContain('same language');
   });
+
+  it('uses multilingual mode on Nova-3 Medical, without hints it may reject', async () => {
+    const fetchMock = ok({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } });
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = { ...withKey('deepgram'), sttModel: 'nova-3-medical' };
+    await transcribeAudio(audio(), provider, { spokenLanguages: ['English', 'Arabic'] });
+    const params = new URL(fetchMock.mock.calls[0][0] as string).searchParams;
+    expect(params.get('language')).toBe('multi');
+    expect(params.getAll('language_hint')).toEqual([]);
+  });
+
+  it('tells the cleanup AI what the dictionary is and that it may be in another language', async () => {
+    const fetchMock = ok({ choices: [{ message: { content: 'x' } }] });
+    vi.stubGlobal('fetch', fetchMock);
+    const providers = createDefaultProviders();
+    providers.groq.apiKey = 'key';
+    await processTranscriptWithLlm('عايز افتح يب يب', 'dictate', providers.groq, {
+      targetLanguages: [], dictionaryWords: ['Yap Yap'], smartCleanup: true,
+    });
+    const system = JSON.parse(fetchMock.mock.calls[0][1].body as string).messages[0].content as string;
+    expect(system).toContain('Yap Yap');
+    expect(system).toContain('another language or script');
+    expect(system).toContain('was not spoken');
+  });
+
+  it('tells Gemini transcription what the dictionary is', async () => {
+    const fetchMock = ok({ candidates: [{ content: { parts: [{ text: 'x' }] } }] });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), withKey('gemini'), { dictionaryWords: ['Yap Yap'] });
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body as string).contents[0].parts[0].text as string;
+    expect(prompt).toContain('another language or script');
+  });
 });
+

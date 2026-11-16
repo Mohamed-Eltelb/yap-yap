@@ -417,7 +417,9 @@ export async function transcribeAudio(
     // Deepgram assumes English unless told otherwise. Nova-3's multilingual mode handles
     // switching languages mid-sentence, and its hints favor the user's languages. Older
     // models can only detect one language for the whole recording.
-    const multilingual = model === 'nova-3' || model === 'nova-3-general';
+    const multilingual = model.startsWith('nova-3');
+    // Deepgram documents language hints for Nova-3 itself, not for its medical model.
+    const takesHints = multilingual && !model.includes('medical');
     const plainLanguage: Array<[string, string]> = multilingual
       ? [['language', 'multi']]
       : [['detect_language', 'true']];
@@ -428,7 +430,7 @@ export async function transcribeAudio(
           ['language', 'multi'],
           // A hint Deepgram doesn't support fails the request, so only supported ones go.
           ...languages
-            .filter((language) => DEEPGRAM_MULTI_CODES.has(language.code))
+            .filter((language) => takesHints && DEEPGRAM_MULTI_CODES.has(language.code))
             .map((language): [string, string] => ['language_hint', language.code]),
         ]
         : plainLanguage;
@@ -500,7 +502,13 @@ export async function transcribeAudio(
       hints.push(`The speaker speaks ${languages.map((language) => language.name).join(', ')}.`);
     }
     if (dialects.length) hints.push(`Preferred dialects: ${dialects.join(', ')}.`);
-    if (dictHint) hints.push(`Custom terms/names that may appear: ${dictHint}.`);
+    if (dictHint) {
+      hints.push(
+        `The user's dictionary, the user's own spellings of names and terms: ${dictHint}. ` +
+        'They may be in another language or script than the speech. When the speaker says one, even mixed into another language, ' +
+        'write it with exactly that spelling; never add one that was not spoken.',
+      );
+    }
 
     const promptText =
       'Transcribe the spoken audio accurately in its original language(s). Never translate: write each part in the language it was spoken in, including mixed-language speech. Return ONLY the exact transcription with proper punctuation, no commentary. ' +
@@ -582,8 +590,15 @@ export async function processTranscriptWithLlm(
     throw new Error(`Missing API key for ${provider.name}.`);
   }
 
+  // The dictionary holds terms the user added or Yap Yap learned from their corrections,
+  // often in another language than the speech (an English product name in Arabic speech).
   const dictClause = options.dictionaryWords.length
-    ? `\nPreserve these exact spellings/terms if referenced: ${options.dictionaryWords.slice(0, 60).join(', ')}.`
+    ? '\nThe user\'s dictionary follows inside <dictionary> tags: names, brands, and terms the user added or corrected, spelled exactly the way they want them.' +
+      `\n<dictionary>\n${options.dictionaryWords.slice(0, 60).join('\n')}\n</dictionary>` +
+      '\n- Entries may be in another language or script than the speech. A term spoken inside another language (an English name said in an Arabic sentence) is still that term.' +
+      '\n- When the transcript has a word or phrase that sounds like an entry, including a misheard version, a phonetic spelling, or the same word written in another script, write the entry exactly as listed.' +
+      '\n- Only replace what was actually spoken. Never insert an entry that was not spoken, and never translate the surrounding speech to match an entry.' +
+      '\n- Do not output the tags.'
     : '';
   // Hand-edited examples are the strongest style signal. When the place is unknown, only the two
   // most-used categories carry theirs, so the prompt stays short and little past text goes out.
