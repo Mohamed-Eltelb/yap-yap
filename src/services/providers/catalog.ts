@@ -103,7 +103,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   deepgram: {
     id: 'deepgram',
     name: 'Deepgram',
-    tagline: 'Fast speech recognition that detects the language you speak',
+    tagline: 'Multilingual speech recognition with smart formatting',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,
@@ -120,7 +120,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   elevenlabs: {
     id: 'elevenlabs',
     name: 'ElevenLabs',
-    tagline: 'Best for several languages: detects any language you speak',
+    tagline: 'Multilingual speech recognition',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,

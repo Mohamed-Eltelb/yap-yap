@@ -114,7 +114,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
             <div className="provider-default">
               <div className="provider-default-role">
                 <span className="provider-default-label">Dictation</span>
-                <span className="provider-default-description">ElevenLabs or Deepgram if you speak several languages</span>
+                {/whisper/i.test(providers[settings.activeSttProvider]?.sttModel ?? '') && (
+                  // Measured: Whisper often mistakes short, accented speech for another language.
+                  <span className="provider-default-description">Whisper can mistake the language if you speak several</span>
+                )}
               </div>
               <SelectMenu
                 id="default-stt-provider"
