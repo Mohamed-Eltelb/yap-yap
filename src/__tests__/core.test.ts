@@ -111,6 +111,11 @@ describe('Reserved shortcuts', () => {
     expect(reserved(['Right Alt'], ['Left Shift'], ['F8'])).toEqual([false, false, false]);
   });
 
+  it('reserves plain keys pressed together', () => {
+    expect(reserved(['A', 'B'], ['F8', 'Space'])).toEqual([true, true]);
+    expect(reserved(['F8', 'F9'])).toEqual([false]);
+  });
+
   it('reserves Ctrl with one key but allows Ctrl + Shift', () => {
     expect(reserved(['Left Ctrl', 'A'], ['Right Ctrl', 'Space'])).toEqual([true, true]);
     expect(reserved(['Left Ctrl', 'Left Shift', 'A'], ['Left Ctrl', 'Left Shift'])).toEqual([false, false]);

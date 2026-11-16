@@ -111,7 +111,8 @@ export function reservedShortcut(combo: string[]): boolean {
   const ordinary = others.filter((key) => key.length === 1 || typingKeys.includes(key));
   const one = others.length === 1;
 
-  if (one && ordinary.length === 1 && !alt && !ctrl && !shift && !meta) return true;
+  // Plain keys with no modifier would fire during normal typing.
+  if (ordinary.length > 0 && !alt && !ctrl && !shift && !meta) return true;
   if (one && ordinary.length === 1 && ctrl && !shift && !alt && !meta) return true;
   if (one && ordinary.length === 1 && shift && !ctrl && !alt && !meta) return true;
   if (others.length === 0 && leftAlt && shift && !ctrl && !meta) return true;
