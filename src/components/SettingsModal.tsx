@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
-import { findShortcutConflict, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
+import { findShortcutConflict, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
   Globe,
   HelpCircle,
@@ -153,7 +153,7 @@ export function SettingsModal({
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
-  const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[] } | null>(null);
+  const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[]; reason: 'used' | 'reserved' } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | null>(null);
   const [preferencesEditorOpen, setPreferencesEditorOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -272,8 +272,12 @@ export function SettingsModal({
       const combo = [...pressed];
       const conflict = findShortcutConflict(settings.shortcuts, capturingTarget, combo, window.yapyap?.platform);
       setCapturingTarget(null);
+      if (window.yapyap?.platform === 'win32' && reservedShortcut(combo)) {
+        setShortcutError({ target: capturingTarget, combo, reason: 'reserved' });
+        return;
+      }
       if (conflict) {
-        setShortcutError({ target: capturingTarget, combo });
+        setShortcutError({ target: capturingTarget, combo, reason: 'used' });
         return;
       }
       const list = [...settings.shortcuts[capturingTarget.mode]];
@@ -462,7 +466,9 @@ export function SettingsModal({
                                   </div>
                                   {errorId && (
                                     <p id={errorId} role="alert" className="mt-1 px-1 text-[12px] text-red-700 dark:text-red-300">
-                                      This shortcut is already in use
+                                      {rowError?.reason === 'reserved'
+                                        ? 'This shortcut is reserved by the system'
+                                        : 'This shortcut is already in use'}
                                     </p>
                                   )}
                                 </div>

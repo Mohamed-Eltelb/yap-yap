@@ -1,5 +1,6 @@
 import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
+import { reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
@@ -60,6 +61,37 @@ describe('Saved shortcuts', () => {
       translate: [['Right Shift']],
       ask: [['Right Ctrl', 'L']],
     });
+  });
+});
+
+describe('Reserved shortcuts', () => {
+  const reserved = (...combos: string[][]) => combos.map((combo) => reservedShortcut(combo));
+
+  it('reserves single ordinary keys but not modifiers or F-keys', () => {
+    expect(reserved(['A'], ['Space'], ['/'], ['Enter'])).toEqual([true, true, true, true]);
+    expect(reserved(['Right Alt'], ['Left Shift'], ['F8'])).toEqual([false, false, false]);
+  });
+
+  it('reserves Ctrl with one key but allows Ctrl + Shift', () => {
+    expect(reserved(['Left Ctrl', 'A'], ['Right Ctrl', 'Space'])).toEqual([true, true]);
+    expect(reserved(['Left Ctrl', 'Left Shift', 'A'], ['Left Ctrl', 'Left Shift'])).toEqual([false, false]);
+  });
+
+  it('reserves Shift with one ordinary key', () => {
+    expect(reserved(['Left Shift', 'A'], ['Left Shift', 'F8'])).toEqual([true, false]);
+  });
+
+  it('reserves Left Alt + Shift but not Right Alt + Shift', () => {
+    expect(reserved(['Left Alt', 'Left Shift'], ['Left Alt', 'Right Shift'], ['Right Alt', 'Right Shift'])).toEqual([true, true, false]);
+  });
+
+  it('reserves Left Alt window keys', () => {
+    expect(reserved(['Left Alt', 'Tab'], ['Left Alt', 'F4'], ['Left Alt', 'Escape'], ['Left Alt', 'Space'])).toEqual([true, true, true, true]);
+    expect(reserved(['Left Alt', '/'], ['Right Alt', 'Space'])).toEqual([false, false]);
+  });
+
+  it('reserves Windows-key shortcuts and Ctrl+Alt+Delete', () => {
+    expect(reserved(['Meta', 'D'], ['Left Ctrl', 'Left Alt', 'Delete'])).toEqual([true, true]);
   });
 });
 
