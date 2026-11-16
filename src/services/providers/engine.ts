@@ -612,6 +612,7 @@ export async function processTranscriptWithLlm(
       `\n<dictionary>\n${options.dictionaryWords.slice(0, 60).join('\n')}\n</dictionary>` +
       '\n- Entries may be in another language or script than the speech. A term spoken inside another language (an English name said in an Arabic sentence) is still that term.' +
       '\n- When the transcript has a word or phrase that sounds like an entry, including a misheard version, a phonetic spelling, or the same word written in another script, write the entry exactly as listed.' +
+      '\n- Personal names follow the script of the sentence around them. In a Latin-script sentence, write the entry exactly as listed, even if the transcript has the name in another script or spelling ("محمد is here" and "Muhammad is here" become "Mohamed is here"). In an Arabic-script sentence, write the name in Arabic letters ("Mohamed قال لي" becomes "محمد قال لي"). Brands, products, and technical terms always keep the entry\'s exact spelling, in any sentence ("Typeless" stays "Typeless" in Arabic).' +
       '\n- Only replace what was actually spoken. Never insert an entry that was not spoken, and never translate the surrounding speech to match an entry.' +
       '\n- Do not output the tags.'
     : '';
