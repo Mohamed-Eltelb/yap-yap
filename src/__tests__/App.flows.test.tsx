@@ -32,6 +32,7 @@ vi.mock('../utils/sounds', () => ({ playInteractionSound: vi.fn() }));
 
 const { App } = await import('../App');
 const { getInitialState } = await import('../services/storage');
+const { startAudioRecording } = await import('../utils/audioRecorder');
 
 type Context = { application?: string; domain?: string; textBefore?: string; textAfter?: string };
 type PasteEdits = { words: string[]; edited?: string };
@@ -163,6 +164,23 @@ describe('Dictation flow', () => {
 
     expect(desktop.api.pasteText).not.toHaveBeenCalled();
     expect(lastSaved().history).toHaveLength(0);
+  });
+
+  it('quietly drops a recording stopped right after it started', async () => {
+    seed();
+    vi.mocked(startAudioRecording).mockResolvedValueOnce({
+      stop: async () => ({ blob: new Blob([]), durationMs: 150, dataUrl: undefined, mimeType: 'audio/webm' }),
+      cancel: vi.fn(),
+    } as unknown as Awaited<ReturnType<typeof startAudioRecording>>);
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+
+    expect(engine.transcribeAudio).not.toHaveBeenCalled();
+    expect(lastHud()?.status).toBe('idle');
   });
 
   it('closes the shortcut placeholder when no API key is set', async () => {
