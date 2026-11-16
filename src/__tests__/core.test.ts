@@ -1491,6 +1491,16 @@ describe('Languages the user speaks', () => {
     expect(prompt).not.toContain('español');
   });
 
+  it('keeps the dictionary in a newer model\'s prompt on auto-detect', async () => {
+    // Only Whisper was measured translating speech because of an English-only prompt.
+    const fetchMock = ok({ text: 'hi' });
+    vi.stubGlobal('fetch', fetchMock);
+    await transcribeAudio(audio(), strongModel(), { spokenLanguages: [], dictionaryWords: ['Yap Yap', 'Mohamed'] });
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('prompt')).toBe('Yap Yap, Mohamed.');
+    expect(form.get('language')).toBeNull();
+  });
+
   it('sends Whisper no prompt on auto-detect, not even dictionary words', async () => {
     // An English-only prompt made Whisper translate Arabic speech into English.
     const fetchMock = ok({ text: 'hi' });
