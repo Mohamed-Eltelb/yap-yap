@@ -62,7 +62,7 @@ declare global {
         fileBase64: string;
         fileName: string;
         mimeType: string;
-        fields: Record<string, string>;
+        fields: Record<string, string | string[]>;
       }) => Promise<HttpResponsePayload>;
     };
   }
@@ -112,7 +112,7 @@ async function performMultipartRequest(
   headers: Record<string, string>,
   audioBlob: Blob,
   fileName: string,
-  fields: Record<string, string>
+  fields: Record<string, string | string[]>
 ): Promise<HttpResponsePayload> {
   const mimeType = audioBlob.type || 'audio/webm';
 
@@ -131,7 +131,7 @@ async function performMultipartRequest(
   const form = new FormData();
   form.append('file', new File([audioBlob], fileName, { type: mimeType }));
   for (const [k, v] of Object.entries(fields)) {
-    form.append(k, v);
+    for (const value of [v].flat()) form.append(k, value);
   }
   const res = await fetch(url, {
     method: 'POST',
@@ -479,13 +479,26 @@ export async function transcribeAudio(
 
   if (provider.id === 'elevenlabs') {
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
-    const res = await performMultipartRequest(
+    const fields: Record<string, string | string[]> = {
+      model_id: provider.sttModel || 'scribe_v3',
+      ...(onlyLanguage ? { language_code: onlyLanguage.code } : {}),
+    };
+    // The dictionary, as terms ElevenLabs listens for. It takes at most 5 words and 50
+    // characters a term, refuses some characters, and bills more past 100 terms.
+    const keyterms = (options.dictionaryWords ?? [])
+      .map((word) => word.trim())
+      .filter((word) => word && word.length <= 50 && word.split(/\s+/).length <= 5 && !/[<>{}[\]\\]/.test(word))
+      .slice(0, 60);
+    const send = (sent: Record<string, string | string[]>) => performMultipartRequest(
       `${base}/speech-to-text`,
       { 'xi-api-key': key },
       audioBlob,
       `audio.${ext}`,
-      { model_id: provider.sttModel || 'scribe_v3', ...(onlyLanguage ? { language_code: onlyLanguage.code } : {}) }
+      sent
     );
+    let res = await send(keyterms.length ? { ...fields, keyterms } : fields);
+    // A model without keyterm support answers 400: transcribe without the dictionary.
+    if (!res.ok && res.status === 400 && keyterms.length) res = await send(fields);
     if (!res.ok) {
       throw new Error(extractErrorMessage(res.text, res.status));
     }

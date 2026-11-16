@@ -610,7 +610,7 @@ app.whenReady().then(() => {
         fileBase64: string;
         fileName: string;
         mimeType: string;
-        fields: Record<string, string>;
+        fields: Record<string, string | string[]>;
       }
     ) => {
       const form = new FormData();
@@ -618,7 +618,7 @@ app.whenReady().then(() => {
       const blob = new Blob([buffer], { type: req.mimeType });
       form.append('file', blob, req.fileName);
       for (const [k, v] of Object.entries(req.fields)) {
-        form.append(k, v);
+        for (const value of [v].flat()) form.append(k, value);
       }
 
       const res = await fetch(req.url, {

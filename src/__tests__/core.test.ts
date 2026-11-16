@@ -1564,6 +1564,20 @@ describe('Languages the user speaks', () => {
     });
   });
 
+  it('sends ElevenLabs the dictionary as keyterms, and retries without them if refused', async () => {
+    const rejected = { ok: false, status: 400, text: async () => JSON.stringify({ detail: { message: 'keyterms not supported' } }) };
+    const accepted = { ok: true, status: 200, text: async () => JSON.stringify({ text: 'Is Typeless using this?' }) };
+    const fetchMock = vi.fn().mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);
+    vi.stubGlobal('fetch', fetchMock);
+    const text = await transcribeAudio(audio(), withKey('elevenlabs'), {
+      dictionaryWords: ['Typeless', 'worktree', 'a b c d e f', 'x'.repeat(51), 'bad<term>'],
+    });
+    expect(text).toBe('Is Typeless using this?');
+    const [first, second] = fetchMock.mock.calls.map(([, init]) => init.body as FormData);
+    expect(first.getAll('keyterms')).toEqual(['Typeless', 'worktree']);
+    expect(second.getAll('keyterms')).toEqual([]);
+  });
+
   it('tells Gemini to write each language in its own script', async () => {
     const fetchMock = ok({ candidates: [{ content: { parts: [{ text: 'x' }] } }] });
     vi.stubGlobal('fetch', fetchMock);

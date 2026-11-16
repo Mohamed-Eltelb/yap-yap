@@ -112,7 +112,10 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
           <section className="provider-defaults" aria-labelledby="default-providers-heading">
             <h3 className="provider-list-heading" id="default-providers-heading">Default providers</h3>
             <div className="provider-default">
-              <span className="provider-default-label">Dictation</span>
+              <div className="provider-default-role">
+                <span className="provider-default-label">Dictation</span>
+                <span className="provider-default-description">ElevenLabs or Deepgram if you speak several languages</span>
+              </div>
               <SelectMenu
                 id="default-stt-provider"
                 label="Default dictation provider"

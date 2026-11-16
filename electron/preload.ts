@@ -71,6 +71,6 @@ contextBridge.exposeInMainWorld('yapyap', {
     fileBase64: string;
     fileName: string;
     mimeType: string;
-    fields: Record<string, string>;
+    fields: Record<string, string | string[]>;
   }) => ipcRenderer.invoke('api:multipart', req),
 });

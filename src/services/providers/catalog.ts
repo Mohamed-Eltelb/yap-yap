@@ -40,7 +40,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   groq: {
     id: 'groq',
     name: 'Groq',
-    tagline: 'Fast speech recognition and AI text processing',
+    tagline: 'Fast AI text processing, and speech recognition best for one language',
     supportsStt: true,
     supportsLlm: true,
     requiresKey: true,
@@ -49,7 +49,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     keyPlaceholder: 'gsk_...',
     sttModels: [
       { id: 'whisper-large-v3-turbo', label: 'whisper-large-v3-turbo (Fastest)' },
-      { id: 'whisper-large-v3', label: 'whisper-large-v3 (Multilingual)' },
+      { id: 'whisper-large-v3', label: 'whisper-large-v3 (More accurate)' },
     ],
     llmModels: [
       { id: 'openai/gpt-oss-20b', label: 'openai/gpt-oss-20b (1000 t/s · Fast)' },
@@ -103,7 +103,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   deepgram: {
     id: 'deepgram',
     name: 'Deepgram',
-    tagline: 'Multilingual speech recognition with smart formatting',
+    tagline: 'Fast speech recognition that detects the language you speak',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,
@@ -120,7 +120,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   elevenlabs: {
     id: 'elevenlabs',
     name: 'ElevenLabs',
-    tagline: 'Multilingual speech recognition',
+    tagline: 'Best for several languages: detects any language you speak',
     supportsStt: true,
     supportsLlm: false,
     requiresKey: true,
