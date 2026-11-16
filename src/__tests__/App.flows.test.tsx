@@ -183,6 +183,23 @@ describe('Dictation flow', () => {
     expect(lastHud()?.status).toBe('idle');
   });
 
+  it('drops a recording in which nothing was said', async () => {
+    seed();
+    vi.mocked(startAudioRecording).mockResolvedValueOnce({
+      stop: async () => ({ blob: new Blob(['audio']), durationMs: 4000, dataUrl: undefined, mimeType: 'audio/webm', heardSpeech: false }),
+      cancel: vi.fn(),
+    } as unknown as Awaited<ReturnType<typeof startAudioRecording>>);
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+
+    expect(engine.transcribeAudio).not.toHaveBeenCalled();
+    expect(lastHud()?.status).toBe('idle');
+  });
+
   it('closes the shortcut placeholder when no API key is set', async () => {
     seed();
     const loaded = store.loaded as { providers: Record<string, { apiKey: string }> };

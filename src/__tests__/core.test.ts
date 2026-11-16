@@ -1,3 +1,4 @@
+import { heardSpeech } from '../utils/audioRecorder';
 import { applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
@@ -1436,5 +1437,19 @@ Send`;
     // Only casing and punctuation fixes are worth learning from.
     expect(isStyleEdit(pasted, 'hey sam running late see you soon')).toBe(true);
     expect(isStyleEdit(pasted, 'Hey Sam. Running late. See you at 5.')).toBe(false);
+  });
+});
+
+describe('Hearing speech in a recording', () => {
+  it('hears a few loud moments', () => {
+    expect(heardSpeech(3, 6)).toBe(true);
+  });
+
+  it('calls steady background noise silence', () => {
+    expect(heardSpeech(1, 120)).toBe(false);
+  });
+
+  it('cannot tell when it barely listened', () => {
+    expect(heardSpeech(0, 2)).toBeUndefined();
   });
 });

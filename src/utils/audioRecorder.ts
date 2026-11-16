@@ -4,8 +4,21 @@ export interface RecorderSession {
     durationMs: number;
     dataUrl: string;
     mimeType: string;
+    /** False when the microphone never picked up a voice; undefined when it could not tell. */
+    heardSpeech?: boolean;
   }>;
   cancel: () => void;
+}
+
+// A frame counts as voice when the waveform swings this far from silence (0–128).
+const VOICE_PEAK = 8;
+// Background windows can pause the level meter, so it only judges after enough frames.
+const FRAMES_TO_JUDGE = 30;
+
+/** Whether a recording held a voice, from how many sampled frames were loud. */
+export function heardSpeech(loudFrames: number, frames: number): boolean | undefined {
+  if (loudFrames >= 3) return true;
+  return frames < FRAMES_TO_JUDGE ? undefined : false;
 }
 
 export async function startAudioRecording(
@@ -63,12 +76,20 @@ export async function startAudioRecording(
   source.connect(analyser);
 
   const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  const waveform = new Uint8Array(analyser.fftSize);
+  let frames = 0;
+  let loudFrames = 0;
   let rafId = 0;
   let stopped = false;
 
   const tick = () => {
     if (stopped) return;
     analyser.getByteFrequencyData(dataArray);
+    analyser.getByteTimeDomainData(waveform);
+    let peak = 0;
+    for (const sample of waveform) peak = Math.max(peak, Math.abs(sample - 128));
+    frames += 1;
+    if (peak >= VOICE_PEAK) loudFrames += 1;
     const barCount = 20;
     const levels: number[] = [];
     const step = Math.max(1, Math.floor(dataArray.length / barCount));
@@ -101,7 +122,7 @@ export async function startAudioRecording(
           const blob = new Blob(chunks, { type: actualMime });
           try {
             const dataUrl = await blobToDataUrl(blob);
-            resolve({ blob, durationMs, dataUrl, mimeType: actualMime });
+            resolve({ blob, durationMs, dataUrl, mimeType: actualMime, heardSpeech: heardSpeech(loudFrames, frames) });
           } catch (err) {
             reject(err);
           }

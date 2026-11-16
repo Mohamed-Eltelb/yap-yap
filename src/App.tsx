@@ -784,10 +784,10 @@ export function App() {
     setHud((current) => ({ ...current, status: 'processing' }));
     const run = processingRunRef.current;
     try {
-      const { blob, durationMs, dataUrl, mimeType } = await session.stop();
+      const { blob, durationMs, dataUrl, mimeType, heardSpeech } = await session.stop();
       if (run !== processingRunRef.current) return;
-      // Stopped right after starting (a double tap): nothing was said, so nothing to report.
-      if (blob.size === 0 || durationMs < 500) {
+      // Stopped right after starting (a double tap) or nothing was said: nothing to report.
+      if (blob.size === 0 || durationMs < 500 || heardSpeech === false) {
         setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
         return;
       }
