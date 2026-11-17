@@ -10,7 +10,7 @@ function desktopStore(loaded: unknown, result: boolean | undefined = true) {
     yapyap: {
       loadStore: vi.fn(async () => loaded),
       saveStore: vi.fn(async (data: Saved) => { saves.push(data); return result; }),
-      loadAudio: vi.fn(async (id: string) => (id === 'e' ? 'data:audio/webm;base64,EEE' : null)),
+      loadAudio: vi.fn(async (id: string) => ({ e: 'data:audio/webm;base64,EEE', k: 'data:audio/webm;base64,KKK' })[id] ?? null),
     },
   });
   return saves;
@@ -60,6 +60,19 @@ describe('Recordings loaded on demand', () => {
     expect(hasHistoryAudio(state.history[0])).toBe(true);
     await savePersistedState(state);
     expect(saves[0].history[0]).toMatchObject({ id: 'e', audioSaved: true });
+  });
+
+  it('loads stored recordings in the background while starting, outside the saved state', async () => {
+    const loaded = { ...getInitialState(), history: [{ ...item('k'), audioSaved: true }, item('h')] };
+    const saves = desktopStore(loaded);
+    const loadAudio = (window as unknown as { yapyap: { loadAudio: ReturnType<typeof vi.fn> } }).yapyap.loadAudio;
+    const state = await loadPersistedState();
+    expect(loadAudio).toHaveBeenCalledTimes(1);
+    expect(state.history[0].audioDataUrl).toBeUndefined();
+    expect(await loadHistoryAudio(state.history[0])).toBe('data:audio/webm;base64,KKK');
+    expect(loadAudio).toHaveBeenCalledTimes(1);
+    await savePersistedState(state);
+    expect(saves[0].history[0].audioDataUrl).toBeUndefined();
   });
 
   it('fetches a stored recording only when asked', async () => {

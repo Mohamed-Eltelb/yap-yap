@@ -304,11 +304,37 @@ export function hasHistoryAudio(item: HistoryItem): boolean {
   return Boolean(item.audioDataUrl || item.audioSaved);
 }
 
-/** A dictation's recording, fetched from the desktop store when it is not in memory. */
+/**
+ * Recordings from the desktop store, by dictation id. They are kept here rather than in
+ * the app state, so saving never copies them: a save holding every recording stalled the
+ * window that also drives the recording meter.
+ */
+const audioCache = new Map<string, string>();
+
+/** A dictation's recording, from memory or else fetched from the desktop store. */
 export async function loadHistoryAudio(item: HistoryItem): Promise<string | undefined> {
   if (item.audioDataUrl) return item.audioDataUrl;
   if (!item.audioSaved || typeof window === 'undefined') return undefined;
-  return (await window.yapyap?.loadAudio?.(item.id)) ?? undefined;
+  const cached = audioCache.get(item.id);
+  if (cached) return cached;
+  const audio = (await window.yapyap?.loadAudio?.(item.id)) ?? undefined;
+  if (audio) audioCache.set(item.id, audio);
+  return audio;
+}
+
+/** How many recordings are fetched at once while starting. */
+const PRELOAD_BATCH = 12;
+
+/**
+ * Fetches the stored recordings a few at a time while the splash shows. Each fetch is a
+ * small message, so neither process freezes, unlike sending them all in one go.
+ */
+async function preloadStoredAudio(history: unknown): Promise<void> {
+  if (!Array.isArray(history) || !window.yapyap?.loadAudio) return;
+  const stored = (history as HistoryItem[]).filter((item) => item?.audioSaved && !item.audioDataUrl && typeof item.id === 'string');
+  for (let start = 0; start < stored.length; start += PRELOAD_BATCH) {
+    await Promise.all(stored.slice(start, start + PRELOAD_BATCH).map((item) => loadHistoryAudio(item).catch(() => undefined)));
+  }
 }
 
 export async function loadPersistedState(): Promise<PersistedAppState> {
@@ -318,6 +344,7 @@ export async function loadPersistedState(): Promise<PersistedAppState> {
     if (typeof window !== 'undefined' && window.yapyap?.loadStore) {
       raw = (await window.yapyap.loadStore()) as Partial<PersistedAppState> | null;
       rememberAudioOnDisk(raw?.history);
+      await preloadStoredAudio(raw?.history);
     }
 
     if (!raw) {
