@@ -218,7 +218,7 @@ const TENS_WORDS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seve
 // What may sit between a trigger's words. Strictly: spaces, hyphens and the like, but no sentence
 // punctuation, so "My address: 12 October" is not the trigger "my address 12" (as in Wispr Flow).
 // Loosely: anything, for text cleanup may have punctuated differently.
-const BETWEEN = { strict: '[^\\p{L}\\p{M}\\p{N}.,;:!?…]', loose: '[^\\p{L}\\p{M}\\p{N}]' };
+const BETWEEN = { strict: '[^\\p{L}\\p{M}\\p{N}.,;:!?…،؛؟]', loose: '[^\\p{L}\\p{M}\\p{N}]' };
 
 /** English words for a whole number below a million, or undefined for larger ones. */
 function numberWords(value: number): string[] | undefined {
@@ -256,6 +256,13 @@ function foldNumberWords(words: string[]): string[] {
     last = null;
   };
   words.forEach((word, index) => {
+    // An Arabic number word stands alone: "عنوان واحد" is "عنوان 1".
+    const arabic = arabicNumberValue(word);
+    if (arabic >= 0) {
+      flush();
+      out.push(String(arabic));
+      return;
+    }
     const unit = UNIT_WORDS.indexOf(word);
     const tens = TENS_WORDS.indexOf(word);
     const next = UNIT_WORDS.indexOf(words[index + 1] ?? '');
@@ -298,6 +305,39 @@ function foldNumberWords(words: string[]): string[] {
   return out;
 }
 
+/**
+ * Arabic number words from zero to ten, by value, in Modern Standard and Egyptian forms, for both
+ * genders. Alef and taa marbuta are matched in their common spellings (see arabicLetters).
+ */
+const ARABIC_NUMBER_WORDS = [
+  ['صفر'],
+  ['واحد', 'واحدة'],
+  ['اثنان', 'اثنين', 'اثنتان', 'اثنتين', 'اتنين', 'تنين'],
+  ['ثلاثة', 'ثلاث', 'تلاتة', 'تلات'],
+  ['أربعة', 'أربع'],
+  ['خمسة', 'خمس'],
+  ['ستة', 'ست'],
+  ['سبعة', 'سبع'],
+  ['ثمانية', 'ثماني', 'ثمان', 'تمانية', 'تمن'],
+  ['تسعة', 'تسع'],
+  ['عشرة', 'عشر'],
+];
+
+/** One Arabic spelling as a pattern: any alef form, and taa marbuta written as haa. */
+function arabicLetters(word: string): string {
+  return word.replace(/[اأإآ]/gu, '[اأإآ]').replace(/ة/gu, '[ةه]');
+}
+
+/** Arabic text with one alef form and taa marbuta as haa, for comparing spellings. */
+function sameArabicLetters(text: string): string {
+  return text.replace(/[أإآ]/gu, 'ا').replace(/ة/gu, 'ه');
+}
+
+/** The value of an Arabic number word, however its alef and taa marbuta are written. */
+function arabicNumberValue(word: string): number {
+  return ARABIC_NUMBER_WORDS.findIndex((forms) => forms.some((form) => sameArabicLetters(form) === sameArabicLetters(word)));
+}
+
 /** Arabic-Indic and Persian digits, by value, so "١٢" and "12" are the same number. */
 const OTHER_DIGITS = ['٠١٢٣٤٥٦٧٨٩', '۰۱۲۳۴۵۶۷۸۹'];
 
@@ -335,7 +375,8 @@ function triggerPattern(key: string, strict: boolean): string {
   const isNumber = (word: string) => /^\d+$/u.test(word);
   return words.map((word, index) => {
     const gap = index ? `${between}+` : '';
-    const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    // Arabic words match with any alef form and with taa marbuta written as haa ("غرفه").
+    const escaped = arabicLetters(word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'));
     if (!isNumber(word)) {
       // Letters may follow written digits directly ("12th"), but never number words ("oned").
       return index && isNumber(words[index - 1]) ? `(?:(?<=\\p{N})${between}*|${gap})${escaped}` : gap + escaped;
@@ -349,7 +390,8 @@ function triggerPattern(key: string, strict: boolean): string {
       ? `(?:and${between}+)?${part}`
       : part).join(`${between}+`);
     const year = word.length === 4 ? yearWords(Number(word)) : undefined;
-    const spelled = [said, year?.join(`${between}+`)].filter(Boolean).join('|');
+    const arabic = ARABIC_NUMBER_WORDS[Number(word)]?.map(arabicLetters).join('|');
+    const spelled = [said, year?.join(`${between}+`), word.length <= 2 ? arabic : undefined].filter(Boolean).join('|');
     // Written digits may follow letters directly ("address12"); number words need a space ("d one", not "done").
     const digitGap = index && !isNumber(words[index - 1]) ? `${between}*` : gap;
     return `(?:${digitGap}${digits}${spelled ? `|${gap}(?:${spelled})` : ''})`;
@@ -359,7 +401,7 @@ function triggerPattern(key: string, strict: boolean): string {
 /** A whole-word matcher for any of the given triggers, each in its own group. */
 function triggersMatcher(keys: readonly string[], strict: boolean): RegExp {
   return new RegExp(
-    `(?<![\\p{L}\\p{M}\\p{N}])(?:${keys.map((key) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:]*)`,
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${keys.map((key) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:،؛؟]*)`,
     'giu',
   );
 }
@@ -392,8 +434,8 @@ export function wholeSnippet(
   entries: readonly { word: string; heardAs?: string }[] = [],
 ): Snippet | undefined {
   // The recognizer may write a word of the trigger the way the dictionary says it is heard.
-  const keys = [snippetTriggerKey(text), snippetTriggerKey(applyDictionaryReplacements(text, entries))].filter(Boolean);
-  return keys.length ? snippets.find((snippet) => triggerKeys(snippet, entries).some((key) => keys.includes(key))) : undefined;
+  const keys = [snippetTriggerKey(text), snippetTriggerKey(applyDictionaryReplacements(text, entries))].filter(Boolean).map(sameArabicLetters);
+  return keys.length ? snippets.find((snippet) => triggerKeys(snippet, entries).some((key) => keys.includes(sameArabicLetters(key)))) : undefined;
 }
 
 /**
@@ -428,7 +470,7 @@ export function expandSnippets(
     const { expansion } = pairs[groups.findIndex((group) => typeof group === 'string')];
     fired = true;
     if (!text.slice(0, offset).trim()) startsWithExpansion = true;
-    const endsSentence = /[.!?…]\s*$/u.test(expansion) || expansion.includes('\n');
+    const endsSentence = /[.!?…؟]\s*$/u.test(expansion) || expansion.includes('\n');
     return expansion + (endsSentence ? '' : trailing);
   });
   return { text: result, fired, startsWithExpansion };

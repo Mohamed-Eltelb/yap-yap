@@ -1897,6 +1897,23 @@ describe('snippets', () => {
     expect(snippetTriggerKey('عنواني ١٢')).toBe('عنواني 12');
     expect(['عنواني 12', 'عنواني ١٢', 'عنواني۱۲'].map((text) => expandSnippets(text, [x('عنواني ١٢')]).fired)).toEqual([true, true, true]);
     expect(expandSnippets('room ١٠٥', [x('room 105')]).fired).toBe(true);
+  });
+
+  it('matches Arabic number words and Arabic punctuation', () => {
+    const address = { ...link, id: 'ar', trigger: 'عنوان ١', expansion: 'مثر' };
+    expect(snippetTriggerKey('عنوان واحد')).toBe('عنوان 1');
+    expect(snippetsSaidIn('عنوان واحد، مصر', [address])).toEqual([address]);
+    expect(expandSnippets('عنوان واحد، مصر', [address]).text).toBe('مثر، مصر');
+    expect(['عنوان 1', 'عنوان ١', 'عنوان واحده', 'عنوان١'].map((text) => expandSnippets(text, [address]).fired)).toEqual([true, true, true, true]);
+    // An Arabic comma inside the phrase means it was not meant.
+    expect(snippetsSaidIn('عنوان، واحد', [address])).toEqual([]);
+    expect(expandSnippets('عنوان واحدة وعشرون', [address]).fired).toBe(true);
+    expect(expandSnippets('عنوانين', [address]).fired).toBe(false);
+    const three = { ...address, trigger: 'غرفة 3' };
+    expect(['غرفة ثلاثة', 'غرفه تلاته', 'غرفة ثلاث'].map((text) => expandSnippets(text, [three]).fired)).toEqual([true, true, true]);
+    expect(wholeSnippet('غرفه تلاته.', [three])?.id).toBe('ar');
+    // A number word folds to the same digit in any spelling.
+    expect([snippetTriggerKey('أربعة'), snippetTriggerKey('اربعه')]).toEqual(['4', '4']);
     const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };
     expect(expandSnippets('my address twelve', [glued]).text).toBe('egypt');
     expect(expandSnippets('my address12', [glued]).text).toBe('egypt');
