@@ -1462,6 +1462,9 @@ describe('what goes to the AI provider', () => {
     await processTranscriptWithLlm('hi', 'dictate', provider, options);
     expect(system(0)).toContain('Do not reword');
     expect(system(0)).toContain('Style may change casing and punctuation only');
+    // Without these, GPT OSS kept "fifteen thousand dollars" and "at two, actually three" in Light.
+    expect(system(0)).toContain('writing numbers as digits, are not rewording');
+    expect(system(0)).toContain('"at two, actually three" becomes "at three"');
     await processTranscriptWithLlm('hi', 'dictate', provider, { ...options, cleanupLevel: 'medium' });
     expect(system(1)).toContain('You may reword');
     expect(system(1)).not.toContain('Do not reword');
