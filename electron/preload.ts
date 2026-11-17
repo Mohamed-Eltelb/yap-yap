@@ -40,6 +40,11 @@ contextBridge.exposeInMainWorld('yapyap', {
     ipcRenderer.on('shortcut:phase', handler);
     return () => ipcRenderer.removeListener('shortcut:phase', handler);
   },
+  onHudShown: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('hud:shown', handler);
+    return () => ipcRenderer.removeListener('hud:shown', handler);
+  },
   onHudState: (cb: (state: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state);
     ipcRenderer.on('hud:state', handler);

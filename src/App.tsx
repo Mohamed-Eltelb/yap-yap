@@ -49,6 +49,7 @@ import {
 } from './utils/audioRecorder';
 import { playInteractionSound } from './utils/sounds';
 import { deliverDictationResult } from './utils/dictationResult';
+import { createHudMouseGate } from './utils/hudMouseGate';
 
 function normalizeKey(e: KeyboardEvent): string {
   if (e.code === 'AltRight') return 'Right Alt';
@@ -181,20 +182,18 @@ export function App() {
   // while the pointer is over the HUD itself.
   useEffect(() => {
     if (!isHudRoute) return;
-    let ignoring = true;
-    const setIgnoring = (ignore: boolean) => {
-      if (ignore === ignoring) return;
-      ignoring = ignore;
-      window.yapyap?.setHudIgnoreMouse?.(ignore);
-    };
+    const gate = createHudMouseGate((ignore) => window.yapyap?.setHudIgnoreMouse?.(ignore));
     const onMove = (event: MouseEvent) =>
-      setIgnoring(!(event.target instanceof Element && event.target.closest('.yy-hud')));
-    const onLeave = () => setIgnoring(true);
+      gate.move(event.target instanceof Element && event.target.closest('.yy-hud') !== null);
+    const onLeave = () => gate.leave();
     window.addEventListener('mousemove', onMove);
     document.addEventListener('mouseleave', onLeave);
+    // Each time the HUD shows again, Electron starts it letting the mouse through.
+    const unsubShown = window.yapyap?.onHudShown?.(gate.reset);
     return () => {
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseleave', onLeave);
+      unsubShown?.();
     };
   }, [isHudRoute]);
 

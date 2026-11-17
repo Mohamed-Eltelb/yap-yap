@@ -43,6 +43,8 @@ declare global {
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
       onShortcutPhase?: (cb: (phase: 'armed' | 'list' | 'closed' | 'busy') => void) => () => void;
       onHudState: (cb: (state: unknown) => void) => () => void;
+      /** The HUD window was shown again, letting the mouse through until it is over the HUD. */
+      onHudShown: (cb: () => void) => () => void;
       onHudAction: (
         cb: (action: HudAction) => void
       ) => () => void;

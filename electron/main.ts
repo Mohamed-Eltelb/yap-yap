@@ -259,7 +259,13 @@ function updateHudWindow(): void {
   if (bounds) hudWindow.setBounds(bounds);
   hudShownStatus = state?.status;
   hudWindow.webContents.send('hud:state', state);
-  if (!hudWindow.isVisible()) hudWindow.showInactive();
+  if (!hudWindow.isVisible()) {
+    // A window hidden while the mouse was over the HUD may come back taking clicks or not,
+    // so start it letting them through and have the page ask again when hovered.
+    if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
+    hudWindow.webContents.send('hud:shown');
+    hudWindow.showInactive();
+  }
 }
 
 function createTray(): void {
