@@ -390,6 +390,23 @@ describe('Snippets', () => {
     expect(lastSaved().history[0].aiText).toBeUndefined();
   });
 
+  it('saves the text without the AI edit with each dictation, and undo uses it as saved', async () => {
+    seed({ dictionary: [{ id: 'd1', word: 'Sam', heardAs: 'sem', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z' }] });
+    engine.transcribeAudio.mockResolvedValue('hey sem see you soon');
+    await dictate();
+    await waitFor(() => expect(lastSaved().history[0].plainText).toBe('hey Sam see you soon'));
+    cleanup();
+
+    // A later dictionary change does not alter what undo shows.
+    seed({ history: [dictation(undefined, { rawText: 'hey sem', text: 'Hey Sam.', plainText: 'hey Sam' })] });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^History$/ }));
+    await user.click(screen.getAllByRole('button', { name: 'More actions' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Undo AI edit' }));
+    await waitFor(() => expect(lastSaved().history[0].text).toBe('hey Sam'));
+  });
+
   it('offers no AI edit to undo when cleanup changed nothing', async () => {
     seed({ history: [dictation(undefined, { rawText: 'Hello there.', text: 'Hello there.' })] });
     render(<App />);

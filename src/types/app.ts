@@ -71,6 +71,11 @@ export interface HistoryItem {
   outcome?: 'silent' | 'cancelled';
   /** Site or app the dictation was written into. */
   writingSource?: string;
+  /**
+   * A dictation's text without the AI edit, saved when it was made: the recognizer's words with the
+   * dictionary spellings and snippets of that time. What "Undo AI edit" shows.
+   */
+  plainText?: string;
   /** The cleaned-up text, kept while the user has undone the AI edit, so it can be redone. */
   aiText?: string;
 }

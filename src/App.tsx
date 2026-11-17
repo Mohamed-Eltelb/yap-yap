@@ -631,6 +631,8 @@ export function App() {
             learnFromEdit = undefined;
           }
         }
+        // Saved now, with this moment's dictionary and snippets, for "Undo AI edit".
+        const plainText = mode === 'dictate' ? withoutAiEdit(rawText) : undefined;
         const category = classifyTranscriptCategory(finalText, mode);
         const words = countWords(finalText);
         const wpm = Math.max(
@@ -650,6 +652,8 @@ export function App() {
                     ...h,
                     rawText,
                     text: finalText,
+                    plainText,
+                    aiText: undefined,
                     answer,
                     wordCount: words,
                     wpm,
@@ -673,6 +677,7 @@ export function App() {
             mode,
             rawText,
             text: finalText,
+            plainText,
             answer,
             targetLanguage:
               mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
@@ -1297,8 +1302,8 @@ export function App() {
    * A dictation as it would read with cleanup off: the recognizer's words with the user's own
    * dictionary spellings and snippets, which are not AI edits.
    */
-  const withoutAiEdit = (item: HistoryItem): string => {
-    const raw = item.rawText.trim();
+  const withoutAiEdit = (rawText: string): string => {
+    const raw = rawText.trim();
     return wholeSnippet(raw, appState.snippets, appState.dictionary)?.expansion
       ?? expandSnippets(
         applyDictionaryReplacements(raw, appState.dictionary),
@@ -1311,13 +1316,16 @@ export function App() {
   const aiEditState = (item: HistoryItem): 'undo' | 'redo' | undefined => {
     if (item.mode !== 'dictate' || item.outcome || !item.rawText.trim()) return undefined;
     if (item.aiText !== undefined) return 'redo';
-    return withoutAiEdit(item) !== item.text ? 'undo' : undefined;
+    return plainTextOf(item) !== item.text ? 'undo' : undefined;
   };
+
+  /** The text saved with the dictation, or for one made before it was saved, worked out now. */
+  const plainTextOf = (item: HistoryItem) => item.plainText ?? withoutAiEdit(item.rawText);
 
   /** Switches a dictation between its cleaned-up text and the text without the AI edit. */
   const handleToggleAiEdit = (item: HistoryItem) => {
     const redo = item.aiText !== undefined;
-    const nextText = redo ? item.aiText! : withoutAiEdit(item);
+    const nextText = redo ? item.aiText! : plainTextOf(item);
     const nextWords = countWords(nextText);
     setAppState((prev) => ({
       ...prev,
