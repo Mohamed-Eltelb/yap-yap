@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Check, Feather, Minus, MoreHorizontal, Pencil, Search, Sparkle, Trash2, Upload, X } from 'lucide-react';
+import { ArrowRight, Check, Feather, Minus, MoreHorizontal, Pencil, Search, Sparkle, Trash2, Upload, X } from 'lucide-react';
 import { DictionaryEntry } from '../types/app';
 import { readHeardAs } from '../services/personalization';
 import { WindowControls } from './YapLogo';
+import { Toggle } from './Toggle';
 
 interface Props {
   entries: DictionaryEntry[];
@@ -95,6 +96,9 @@ export function DictionaryView({
   const [wordForm, setWordForm] = useState<'add' | DictionaryEntry | null>(null);
   const [newWord, setNewWord] = useState('');
   const [heardAs, setHeardAs] = useState('');
+  /** Whether the word replaces a spelling Yap Yap keeps getting wrong. */
+  const [correcting, setCorrecting] = useState(false);
+  const heardAsRef = useRef<HTMLInputElement>(null);
   const [wordError, setWordError] = useState('');
   const [heardAsError, setHeardAsError] = useState('');
   const editingEntry = wordForm === 'add' ? null : wordForm;
@@ -139,6 +143,7 @@ export function DictionaryView({
     setMenuId(null);
     setNewWord(form === 'add' ? '' : form.word);
     setHeardAs(form === 'add' ? '' : form.heardAs ?? '');
+    setCorrecting(form !== 'add' && Boolean(form.heardAs));
     setWordError('');
     setHeardAsError('');
     setWordForm(form);
@@ -152,7 +157,11 @@ export function DictionaryView({
       setWordError('This word is already in your dictionary.');
       return;
     }
-    const heard = readHeardAs(heardAs);
+    const heard = correcting ? readHeardAs(heardAs) : undefined;
+    if (correcting && !heard) {
+      setHeardAsError('Enter the misspelling, or turn off Correct a misspelling.');
+      return;
+    }
     if (heard && heard.toLowerCase() === cleaned.toLowerCase()) {
       setHeardAsError('Enter how Yap Yap gets it wrong, not the word itself.');
       return;
@@ -369,37 +378,54 @@ export function DictionaryView({
               {editingEntry ? 'Edit word' : 'Add to dictionary'}
             </h2>
 
-            <input
-              type="text"
-              autoFocus
-              value={newWord}
-              onChange={(e) => { setNewWord(e.target.value); setWordError(''); }}
-              placeholder={editingEntry ? 'Edit word' : 'Add a new word'}
-              aria-label="Word"
-              aria-invalid={Boolean(wordError)}
-              aria-describedby={wordError ? 'dictionary-word-error' : undefined}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--text-primary)]/70 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
-            />
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <span className="text-[13.5px] text-[var(--text-primary)]">Correct a misspelling</span>
+              <Toggle
+                label="Correct a misspelling"
+                checked={correcting}
+                onChange={(on) => {
+                  setCorrecting(on);
+                  setHeardAsError('');
+                  if (on) requestAnimationFrame(() => heardAsRef.current?.focus());
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              {correcting && (
+                <>
+                  <input
+                    ref={heardAsRef}
+                    type="text"
+                    maxLength={60}
+                    value={heardAs}
+                    onChange={(e) => { setHeardAs(e.target.value); setHeardAsError(''); }}
+                    placeholder="Misspelling"
+                    aria-label="Misspelling"
+                    aria-invalid={Boolean(heardAsError)}
+                    aria-describedby={heardAsError ? 'dictionary-heard-as-error' : 'dictionary-heard-as-help'}
+                    className="min-w-0 flex-1 px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
+                  />
+                  <ArrowRight aria-hidden="true" size={16} className="shrink-0 text-[var(--text-secondary)]" />
+                </>
+              )}
+              <input
+                type="text"
+                autoFocus
+                value={newWord}
+                onChange={(e) => { setNewWord(e.target.value); setWordError(''); }}
+                placeholder={correcting ? 'Correct spelling' : editingEntry ? 'Edit word' : 'Add a new word'}
+                aria-label={correcting ? 'Correct spelling' : 'Word'}
+                aria-invalid={Boolean(wordError)}
+                aria-describedby={wordError ? 'dictionary-word-error' : undefined}
+                className="min-w-0 flex-1 px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--text-primary)]/70 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
+              />
+            </div>
 
             {wordError && <p id="dictionary-word-error" role="alert" className="yy-dictionary-word-error mt-2 text-sm">{wordError}</p>}
-
-            <label htmlFor="dictionary-heard-as" className="mt-4 block text-[13px] font-medium text-[var(--text-primary)]">
-              Often written as <span className="font-normal text-[var(--text-secondary)]">(optional)</span>
-            </label>
-            <input
-              id="dictionary-heard-as"
-              type="text"
-              maxLength={60}
-              value={heardAs}
-              onChange={(e) => { setHeardAs(e.target.value); setHeardAsError(''); }}
-              placeholder="For example: hand of"
-              aria-invalid={Boolean(heardAsError)}
-              aria-describedby={heardAsError ? 'dictionary-heard-as-error' : 'dictionary-heard-as-help'}
-              className="mt-1.5 w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]/15"
-            />
-            {heardAsError
+            {correcting && (heardAsError
               ? <p id="dictionary-heard-as-error" role="alert" className="yy-dictionary-word-error mt-2 text-sm">{heardAsError}</p>
-              : <p id="dictionary-heard-as-help" className="mt-1.5 text-xs text-[var(--text-secondary)]">A spelling Yap Yap keeps getting wrong. It is always replaced with your word.</p>}
+              : <p id="dictionary-heard-as-help" className="mt-2 text-xs text-[var(--text-secondary)]">Whenever Yap Yap writes the misspelling, it writes your word instead.</p>)}
 
             <input
               ref={fileInputRef}

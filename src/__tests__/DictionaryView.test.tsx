@@ -16,11 +16,22 @@ function renderView(entries: DictionaryEntry[] = [supabase]) {
 afterEach(cleanup);
 
 describe('Dictionary', () => {
+  it('adds a plain word with the misspelling switch off', async () => {
+    const { onAddWord, user } = renderView();
+    await user.click(screen.getByRole('button', { name: 'New word' }));
+    expect((screen.getByRole('switch', { name: 'Correct a misspelling' })).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByRole('textbox', { name: 'Misspelling' })).toBeNull();
+    await user.type(screen.getByRole('textbox', { name: 'Word' }), 'Kubernetes');
+    await user.click(screen.getByRole('button', { name: 'Add word' }));
+    expect(onAddWord).toHaveBeenCalledWith('Kubernetes', 'manual', undefined);
+  });
+
   it('adds a word with the spelling it replaces', async () => {
     const { onAddWord, user } = renderView();
     await user.click(screen.getByRole('button', { name: 'New word' }));
-    await user.type(screen.getByRole('textbox', { name: 'Word' }), 'handoff');
-    await user.type(screen.getByRole('textbox', { name: /often written as/i }), '  hand  of ');
+    await user.click(screen.getByRole('switch', { name: 'Correct a misspelling' }));
+    await user.type(screen.getByRole('textbox', { name: 'Misspelling' }), '  hand  of ');
+    await user.type(screen.getByRole('textbox', { name: 'Correct spelling' }), 'handoff');
     await user.click(screen.getByRole('button', { name: 'Add word' }));
     expect(onAddWord).toHaveBeenCalledWith('handoff', 'manual', 'hand of');
   });
@@ -28,8 +39,12 @@ describe('Dictionary', () => {
   it('rejects a heard-as spelling that is the word itself or another entry\'s', async () => {
     const { onAddWord, user } = renderView();
     await user.click(screen.getByRole('button', { name: 'New word' }));
-    await user.type(screen.getByRole('textbox', { name: 'Word' }), 'handoff');
-    const heard = screen.getByRole('textbox', { name: /often written as/i });
+    await user.click(screen.getByRole('switch', { name: 'Correct a misspelling' }));
+    await user.type(screen.getByRole('textbox', { name: 'Correct spelling' }), 'handoff');
+    await user.click(screen.getByRole('button', { name: 'Add word' }));
+    expect(screen.getByRole('alert').textContent).toMatch(/Enter the misspelling/);
+
+    const heard = screen.getByRole('textbox', { name: 'Misspelling' });
     await user.type(heard, 'Handoff');
     await user.click(screen.getByRole('button', { name: 'Add word' }));
     expect(screen.getByRole('alert').textContent).toMatch(/not the word itself/);
@@ -46,9 +61,10 @@ describe('Dictionary', () => {
     expect(screen.getByText('super base')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Actions for Supabase' }));
     await user.click(screen.getByRole('button', { name: 'Edit' }));
-    const heard = screen.getByRole('textbox', { name: /often written as/i }) as HTMLInputElement;
+    const heard = screen.getByRole('textbox', { name: 'Misspelling' }) as HTMLInputElement;
     expect(heard.value).toBe('super base');
-    await user.clear(heard);
+    await user.click(screen.getByRole('switch', { name: 'Correct a misspelling' }));
+    expect(screen.queryByRole('textbox', { name: 'Misspelling' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(onEditWord).toHaveBeenCalledWith('d-1', 'Supabase', undefined);
   });
