@@ -1883,6 +1883,21 @@ describe('snippets', () => {
     expect(snippetsSaidIn('Send it to my address 12, please.', [glued, link])).toEqual([glued]);
     expect(expandSnippets('Send it to my address, 12, please.', [glued], [], { loose: true }).text).toBe('Send it to egypt, please.');
     expect(expandSnippets('Send it to my address, 12, please.', [glued]).fired).toBe(false);
+    // Where cleanup kept the punctuation, only the meant trigger expands.
+    expect(expandSnippets('My address: 12 October City. Send it to my address 12.', [glued], [], { loose: true }).text)
+      .toBe('My address: 12 October City. Send it to egypt.');
+  });
+
+  it('never reads number words into a glued trigger, and knows Arabic-Indic digits', () => {
+    const x = (trigger: string) => ({ ...link, id: trigger, trigger, expansion: '[X]' });
+    expect(expandSnippets('I am done, the weight is gone.', [x('d1'), x('w8'), x('g1')]).fired).toBe(false);
+    expect(['d1', 'd 1', 'd one', 'D1.'].map((text) => expandSnippets(text, [x('d1')]).fired)).toEqual([true, true, true, true]);
+    expect(expandSnippets('the 12th floor', [x('12th floor')]).fired).toBe(true);
+    expect(expandSnippets('the twelveth floor', [x('12th floor')]).fired).toBe(false);
+    expect(snippetTriggerKey('عنواني ١٢')).toBe('عنواني 12');
+    expect(['عنواني 12', 'عنواني ١٢', 'عنواني۱۲'].map((text) => expandSnippets(text, [x('عنواني ١٢')]).fired)).toEqual([true, true, true]);
+    expect(expandSnippets('room ١٠٥', [x('room 105')]).fired).toBe(true);
+    const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };
     expect(expandSnippets('my address twelve', [glued]).text).toBe('egypt');
     expect(expandSnippets('my address12', [glued]).text).toBe('egypt');
     expect(expandSnippets('my address 123', [glued]).fired).toBe(false);

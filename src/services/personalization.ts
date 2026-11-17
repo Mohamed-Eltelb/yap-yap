@@ -298,10 +298,17 @@ function foldNumberWords(words: string[]): string[] {
   return out;
 }
 
+/** Arabic-Indic and Persian digits, by value, so "١٢" and "12" are the same number. */
+const OTHER_DIGITS = ['٠١٢٣٤٥٦٧٨٩', '۰۱۲۳۴۵۶۷۸۹'];
+
+function asciiDigits(text: string): string {
+  return text.replace(/[٠-٩۰-۹]/gu, (digit) => String(OTHER_DIGITS.find((set) => set.includes(digit))!.indexOf(digit)));
+}
+
 /** A trigger's words, lowercase, without punctuation, numbers as digits: how it is compared. */
 export function snippetTriggerKey(trigger: string): string {
   // "address12" is said as "address 12", so letters and digits are separate words.
-  return foldNumberWords(trigger.toLowerCase().match(/\p{N}+|[\p{L}\p{M}]+/gu) ?? []).join(' ');
+  return foldNumberWords(asciiDigits(trigger.toLowerCase()).match(/\p{N}+|[\p{L}\p{M}]+/gu) ?? []).join(' ');
 }
 
 /** Saved snippets, keeping valid ones only: a trigger with a letter or digit, used once. */
@@ -325,19 +332,27 @@ export function parseSnippets(value: unknown): Snippet[] {
 function triggerPattern(key: string, strict: boolean): string {
   const between = strict ? BETWEEN.strict : BETWEEN.loose;
   const words = key.split(' ');
+  const isNumber = (word: string) => /^\d+$/u.test(word);
   return words.map((word, index) => {
-    // Letters and digits may also be written together ("address12"), with no space between.
-    const gap = !index ? '' : `${between}${/^\d+$/u.test(word) !== /^\d+$/u.test(words[index - 1]) ? '*' : '+'}`;
+    const gap = index ? `${between}+` : '';
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    if (!isNumber(word)) {
+      // Letters may follow written digits directly ("12th"), but never number words ("oned").
+      return index && isNumber(words[index - 1]) ? `(?:(?<=\\p{N})${between}*|${gap})${escaped}` : gap + escaped;
+    }
+    // Digits in any script, so "١٢" matches too.
+    const digits = [...word].map((digit) => `[${digit}${OTHER_DIGITS.map((set) => set[Number(digit)]).join('')}]`).join('');
     // A number matches as digits or as its words, with or without "and" after hundred or thousand,
     // and a four-digit one also as a year said in pairs.
-    const spoken = /^\d+$/u.test(word) ? numberWords(Number(word)) : undefined;
-    if (!spoken) return gap + escaped;
-    const said = spoken.map((part, at) => at && /^(?:hundred|thousand)$/u.test(spoken[at - 1])
+    const spoken = numberWords(Number(word));
+    const said = spoken?.map((part, at) => at && /^(?:hundred|thousand)$/u.test(spoken[at - 1])
       ? `(?:and${between}+)?${part}`
       : part).join(`${between}+`);
     const year = word.length === 4 ? yearWords(Number(word)) : undefined;
-    return `${gap}(?:${escaped}|${said}${year ? `|${year.join(`${between}+`)}` : ''})`;
+    const spelled = [said, year?.join(`${between}+`)].filter(Boolean).join('|');
+    // Written digits may follow letters directly ("address12"); number words need a space ("d one", not "done").
+    const digitGap = index && !isNumber(words[index - 1]) ? `${between}*` : gap;
+    return `(?:${digitGap}${digits}${spelled ? `|${gap}(?:${spelled})` : ''})`;
   }).join('');
 }
 
@@ -397,6 +412,12 @@ export function expandSnippets(
     .flatMap((snippet) => triggerKeys(snippet, entries).map((key) => ({ key, expansion: snippet.expansion })))
     .sort((a, b) => b.key.length - a.key.length);
   if (!pairs.length || !text) return { text, fired: false, startsWithExpansion: false };
+  if (loose) {
+    // Where cleanup kept the punctuation, it still tells a meant trigger from words that only look
+    // like one ("My address: 12 October City. Send it to my address 12."). Loosen only if needed.
+    const strict = expandSnippets(text, snippets, entries);
+    if (strict.fired) return strict;
+  }
   const matcher = triggersMatcher(pairs.map(({ key }) => key), !loose);
   let fired = false;
   let startsWithExpansion = false;
