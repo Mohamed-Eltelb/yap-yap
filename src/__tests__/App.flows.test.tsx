@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DictionaryEntry, HistoryItem, SettingsState, Snippet, WritingSample } from '../types/app';
 
@@ -366,6 +367,37 @@ describe('Snippets', () => {
     await dictate();
 
     expect(desktop.api.pasteText).toHaveBeenCalledWith('مثر، مصر');
+  });
+
+  it('undoes and redoes the AI edit of a dictation, keeping dictionary spellings and snippets', async () => {
+    seed({
+      history: [dictation(undefined, { rawText: 'um send it to my address 12 please, yep yep', text: 'Send it to egypt, please, Yap Yap.' })],
+      snippets: [{ ...signature, trigger: 'my address12', expansion: 'egypt' }],
+      dictionary: [{ id: 'd1', word: 'Yap Yap', heardAs: 'yep yep', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z' }],
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^History$/ }));
+    const menu = async () => user.click(screen.getAllByRole('button', { name: 'More actions' })[0]);
+
+    await menu();
+    await user.click(screen.getByRole('button', { name: 'Undo AI edit' }));
+    await waitFor(() => expect(lastSaved().history[0]).toMatchObject({ text: 'um send it to egypt please, Yap Yap', aiText: 'Send it to egypt, please, Yap Yap.' }));
+
+    await menu();
+    await user.click(screen.getByRole('button', { name: 'Redo AI edit' }));
+    await waitFor(() => expect(lastSaved().history[0].text).toBe('Send it to egypt, please, Yap Yap.'));
+    expect(lastSaved().history[0].aiText).toBeUndefined();
+  });
+
+  it('offers no AI edit to undo when cleanup changed nothing', async () => {
+    seed({ history: [dictation(undefined, { rawText: 'Hello there.', text: 'Hello there.' })] });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^History$/ }));
+    await user.click(screen.getAllByRole('button', { name: 'More actions' })[0]);
+    expect(screen.queryByRole('button', { name: 'Undo AI edit' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
   it('expands with cleanup off and with personalization off', async () => {

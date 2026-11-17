@@ -71,6 +71,8 @@ export interface HistoryItem {
   outcome?: 'silent' | 'cancelled';
   /** Site or app the dictation was written into. */
   writingSource?: string;
+  /** The cleaned-up text, kept while the user has undone the AI edit, so it can be redone. */
+  aiText?: string;
 }
 
 /**

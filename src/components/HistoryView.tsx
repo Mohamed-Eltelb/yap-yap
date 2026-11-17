@@ -14,9 +14,11 @@ import {
   Pause,
   Pencil,
   Play,
+  Redo2,
   RotateCcw,
   Sparkles,
   Trash2,
+  Undo2,
   Upload,
   X,
 } from 'lucide-react';
@@ -31,6 +33,9 @@ interface Props {
   onToggleFlag: (id: string) => void;
   onEditItem: (id: string, newText: string) => void;
   onRetryItem: (item: HistoryItem) => void;
+  /** Whether the AI edit of a dictation can be undone, or redone after an undo. */
+  aiEditState?: (item: HistoryItem) => 'undo' | 'redo' | undefined;
+  onToggleAiEdit?: (item: HistoryItem) => void;
   onDownloadAudio: (item: HistoryItem) => void;
   onDeleteItem: (id: string) => void;
   onClearAll: () => void;
@@ -87,6 +92,8 @@ export function HistoryView({
   onToggleFlag,
   onEditItem,
   onRetryItem,
+  aiEditState,
+  onToggleAiEdit,
   onDownloadAudio,
   onDeleteItem,
   onClearAll,
@@ -340,6 +347,7 @@ export function HistoryView({
                 <div className="rounded-xl border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
                   {items.map((item) => {
                     const isMenuOpen = openMenuId === item.id;
+                    const aiEdit = isMenuOpen ? aiEditState?.(item) : undefined;
                     const isEditing = editingId === item.id;
                     const isPlaying = playingId === item.id;
                     const hasAnswer = Boolean(getHistoryAnswer(item));
@@ -505,6 +513,21 @@ export function HistoryView({
                                   >
                                     {isPlaying ? <Pause size={14} /> : <Play size={14} />}
                                     {isPlaying ? 'Pause audio' : 'Play audio'}
+                                  </button>
+                                )}
+                                {aiEdit && onToggleAiEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onToggleAiEdit(item);
+                                      setOpenMenuId(null);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2.5"
+                                  >
+                                    {aiEdit === 'undo'
+                                      ? <Undo2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                                      : <Redo2 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
+                                    <span>{aiEdit === 'undo' ? 'Undo AI edit' : 'Redo AI edit'}</span>
                                   </button>
                                 )}
                                 <button

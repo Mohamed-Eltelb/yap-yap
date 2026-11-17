@@ -1282,6 +1282,7 @@ export function App() {
                 // The text is the model's again, not the user's hand edit.
                 writingCorrection: undefined,
                 writingCorrectedAt: undefined,
+                aiText: undefined,
               }
             : h
         ),
@@ -1290,6 +1291,47 @@ export function App() {
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Retry failed');
     }
+  };
+
+  /**
+   * A dictation as it would read with cleanup off: the recognizer's words with the user's own
+   * dictionary spellings and snippets, which are not AI edits.
+   */
+  const withoutAiEdit = (item: HistoryItem): string => {
+    const raw = item.rawText.trim();
+    return wholeSnippet(raw, appState.snippets, appState.dictionary)?.expansion
+      ?? expandSnippets(
+        applyDictionaryReplacements(raw, appState.dictionary),
+        snippetsSaidIn(raw, appState.snippets, appState.dictionary),
+        appState.dictionary,
+        { loose: true },
+      ).text;
+  };
+
+  const aiEditState = (item: HistoryItem): 'undo' | 'redo' | undefined => {
+    if (item.mode !== 'dictate' || item.outcome || !item.rawText.trim()) return undefined;
+    if (item.aiText !== undefined) return 'redo';
+    return withoutAiEdit(item) !== item.text ? 'undo' : undefined;
+  };
+
+  /** Switches a dictation between its cleaned-up text and the text without the AI edit. */
+  const handleToggleAiEdit = (item: HistoryItem) => {
+    const redo = item.aiText !== undefined;
+    const nextText = redo ? item.aiText! : withoutAiEdit(item);
+    const nextWords = countWords(nextText);
+    setAppState((prev) => ({
+      ...prev,
+      history: prev.history.map((h) => h.id === item.id
+        ? {
+          ...h,
+          text: nextText,
+          aiText: redo ? undefined : h.text,
+          wordCount: nextWords,
+          wpm: Math.max(1, Math.round((nextWords / Math.max(1000, h.durationMs)) * 60_000)),
+        }
+        : h),
+    }));
+    showToast(redo ? 'AI edit restored' : 'AI edit undone');
   };
 
   const handleDownloadAudio = (item: HistoryItem) => {
@@ -1394,6 +1436,8 @@ export function App() {
                 wordCount: nextWords,
                 wpm: nextWpm,
                 category: nextCategory,
+                // A hand edit is the text now: there is no AI edit left to redo.
+                aiText: undefined,
               }
             : h
         ),
@@ -1542,6 +1586,8 @@ export function App() {
               }))
             }
             onRetryItem={(item) => void handleRetryHistoryItem(item)}
+            aiEditState={aiEditState}
+            onToggleAiEdit={handleToggleAiEdit}
             onDownloadAudio={handleDownloadAudio}
             onDeleteItem={(id) =>
               setAppState((prev) => ({
