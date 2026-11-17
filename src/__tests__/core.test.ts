@@ -612,6 +612,8 @@ describe('Multi-Provider Engine', () => {
     );
     expect(apiMultipartMock.mock.calls[0][0].headers['xi-api-key']).toBe('el_test_key');
     expect(apiMultipartMock.mock.calls[0][0].fields.model_id).toBe('scribe_v3');
+    // Scribe otherwise writes sounds like "[background noise]" into the text.
+    expect(apiMultipartMock.mock.calls[0][0].fields.tag_audio_events).toBe('false');
   });
 
   it('omits sampling temperature for OpenAI gpt-6-luna reasoning model', async () => {

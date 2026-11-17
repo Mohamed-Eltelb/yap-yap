@@ -484,6 +484,8 @@ export async function transcribeAudio(
     const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl!);
     const fields: Record<string, string | string[]> = {
       model_id: provider.sttModel || 'scribe_v3',
+      // Scribe tags sounds by default, writing "[background noise]" or "(laughs)" into the text.
+      tag_audio_events: 'false',
       ...(onlyLanguage ? { language_code: onlyLanguage.code } : {}),
     };
     // The dictionary, as terms ElevenLabs listens for. It takes at most 5 words and 50
