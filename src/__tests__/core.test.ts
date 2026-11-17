@@ -1465,6 +1465,8 @@ describe('what goes to the AI provider', () => {
     // Without these, GPT OSS kept "fifteen thousand dollars" and "at two, actually three" in Light.
     expect(system(0)).toContain('writing numbers as digits, are not rewording');
     expect(system(0)).toContain('"at two, actually three" becomes "at three"');
+    expect(system(0)).toContain('Put quotation marks around text the speaker names or quotes');
+    expect(system(0)).toContain('never rewritten as formal Arabic');
     await processTranscriptWithLlm('hi', 'dictate', provider, { ...options, cleanupLevel: 'medium' });
     expect(system(1)).toContain('You may reword');
     expect(system(1)).not.toContain('Do not reword');
@@ -2050,3 +2052,4 @@ describe('snippets', () => {
     expect(sanitizeLoadedState({ dictionary: [] } as never).snippets).toEqual([]);
   });
 });
+
