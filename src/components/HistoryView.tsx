@@ -46,6 +46,9 @@ interface Props {
 
 type HistoryFilter = 'all' | 'dictations' | 'ask';
 
+/** How many entries the list shows at first, and how many more each time it is scrolled to the end. */
+export const HISTORY_PAGE_SIZE = 40;
+
 const retentionOptions = [
   { value: 'forever', label: 'Forever' },
   { value: '1y', label: '1 year' },
@@ -141,16 +144,44 @@ export function HistoryView({
     return history;
   }, [history, filter]);
 
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const hasMore = visibleCount < filtered.length;
+
+  // Each filter starts again from the newest page.
+  useEffect(() => setVisibleCount(HISTORY_PAGE_SIZE), [filter]);
+
+  // Load the next page when the end of the list scrolls near the view.
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!hasMore || !sentinel) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisibleCount(filtered.length);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => count + HISTORY_PAGE_SIZE);
+        }
+      },
+      { root: scrollRef.current, rootMargin: '0px 0px 600px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, visibleCount, filtered.length]);
+
   const groups = useMemo(() => {
     const map = new Map<string, HistoryItem[]>();
-    for (const item of filtered) {
+    for (const item of filtered.slice(0, visibleCount)) {
       const heading = formatDayHeading(item.createdAt);
       const list = map.get(heading) ?? [];
       list.push(item);
       map.set(heading, list);
     }
     return Array.from(map.entries());
-  }, [filtered]);
+  }, [filtered, visibleCount]);
 
   const handleTogglePlay = async (item: HistoryItem) => {
     if (!hasHistoryAudio(item)) return;
@@ -189,6 +220,7 @@ export function HistoryView({
 
   return (
     <div
+      ref={scrollRef}
       className="flex-1 h-full overflow-y-auto bg-[var(--bg-main)] flex flex-col"
       onClick={() => {
         if (openMenuId) setOpenMenuId(null);
@@ -589,6 +621,11 @@ export function HistoryView({
                 </div>
               </div>
             ))}
+            {hasMore && (
+              <div ref={sentinelRef} className="py-4 text-center text-xs text-[var(--text-muted)]">
+                Loading older history…
+              </div>
+            )}
           </div>
         )}
       </div>

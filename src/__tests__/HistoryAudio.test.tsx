@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { HistoryView } from '../components/HistoryView';
+import { HISTORY_PAGE_SIZE, HistoryView } from '../components/HistoryView';
 import type { HistoryItem } from '../types/app';
 
 const noop = () => {};
@@ -35,4 +35,21 @@ it('offers Retry for a cancelled dictation whose recording is in the desktop sto
   render(view([dictation({ text: '', outcome: 'cancelled', audioSaved: true })], onRetry));
   fireEvent.click(screen.getByRole('button', { name: /Retry/ }));
   expect(onRetry).toHaveBeenCalled();
+});
+
+it('shows history a page at a time, loading the next page when the end scrolls into view', () => {
+  let fire: (visible: boolean) => void = () => {};
+  vi.stubGlobal('IntersectionObserver', vi.fn(function (this: object, cb: (e: { isIntersecting: boolean }[]) => void) {
+    fire = (visible) => act(() => cb([{ isIntersecting: visible }]));
+    Object.assign(this, { observe: () => {}, disconnect: () => {} });
+  }));
+  const items = Array.from({ length: HISTORY_PAGE_SIZE * 2 + 5 }, (_, i) =>
+    dictation({ id: `h-${i}`, text: `Entry ${i}` }));
+  render(view(items));
+  expect(screen.getAllByText(/^Entry \d+$/)).toHaveLength(HISTORY_PAGE_SIZE);
+  fire(true);
+  expect(screen.getAllByText(/^Entry \d+$/)).toHaveLength(HISTORY_PAGE_SIZE * 2);
+  fire(true);
+  expect(screen.getAllByText(/^Entry \d+$/)).toHaveLength(items.length);
+  expect(screen.queryByText(/Loading older history/)).toBeNull();
 });
