@@ -18,6 +18,7 @@ import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccel
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 import type { HudAction } from './hudActions';
+import { HUD_SHRINK_DELAY_MS, hudResizeDelay } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -212,11 +213,35 @@ function createHudWindow(): void {
   });
 }
 
+let hudResizeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Places the HUD window at the bottom center of the work area at this size. */
+function setHudSize(window: BrowserWindow, workArea: Electron.Rectangle, width: number, height: number) {
+  const x = workArea.x + Math.round((workArea.width - width) / 2);
+  const y = workArea.y + workArea.height - height - 4;
+  const bounds = window.getBounds();
+  if (bounds.width !== width || bounds.height !== height || bounds.x !== x || bounds.y !== y) {
+    window.setBounds({ x, y, width, height });
+  }
+}
+
 function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
+  clearTimeout(hudResizeTimer);
+  hudResizeTimer = undefined;
   if (!hudPayload.show) {
-    hudWindow.hide();
-    hudDisplayId = undefined;
+    if (!hudWindow.isVisible()) {
+      hudDisplayId = undefined;
+      return;
+    }
+    // Let the page shrink its pill out before the window goes.
+    hudWindow.webContents.send('hud:state', hudPayload.state ?? { status: 'idle', mode: 'dictate', levels: [] });
+    const window = hudWindow;
+    hudResizeTimer = setTimeout(() => {
+      hudResizeTimer = undefined;
+      window.hide();
+      hudDisplayId = undefined;
+    }, HUD_SHRINK_DELAY_MS);
     return;
   }
 
@@ -249,11 +274,18 @@ function updateHudWindow(): void {
   }
   width = Math.min(width, workArea.width);
   height = Math.min(height, workArea.height - 12);
-  const x = workArea.x + Math.round((workArea.width - width) / 2);
-  const y = workArea.y + workArea.height - height - 4;
   const bounds = hudWindow.getBounds();
-  if (bounds.width !== width || bounds.height !== height || bounds.x !== x || bounds.y !== y) {
-    hudWindow.setBounds({ x, y, width, height });
+  // A visible window grows at once but shrinks only after the pill has animated,
+  // so the pill is never cut off mid-animation.
+  if (hudWindow.isVisible() && hudResizeDelay(bounds, { width, height }) > 0) {
+    setHudSize(hudWindow, workArea, Math.max(width, bounds.width), Math.max(height, bounds.height));
+    const window = hudWindow;
+    hudResizeTimer = setTimeout(() => {
+      hudResizeTimer = undefined;
+      setHudSize(window, workArea, width, height);
+    }, HUD_SHRINK_DELAY_MS);
+  } else {
+    setHudSize(hudWindow, workArea, width, height);
   }
   hudWindow.webContents.send('hud:state', state);
   if (!hudWindow.isVisible()) hudWindow.showInactive();
