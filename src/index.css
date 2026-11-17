@@ -2362,6 +2362,19 @@ textarea,
     yy-hud-notice-out 0.25s ease-in 5.75s forwards;
 }
 
+.yy-hud-tip-finish {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0 1px;
+  border-radius: 50%;
+  background: #fff;
+  color: #17191a;
+  vertical-align: -1.5px;
+}
+
 .yy-hud-tip kbd,
 .yy-hud-shortcut kbd {
   padding: 3px 7px;

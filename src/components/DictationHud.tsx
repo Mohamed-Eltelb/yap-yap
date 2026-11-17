@@ -53,6 +53,13 @@ export const PILL_CLOSE_MS = 200;
 /** How long the pause tip stays; it fades out over its last quarter second (see .yy-hud-tip). */
 export const PAUSE_TIP_MS = 6000;
 
+/** A small copy of the Finish button, for pointing at it in text. */
+const finishIcon = (
+  <span className="yy-hud-tip-finish" aria-label="Finish" role="img">
+    <Check size={11} strokeWidth={2.75} aria-hidden="true" />
+  </span>
+);
+
 export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
 
 /** The pill shape a HUD state uses, or nothing when that state shows another screen. */
@@ -203,8 +210,8 @@ export function DictationHud({
       {hud.status === 'recording' && hud.pauseTip && !hud.paused && (
         <p className="yy-hud-tip" role="status">
           {hud.pauseTip.keys
-            ? <>Hold <kbd>{hud.pauseTip.keys.join(' + ')}</kbd> to pause, or hover ✓ and click pause</>
-            : <>Hover ✓ and click pause to pause the recording</>}
+            ? <>Hold <kbd>{hud.pauseTip.keys.join(' + ')}</kbd> to pause, or hover {finishIcon} and click pause</>
+            : <>Hover {finishIcon} and click pause to pause the recording</>}
         </p>
       )}
       {pill && (
