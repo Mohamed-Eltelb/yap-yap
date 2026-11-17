@@ -2038,8 +2038,13 @@ textarea,
   animation: yy-hud-ring-down 5s linear forwards;
 }
 
+/* Hovering holds the countdown, but the notice still finishes rising in: the X that
+   cancelled sits under it, so the pointer is often already there when it appears. */
 .yy-hud-countdown:hover,
-.yy-hud-countdown:focus-within,
+.yy-hud-countdown:focus-within {
+  animation-play-state: running, paused;
+}
+
 .yy-hud-countdown:hover .yy-hud-undo-ring rect,
 .yy-hud-countdown:focus-within .yy-hud-undo-ring rect {
   animation-play-state: paused;
@@ -2117,6 +2122,12 @@ textarea,
   /* The Undo countdown still runs, without movement: the ring empties, then the notice goes. */
   .yy-hud-cancelled.yy-hud-countdown {
     animation: yy-hud-notice-out 0.01s linear 5s forwards;
+  }
+
+  /* Here the countdown is the only animation, so hovering simply holds it. */
+  .yy-hud-cancelled.yy-hud-countdown:hover,
+  .yy-hud-cancelled.yy-hud-countdown:focus-within {
+    animation-play-state: paused;
   }
 
   .yy-hud-tip {
