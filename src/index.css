@@ -1788,13 +1788,15 @@ textarea,
   width: 2px;
   border-radius: 2px;
   background: #fff;
-  transition: height 80ms linear, opacity 0.2s var(--hud-ease);
+  transition: height 80ms linear, opacity 0.25s var(--hud-ease);
 }
 
-.yy-hud-pill[data-state="armed"] .yy-hud-wave span { opacity: 0.55; }
+/* Dim while waiting, so the bars visibly light up from the center when recording starts. */
+.yy-hud-pill[data-state="armed"] .yy-hud-wave span { opacity: 0.25; }
 
 .yy-hud-pill-label {
   position: absolute;
+  z-index: 1;
   inset: 0;
   display: grid;
   place-items: center;

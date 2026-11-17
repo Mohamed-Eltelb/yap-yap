@@ -55,3 +55,14 @@ it('keeps the same pill element while it shrinks out, so the shrink animates', (
   rerender(<Hud status="idle" />);
   expect(container.querySelector('.yy-hud-pill')).toBe(pill);
 });
+
+it('keeps the Thinking pill in place when the still-processing notice appears', () => {
+  const noop = vi.fn();
+  const props = { onStop: noop, onCancel: noop, onUndo: noop, onRetry: noop, onSelectTarget: noop,
+    onEditTargets: noop, onCopyResult: noop, onDismissResult: noop };
+  const { container, rerender } = render(<DictationHud hud={{ status: 'processing', mode: 'dictate', levels: [] }} {...props} />);
+  const pill = container.querySelector('.yy-hud-pill');
+  rerender(<DictationHud hud={{ status: 'processing', mode: 'dictate', levels: [], busyNotice: true }} {...props} />);
+  expect(container.querySelector('.yy-hud-busy')).not.toBeNull();
+  expect(container.querySelector('.yy-hud-pill')).toBe(pill);
+});

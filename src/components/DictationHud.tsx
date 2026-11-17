@@ -203,7 +203,7 @@ export function DictationHud({
               <span key={index} style={{
                 height: `${recording ? barHeight(hud.levels, index, loud) : 2}px`,
                 // The bars fade in from the center outward.
-                transitionDelay: `0ms, ${Math.abs(index - (bars.length - 1) / 2) * 20}ms`,
+                transitionDelay: `0ms, ${Math.abs(index - (bars.length - 1) / 2) * 35}ms`,
               }} />
             ))}
           </div>
