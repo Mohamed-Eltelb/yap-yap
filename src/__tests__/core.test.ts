@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, expandSnippets, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1830,5 +1830,43 @@ describe('starting styles', () => {
     const learned = buildWritingProfiles([1, 2, 3].map(() => ({ mode: 'dictate' as const, writingSample: { category: 'Messaging', tone: 'Friendly', phrasing: '' } })));
     expect(stylesForCleanup(applyStyleCorrections(learned, picked), picked)).toEqual([expect.objectContaining({ category: 'Messaging', tone: 'Casual', phrasing: veryCasual.phrasing })]);
     expect(stylesForCleanup(applyStyleCorrections(learned, {}), {})).toEqual([expect.objectContaining({ category: 'Messaging', tone: 'Friendly' })]);
+  });
+});
+
+describe('snippets', () => {
+  const signature = { id: 's1', trigger: 'my signature', expansion: 'Best,\nSam Lee', createdAt: '2026-01-01T00:00:00.000Z' };
+  const address = { id: 's2', trigger: 'home address two', expansion: '12 Elm St', createdAt: '2026-01-01T00:00:00.000Z' };
+  const link = { id: 's3', trigger: 'zoom link', expansion: 'https://zoom.us/j/1', createdAt: '2026-01-01T00:00:00.000Z' };
+  const snippets = [signature, address, link];
+
+  it('expands a trigger anywhere, ignoring case and punctuation, and drops a stray period after a signature', () => {
+    expect(expandSnippets('Talk soon. My signature.', snippets)).toEqual({ text: 'Talk soon. Best,\nSam Lee', fired: true, startsWithExpansion: false });
+    expect(expandSnippets('Join with the Zoom link, thanks.', snippets).text).toBe('Join with the https://zoom.us/j/1, thanks.');
+    expect(expandSnippets('Send it to home address 2.', snippets).text).toBe('Send it to 12 Elm St.');
+    expect(expandSnippets('Zoom link: join early.', snippets)).toMatchObject({ text: 'https://zoom.us/j/1: join early.', startsWithExpansion: true });
+  });
+
+  it('matches whole words only and never expands an expansion again', () => {
+    expect(expandSnippets('The zoom linkage broke.', snippets)).toMatchObject({ text: 'The zoom linkage broke.', fired: false });
+    expect(expandSnippets('a b', [{ ...link, trigger: 'a', expansion: 'b' }, { ...link, id: 's4', trigger: 'b', expansion: 'c' }]).text).toBe('b c');
+  });
+
+  it('recognizes a dictation that is only a trigger, also after a dictionary replacement', () => {
+    expect(wholeSnippet('My signature.', snippets)).toBe(signature);
+    expect(wholeSnippet('my signature please', snippets)).toBeUndefined();
+    const entries = [{ word: 'Zoom', heardAs: 'zoo m' }];
+    expect(wholeSnippet('zoo m link', [link], entries)).toBe(link);
+    expect(expandSnippets(applyDictionaryReplacements('the zoo m link', entries), [{ ...link, trigger: 'zoo m link' }], entries).fired).toBe(true);
+  });
+
+  it('keeps valid snippets through saving and loading', () => {
+    expect(parseSnippets([
+      { ...signature, expansion: 'Best,\r\nSam' },
+      { ...signature, id: 's9', trigger: 'MY  signature!' },
+      { ...link, trigger: '!!!' },
+      { ...address, expansion: '   ' },
+      'nope',
+    ])).toEqual([{ ...signature, expansion: 'Best,\nSam' }]);
+    expect(sanitizeLoadedState({ dictionary: [] } as never).snippets).toEqual([]);
   });
 });

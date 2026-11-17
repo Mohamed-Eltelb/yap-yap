@@ -403,7 +403,9 @@ html.dark .yy-home-insights {
   }
 
   .yy-dictionary-word:hover .yy-dictionary-row-action,
-  .yy-dictionary-word:focus-within .yy-dictionary-row-action {
+  .yy-dictionary-word:focus-within .yy-dictionary-row-action,
+  .yy-snippet:hover .yy-dictionary-row-action,
+  .yy-snippet:focus-within .yy-dictionary-row-action {
     opacity: 1;
   }
 
@@ -2214,4 +2216,43 @@ textarea,
 .yy-style-choice span {
   color: var(--text-secondary);
   font-size: 11.5px;
+}
+
+/* Snippets: the phrase to say, then the saved text it inserts. */
+.yy-snippet-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (width >= 560px) {
+  .yy-snippet-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.yy-snippet {
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  transition: background-color 150ms;
+}
+
+.yy-snippet:hover {
+  background: var(--bg-hover);
+}
+
+.yy-snippet-trigger {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 26px;
+}
+
+.yy-snippet-expansion {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }

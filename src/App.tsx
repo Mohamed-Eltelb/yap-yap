@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DictationContext } from '../electron/dictationContext';
 import { DictionaryView, type ImportedWord } from './components/DictionaryView';
+import { SnippetsView } from './components/SnippetsView';
 import { DictationHud, HudState } from './components/DictationHud';
 import { HistoryView } from './components/HistoryView';
 import { HomeView } from './components/HomeView';
@@ -12,7 +13,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyDictionaryReplacements, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, expandSnippets, wholeSnippet, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -495,10 +496,13 @@ export function App() {
         let usedProviderId: ProviderId = sttProviderId;
         let usedModel = sttProvider.sttModel;
 
+        // Saying only a snippet's trigger pastes its text as saved, with no cleanup to change it.
+        const onlySnippet = mode === 'dictate' ? wholeSnippet(rawText, appState.snippets, appState.dictionary) : undefined;
+
         const needsLlm =
           mode === 'translate' ||
           mode === 'ask' ||
-          (mode === 'dictate' && appState.settings.smartCleanup);
+          (mode === 'dictate' && appState.settings.smartCleanup && !onlySnippet);
 
         if (needsLlm && llmSelection !== 'none') {
           let llmProvider = appState.providers[llmSelection];
@@ -597,8 +601,24 @@ export function App() {
           throw new Error('Select an AI provider in API Keys to use Translate or Ask anything.');
         }
 
-        // Spellings the user said the recognizer gets wrong, fixed with or without cleanup.
-        if (mode === 'dictate') finalText = applyDictionaryReplacements(finalText, appState.dictionary);
+        // Spellings the user said the recognizer gets wrong, fixed with or without cleanup. Snippets
+        // expand last, so nothing rewrites their text.
+        let beforeSnippets = finalText;
+        let startsWithSnippet = false;
+        if (mode === 'dictate') {
+          finalText = applyDictionaryReplacements(finalText, appState.dictionary);
+          beforeSnippets = finalText;
+          const expanded = onlySnippet
+            ? { text: onlySnippet.expansion, fired: true, startsWithExpansion: true }
+            : expandSnippets(finalText, appState.snippets, appState.dictionary);
+          finalText = expanded.text;
+          startsWithSnippet = expanded.startsWithExpansion;
+          // Saved text says nothing about how the user writes here.
+          if (expanded.fired) {
+            learnStyle = undefined;
+            learnFromEdit = undefined;
+          }
+        }
         const category = classifyTranscriptCategory(finalText, mode);
         const words = countWords(finalText);
         const wpm = Math.max(
@@ -606,7 +626,7 @@ export function App() {
           Math.round((countWords(rawText) / Math.max(1000, durationMs)) * 60_000)
         );
         // Ask answers and translations are not the user's words, so only dictation teaches terms.
-        const autoWords = mode === 'dictate' ? extractAutoDictionaryWords(finalText, dictWords) : [];
+        const autoWords = mode === 'dictate' ? extractAutoDictionaryWords(beforeSnippets, dictWords) : [];
 
         const itemId = existingItemId ?? `h-${Date.now()}`;
         if (existingItemId) {
@@ -705,7 +725,8 @@ export function App() {
         void learnStyle?.().then((sample) => sample && keepSample(sample));
 
         const desktop = window.yapyap;
-        const delivered = mode === 'dictate' ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
+        // A snippet at the start keeps its text exactly; fitting would lowercase its first letter.
+        const delivered = mode === 'dictate' && !startsWithSnippet ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
         if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
         const pasted = await deliverDictationResult(
@@ -770,7 +791,7 @@ export function App() {
         });
       }
     },
-    [appState.dictionary, appState.history, appState.providers, appState.settings, learnedSources, stats.categoryBreakdown]
+    [appState.dictionary, appState.history, appState.providers, appState.settings, appState.snippets, learnedSources, stats.categoryBreakdown]
   );
 
   const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
@@ -1218,7 +1239,10 @@ export function App() {
         }
       );
       const cleaned = processed.finalText || item.text;
-      const nextText = item.mode === 'dictate' ? applyDictionaryReplacements(cleaned, appState.dictionary) : cleaned;
+      const nextText = item.mode === 'dictate'
+        ? wholeSnippet(item.rawText, appState.snippets, appState.dictionary)?.expansion
+          ?? expandSnippets(applyDictionaryReplacements(cleaned, appState.dictionary), appState.snippets, appState.dictionary).text
+        : cleaned;
       const nextWords = countWords(nextText);
       const nextWpm = Math.max(
         1,
@@ -1513,6 +1537,24 @@ export function App() {
             }}
             onExportJson={handleExportHistory}
             onImportJson={handleImportHistory}
+          />
+        )}
+
+        {activeNav === 'snippets' && (
+          <SnippetsView
+            snippets={appState.snippets}
+            onAdd={(trigger, expansion) => {
+              setAppState((prev) => ({
+                ...prev,
+                snippets: [{ id: `s-${Date.now()}`, trigger, expansion, createdAt: new Date().toISOString() }, ...prev.snippets],
+              }));
+              showToast(`Added "${trigger}"`);
+            }}
+            onEdit={(id, trigger, expansion) => setAppState((prev) => ({
+              ...prev,
+              snippets: prev.snippets.map((item) => item.id === id ? { ...item, trigger, expansion } : item),
+            }))}
+            onDelete={(id) => setAppState((prev) => ({ ...prev, snippets: prev.snippets.filter((item) => item.id !== id) }))}
           />
         )}
 

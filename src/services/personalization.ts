@@ -1,4 +1,4 @@
-import type { DictionaryEntry, HistoryItem, RetainedStyleSample, StyleCorrections, WritingSample } from '../types/app';
+import type { DictionaryEntry, HistoryItem, RetainedStyleSample, Snippet, StyleCorrections, WritingSample } from '../types/app';
 
 export const WRITING_CATEGORIES = [
   'AI assistants',
@@ -205,6 +205,96 @@ export function readHeardAs(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.replace(/\s+/gu, ' ').trim().slice(0, 60);
   return text || undefined;
+}
+
+/** Longest trigger and expansion a snippet can have. */
+export const MAX_SNIPPET_TRIGGER = 60;
+export const MAX_SNIPPET_EXPANSION = 4000;
+
+/** Cleanup may write a spoken number as digits ("address two" becomes "address 2"). */
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+
+/** A trigger's words, lowercase, without punctuation, numbers as digits: how it is compared. */
+export function snippetTriggerKey(trigger: string): string {
+  return (trigger.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [])
+    .map((word) => NUMBER_WORDS.includes(word) ? String(NUMBER_WORDS.indexOf(word)) : word)
+    .join(' ');
+}
+
+/** Saved snippets, keeping valid ones only: a trigger with a letter or digit, used once. */
+export function parseSnippets(value: unknown): Snippet[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((raw): Snippet[] => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Record<string, unknown>;
+    const trigger = typeof item.trigger === 'string' ? item.trigger.replace(/\s+/gu, ' ').trim().slice(0, MAX_SNIPPET_TRIGGER) : '';
+    const expansion = typeof item.expansion === 'string' ? item.expansion.replace(/\r\n?/gu, '\n').slice(0, MAX_SNIPPET_EXPANSION) : '';
+    const key = snippetTriggerKey(trigger);
+    if (!key || !expansion.trim() || typeof item.id !== 'string' || !item.id || seen.has(key)) return [];
+    seen.add(key);
+    const createdAt = typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt)) ? item.createdAt : new Date(0).toISOString();
+    return [{ id: item.id, trigger, expansion, createdAt }];
+  });
+}
+
+/** Words of a trigger as a pattern: any spacing or punctuation between them, whole words only. */
+function triggerPattern(key: string): string {
+  return key.split(' ').map((word) => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    // A number matches as digits or as its word.
+    return /^\d+$/u.test(word) && NUMBER_WORDS[Number(word)] ? `(?:${escaped}|${NUMBER_WORDS[Number(word)]})` : escaped;
+  }).join('[^\\p{L}\\p{M}\\p{N}]+');
+}
+
+/** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */
+function triggerKeys(snippet: Snippet, entries: readonly { word: string; heardAs?: string }[]): string[] {
+  return [...new Set([snippetTriggerKey(snippet.trigger), snippetTriggerKey(applyDictionaryReplacements(snippet.trigger, entries))])].filter(Boolean);
+}
+
+/** The snippet whose trigger is all the text says, if any. Its expansion is then pasted as is. */
+export function wholeSnippet(
+  text: string,
+  snippets: readonly Snippet[],
+  entries: readonly { word: string; heardAs?: string }[] = [],
+): Snippet | undefined {
+  // The recognizer may write a word of the trigger the way the dictionary says it is heard.
+  const keys = [snippetTriggerKey(text), snippetTriggerKey(applyDictionaryReplacements(text, entries))].filter(Boolean);
+  return keys.length ? snippets.find((snippet) => triggerKeys(snippet, entries).some((key) => keys.includes(key))) : undefined;
+}
+
+/**
+ * Replaces each trigger phrase in the text with its expansion, longest trigger first, in one pass
+ * so an expansion is never matched again. Punctuation cleanup put right after a trigger is dropped
+ * when the expansion ends a sentence or spans lines, so a signature gets no stray period.
+ */
+export function expandSnippets(
+  text: string,
+  snippets: readonly Snippet[],
+  entries: readonly { word: string; heardAs?: string }[] = [],
+): { text: string; fired: boolean; startsWithExpansion: boolean } {
+  const pairs = snippets
+    .flatMap((snippet) => triggerKeys(snippet, entries).map((key) => ({ key, expansion: snippet.expansion })))
+    .sort((a, b) => b.key.length - a.key.length);
+  if (!pairs.length || !text) return { text, fired: false, startsWithExpansion: false };
+  const matcher = new RegExp(
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${pairs.map(({ key }) => `(${triggerPattern(key)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:]*)`,
+    'giu',
+  );
+  let fired = false;
+  let startsWithExpansion = false;
+  const result = text.replace(matcher, (...args) => {
+    const offset = args.at(-2) as number;
+    const groups = args.slice(1, pairs.length + 1) as (string | undefined)[];
+    const trailing = (args[pairs.length + 1] as string | undefined) ?? '';
+    const { expansion } = pairs[groups.findIndex((group) => typeof group === 'string')];
+    fired = true;
+    if (!text.slice(0, offset).trim()) startsWithExpansion = true;
+    const endsSentence = /[.!?…]\s*$/u.test(expansion) || expansion.includes('\n');
+    return expansion + (endsSentence ? '' : trailing);
+  });
+  return { text: result, fired, startsWithExpansion };
 }
 
 /**

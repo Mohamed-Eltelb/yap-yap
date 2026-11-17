@@ -108,6 +108,16 @@ export interface DictionaryEntry {
   heardAs?: string;
 }
 
+/** Saved text inserted when the user says its trigger phrase while dictating. */
+export interface Snippet {
+  id: string;
+  /** What the user says, such as "my signature". */
+  trigger: string;
+  /** What is pasted instead, exactly as saved, line breaks included. */
+  expansion: string;
+  createdAt: string;
+}
+
 /** Per category, only the parts the user corrected. The rest of the style keeps learning. */
 export type StyleCorrections = Record<string, {
   tone?: string;
@@ -162,7 +172,7 @@ export interface SettingsState {
   dismissedPromoCard: boolean;
 }
 
-export type ActiveNav = 'home' | 'history' | 'dictionary';
+export type ActiveNav = 'home' | 'history' | 'dictionary' | 'snippets';
 
 export type SettingsModalTab =
   | 'providers'

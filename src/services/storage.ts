@@ -6,7 +6,7 @@ import {
 } from '../data/seedData';
 import { createDefaultProviders, PROVIDER_CATALOG } from './providers/catalog';
 import { assignHistoryIds } from './historyImport';
-import { parseRetainedStyles, readHeardAs, STYLE_PRESETS, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
+import { parseRetainedStyles, parseSnippets, readHeardAs, STYLE_PRESETS, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
 import {
   DictionaryEntry,
   HistoryItem,
@@ -14,6 +14,7 @@ import {
   ProviderConfig,
   ProviderId,
   SettingsState,
+  Snippet,
 } from '../types/app';
 
 export interface PersistedAppState {
@@ -21,6 +22,7 @@ export interface PersistedAppState {
   providers: Record<ProviderId, ProviderConfig>;
   history: HistoryItem[];
   dictionary: DictionaryEntry[];
+  snippets: Snippet[];
 }
 
 const STORAGE_KEY = 'yapyap_app_state_v2';
@@ -46,6 +48,7 @@ export function getInitialState(): PersistedAppState {
     providers: createDefaultProviders(),
     history: createInitialHistory(),
     dictionary: INITIAL_DICTIONARY,
+    snippets: [],
   };
 }
 
@@ -256,6 +259,7 @@ export function sanitizeLoadedState(
     providers: mergedProviders,
     history: assignHistoryIds(realHistory),
     dictionary: realDictionary,
+    snippets: parseSnippets(raw.snippets),
   };
 }
 

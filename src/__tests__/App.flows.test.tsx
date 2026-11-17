@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DictionaryEntry, HistoryItem, SettingsState, WritingSample } from '../types/app';
+import type { DictionaryEntry, HistoryItem, SettingsState, Snippet, WritingSample } from '../types/app';
 
 // Tests stop at the module edges: no microphone, network, sound, or saved store.
 const engine = vi.hoisted(() => ({
@@ -73,12 +73,13 @@ function dictation(writingSample?: WritingSample, extra: Partial<HistoryItem> = 
   } as HistoryItem;
 }
 
-function seed({ settings = {}, history = [], dictionary = [] }: { settings?: Partial<SettingsState>; history?: HistoryItem[]; dictionary?: DictionaryEntry[] } = {}) {
+function seed({ settings = {}, history = [], dictionary = [], snippets = [] }: { settings?: Partial<SettingsState>; history?: HistoryItem[]; dictionary?: DictionaryEntry[]; snippets?: Snippet[] } = {}) {
   const initial = getInitialState();
   store.loaded = {
     ...initial,
     history,
     dictionary,
+    snippets,
     providers: { ...initial.providers, groq: { ...initial.providers.groq, apiKey: 'test-key' } },
     settings: {
       ...initial.settings,
@@ -90,10 +91,10 @@ function seed({ settings = {}, history = [], dictionary = [] }: { settings?: Par
 }
 
 /** Records, stops, and waits until the dictation is pasted and its follow-up work has run. */
-async function dictate() {
+async function dictate(mode = 'dictate') {
   render(<App />);
   await waitFor(() => expect(desktop.trigger).toBeDefined());
-  await act(async () => { desktop.trigger!('dictate'); });
+  await act(async () => { desktop.trigger!(mode); });
   await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
   await act(async () => { desktop.action!({ type: 'stop' }); });
   await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
@@ -313,6 +314,49 @@ describe('Default writing style', () => {
     desktop.context = { domain: 'app.slack.com', textBefore: '', textAfter: '' };
     await dictate();
     expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: expect.stringMatching(/lowercase/) })]);
+  });
+});
+
+describe('Snippets', () => {
+  const signature: Snippet = { id: 's-1', trigger: 'my signature', expansion: 'best,\nSam Lee', createdAt: '2026-01-01T00:00:00.000Z' };
+
+  it('pastes a snippet exactly as saved when only its trigger is said, with no cleanup or learning', async () => {
+    seed({ snippets: [signature] });
+    engine.transcribeAudio.mockResolvedValue('My signature.');
+    desktop.context = { domain: 'mail.google.com', textBefore: 'Thanks for the help. ', textAfter: '' };
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('best,\nSam Lee');
+    expect(engine.processTranscriptWithLlm).not.toHaveBeenCalled();
+    expect(engine.detectWritingStyle).not.toHaveBeenCalled();
+    await waitFor(() => expect(lastSaved().history[0].text).toBe('best,\nSam Lee'));
+  });
+
+  it('expands a trigger inside a sentence after cleanup and learns nothing from it', async () => {
+    seed({ snippets: [signature] });
+    desktop.edits = { words: [], edited: 'talk soon, best, sam lee' };
+    engine.transcribeAudio.mockResolvedValue('talk soon my signature');
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Talk soon. My signature.' });
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Talk soon. best,\nSam Lee');
+    expect(engine.processTranscriptWithLlm.mock.calls[0][0]).toBe('talk soon my signature');
+    expect(engine.detectWritingStyle).not.toHaveBeenCalled();
+    expect(lastSaved().dictionary.map((entry) => entry.word)).not.toContain('Sam Lee');
+  });
+
+  it('expands with cleanup off and with personalization off', async () => {
+    seed({ snippets: [signature], settings: { smartCleanup: false, personalizationEnabled: false } });
+    engine.transcribeAudio.mockResolvedValue('talk soon my signature');
+    await dictate();
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('talk soon best,\nSam Lee');
+  });
+
+  it('does not expand a translation', async () => {
+    seed({ snippets: [signature], settings: { translationTargets: ['Spanish'] } });
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'my signature' });
+    await dictate('translate');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('my signature');
   });
 });
 

@@ -10,6 +10,7 @@ import {
   Monitor,
   Moon,
   Settings,
+  TextQuote,
   Sun,
   X,
 } from 'lucide-react';
@@ -58,6 +59,7 @@ export function Sidebar({
     { id: 'home', label: 'Home', icon: <Home className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
     { id: 'history', label: 'History', icon: <History className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
     { id: 'dictionary', label: 'Dictionary', icon: <BookText className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
+    { id: 'snippets', label: 'Snippets', icon: <TextQuote className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
   ];
 
   const activeProvider = providers[activeSttProvider];
