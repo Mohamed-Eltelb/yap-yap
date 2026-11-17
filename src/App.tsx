@@ -1316,16 +1316,14 @@ export function App() {
   const aiEditState = (item: HistoryItem): 'undo' | 'redo' | undefined => {
     if (item.mode !== 'dictate' || item.outcome || !item.rawText.trim()) return undefined;
     if (item.aiText !== undefined) return 'redo';
-    return plainTextOf(item) !== item.text ? 'undo' : undefined;
+    return item.plainText !== undefined && item.plainText !== item.text ? 'undo' : undefined;
   };
 
-  /** The text saved with the dictation, or for one made before it was saved, worked out now. */
-  const plainTextOf = (item: HistoryItem) => item.plainText ?? withoutAiEdit(item.rawText);
-
-  /** Switches a dictation between its cleaned-up text and the text without the AI edit. */
+  /** Switches a dictation between its cleaned-up text and the text saved without the AI edit. */
   const handleToggleAiEdit = (item: HistoryItem) => {
     const redo = item.aiText !== undefined;
-    const nextText = redo ? item.aiText! : plainTextOf(item);
+    const nextText = redo ? item.aiText! : item.plainText;
+    if (nextText === undefined) return;
     const nextWords = countWords(nextText);
     setAppState((prev) => ({
       ...prev,

@@ -371,7 +371,7 @@ describe('Snippets', () => {
 
   it('undoes and redoes the AI edit of a dictation, keeping dictionary spellings and snippets', async () => {
     seed({
-      history: [dictation(undefined, { rawText: 'um send it to my address 12 please, yep yep', text: 'Send it to egypt, please, Yap Yap.' })],
+      history: [dictation(undefined, { rawText: 'um send it to my address 12 please, yep yep', text: 'Send it to egypt, please, Yap Yap.', plainText: 'um send it to egypt please, Yap Yap' })],
       snippets: [{ ...signature, trigger: 'my address12', expansion: 'egypt' }],
       dictionary: [{ id: 'd1', word: 'Yap Yap', heardAs: 'yep yep', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z' }],
     });
@@ -407,14 +407,16 @@ describe('Snippets', () => {
     await waitFor(() => expect(lastSaved().history[0].text).toBe('hey Sam'));
   });
 
-  it('offers no AI edit to undo when cleanup changed nothing', async () => {
-    seed({ history: [dictation(undefined, { rawText: 'Hello there.', text: 'Hello there.' })] });
+  it('offers no AI edit to undo when cleanup changed nothing, or for a dictation saved before undo existed', async () => {
+    seed({ history: [dictation(undefined, { rawText: 'Hello there.', text: 'Hello there.', plainText: 'Hello there.' }), dictation(undefined, { rawText: 'hi', text: 'Hi.' })] });
     render(<App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /^History$/ }));
     await user.click(screen.getAllByRole('button', { name: 'More actions' })[0]);
     expect(screen.queryByRole('button', { name: 'Undo AI edit' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: 'More actions' })[1]);
+    expect(screen.queryByRole('button', { name: 'Undo AI edit' })).toBeNull();
   });
 
   it('expands with cleanup off and with personalization off', async () => {
