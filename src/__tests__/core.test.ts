@@ -1853,7 +1853,16 @@ describe('snippets', () => {
     expect(snippetTriggerKey('twenty one')).toBe('21');
     expect(snippetTriggerKey('one two three')).toBe('1 2 3');
     expect(snippetTriggerKey('two thousand twenty six')).toBe('2026');
-    expect(expandSnippets('Meet in room 105 at noon.', [room]).text).toBe('Meet in Room 105, 3rd floor at noon.');
+    expect(snippetTriggerKey('in twenty fifteen')).toBe('in 2015');
+    expect(snippetTriggerKey('nineteen ninety nine')).toBe('1999');
+    expect(snippetTriggerKey('nineteen oh five')).toBe('1905');
+    expect(snippetTriggerKey('twenty twenty one')).toBe('2021');
+    expect(snippetTriggerKey('twenty one twenty')).toBe('21 20');
+    const year = { ...link, id: 's8', trigger: '2015', expansion: '[YEAR]' };
+    expect(expandSnippets('Back in twenty fifteen we met.', [year]).text).toBe('Back in [YEAR] we met.');
+    expect(expandSnippets('Back in two thousand fifteen.', [year]).text).toBe('Back in [YEAR].');
+    expect(expandSnippets('Back in 2015.', [year]).text).toBe('Back in [YEAR].');
+    expect(expandSnippets('in nineteen oh five', [{ ...year, trigger: '1905' }]).text).toBe('in [YEAR]');    expect(expandSnippets('Meet in room 105 at noon.', [room]).text).toBe('Meet in Room 105, 3rd floor at noon.');
     expect(expandSnippets('Meet in room one hundred and five.', [room]).fired).toBe(true);
     expect(expandSnippets('Send it to office address 21.', [office]).text).toBe('Send it to 21 Main St.');
     expect(expandSnippets('Send it to office address twenty one.', [office]).fired).toBe(true);

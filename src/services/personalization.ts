@@ -230,9 +230,19 @@ function numberWords(value: number): string[] | undefined {
   return [...numberWords(Math.floor(value / size))!, name, ...(rest ? numberWords(rest)! : [])];
 }
 
+/** A year said in two pairs: "twenty fifteen", "nineteen oh five", "nineteen hundred". */
+function yearWords(value: number): string[] | undefined {
+  const head = Math.floor(value / 100);
+  const tail = value % 100;
+  if (!Number.isInteger(value) || head < 10 || head > 99) return undefined;
+  const tailWords = tail === 0 ? ['hundred'] : tail < 10 ? ['oh', UNIT_WORDS[tail]] : numberWords(tail)!;
+  return [...numberWords(head)!, ...tailWords];
+}
+
 /**
- * Folds spoken numbers into digits: "twenty one" is 21, "one hundred and five" is 105. Digits said
- * one by one stay apart ("one two" is 1 2), since a unit never follows a unit in a single number.
+ * Folds spoken numbers into digits: "twenty one" is 21, "one hundred and five" is 105, and years
+ * said in pairs, "twenty fifteen" is 2015. Digits said one by one stay apart ("one two" is 1 2),
+ * since a unit never follows a unit in a single number.
  */
 function foldNumberWords(words: string[]): string[] {
   const out: string[] = [];
@@ -248,7 +258,19 @@ function foldNumberWords(words: string[]): string[] {
   words.forEach((word, index) => {
     const unit = UNIT_WORDS.indexOf(word);
     const tens = TENS_WORDS.indexOf(word);
-    if (unit >= 0) {
+    const next = UNIT_WORDS.indexOf(words[index + 1] ?? '');
+    // A pair from 10 to 99 followed by another pair is a year: "nineteen ninety", "twenty fifteen".
+    const yearHead = total === 0 && (last === 'teen' || (last === 'tens' && current % 10 === 0)) && current >= 10;
+    if (yearHead && (unit >= 10 || tens > 1)) {
+      total = current * 100;
+      current = unit >= 10 ? unit : tens * 10;
+      last = unit >= 10 ? 'teen' : 'tens';
+    } else if (yearHead && word === 'oh' && next > 0 && next < 10) {
+      // "nineteen oh five": the unit that follows joins as the last digit.
+      total = current * 100;
+      current = 0;
+      last = 'tens';
+    } else if (unit >= 0) {
       const kind = unit < 10 ? 'unit' : 'teen';
       // "twenty one" joins; "one two" or "twenty twelve" do not.
       if (last === 'unit' || last === 'teen' || (last === 'tens' && kind === 'teen')) flush();
@@ -307,13 +329,15 @@ function triggerPattern(key: string, strict: boolean): string {
     // Letters and digits may also be written together ("address12"), with no space between.
     const gap = !index ? '' : `${between}${/^\d+$/u.test(word) !== /^\d+$/u.test(words[index - 1]) ? '*' : '+'}`;
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-    // A number matches as digits or as its words, with or without "and" after hundred or thousand.
+    // A number matches as digits or as its words, with or without "and" after hundred or thousand,
+    // and a four-digit one also as a year said in pairs.
     const spoken = /^\d+$/u.test(word) ? numberWords(Number(word)) : undefined;
     if (!spoken) return gap + escaped;
     const said = spoken.map((part, at) => at && /^(?:hundred|thousand)$/u.test(spoken[at - 1])
       ? `(?:and${between}+)?${part}`
       : part).join(`${between}+`);
-    return `${gap}(?:${escaped}|${said})`;
+    const year = word.length === 4 ? yearWords(Number(word)) : undefined;
+    return `${gap}(?:${escaped}|${said}${year ? `|${year.join(`${between}+`)}` : ''})`;
   }).join('');
 }
 
