@@ -571,6 +571,7 @@ export function App() {
                 targetLanguage,
                 dictionaryWords: dictWords,
                 smartCleanup: appState.settings.smartCleanup,
+                cleanupLevel: appState.settings.cleanupLevel,
                 writingStyles,
                 // Rules are the user's own instructions, so they apply even with learning off.
                 writingPreferences: mode === 'dictate' ? appState.settings.writingPreferences : undefined,
@@ -1250,6 +1251,7 @@ export function App() {
           targetLanguage: item.targetLanguage,
           dictionaryWords: dictionaryWordsFor(appState.dictionary, appState.settings.personalizationEnabled),
           smartCleanup: appState.settings.smartCleanup,
+          cleanupLevel: appState.settings.cleanupLevel,
           writingStyles,
           writingPreferences: item.mode === 'dictate' ? appState.settings.writingPreferences : undefined,
           // The category learned for this dictation stands in for its destination.

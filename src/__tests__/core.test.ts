@@ -1437,6 +1437,26 @@ describe('what goes to the AI provider', () => {
     expect(fetchMock.mock.calls[1][1].body).toContain('Private email text');
   });
 
+  it('lets Medium cleanup reword and Light only fix, and sends nothing with cleanup off', async () => {
+    vi.stubGlobal('window', undefined);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'Hi.' } }] }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = { ...createDefaultProviders().groq, apiKey: 'test' };
+    const style = { category: 'Email', tone: 'Formal', phrasing: '', count: 3, corrections: 0, examples: [] };
+    const options = { targetLanguages: [], dictionaryWords: [], smartCleanup: true, writingStyles: [style] };
+    const system = (call: number) => JSON.parse(fetchMock.mock.calls[call][1].body).messages[0].content as string;
+
+    await processTranscriptWithLlm('hi', 'dictate', provider, options);
+    expect(system(0)).toContain('Do not reword');
+    expect(system(0)).toContain('Style may change casing and punctuation only');
+    await processTranscriptWithLlm('hi', 'dictate', provider, { ...options, cleanupLevel: 'medium' });
+    expect(system(1)).toContain('You may reword');
+    expect(system(1)).not.toContain('Do not reword');
+    expect(system(1)).toContain('Style may also guide word choice');
+    expect(await processTranscriptWithLlm('hi', 'dictate', provider, { ...options, smartCleanup: false, cleanupLevel: 'medium' })).toEqual({ finalText: 'hi' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('caps the text sent for style detection', async () => {
     vi.stubGlobal('window', undefined);
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: '{}' } }] }) });

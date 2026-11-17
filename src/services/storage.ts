@@ -251,6 +251,7 @@ export function sanitizeLoadedState(
       retainedStyleSamples: parseRetainedStyles(raw.settings?.retainedStyleSamples),
       sourceCategories: parseSourceCategories(raw.settings?.sourceCategories),
       defaultStyle: STYLE_PRESETS.some((preset) => preset.id === raw.settings?.defaultStyle) ? String(raw.settings?.defaultStyle) : '',
+      cleanupLevel: raw.settings?.cleanupLevel === 'medium' ? 'medium' : 'light',
       shortcuts: removeDuplicateShortcuts({
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),

@@ -45,6 +45,8 @@ export interface ProviderConfig {
   modelsSelected?: boolean;
 }
 
+export type CleanupLevel = 'light' | 'medium';
+
 export interface HistoryItem {
   id: string;
   createdAt: string; // ISO string
@@ -153,7 +155,10 @@ export interface SettingsState {
   appearance: AppearanceMode;
   launchAtLogin: boolean;
   autoPaste: boolean;
+  /** Whether AI cleanup runs on dictations. Off is the "None" level. */
   smartCleanup: boolean;
+  /** How much cleanup edits when on: Light fixes, Medium may also reword for clarity. */
+  cleanupLevel: CleanupLevel;
   personalizationEnabled: boolean;
   writingPreferences: string;
   /** The user's corrections to learned styles, by category. They replace what was learned. */

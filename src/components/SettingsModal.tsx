@@ -72,6 +72,13 @@ function formatKeyName(e: KeyboardEvent): string {
   return e.key.length === 1 ? e.key.toUpperCase() : e.key;
 }
 
+/** AI cleanup levels, as Wispr Flow names them. None is cleanup off. */
+const CLEANUP_CHOICES = [
+  { id: 'none', label: 'None', description: 'Your words exactly as transcribed' },
+  { id: 'light', label: 'Light', description: 'Removes filler words, fixes grammar and punctuation' },
+  { id: 'medium', label: 'Medium', description: 'Also rewords for clarity, keeping your meaning' },
+] as const;
+
 const shortcutLabels = {
   dictate: 'Dictate',
   translate: 'Translate',
@@ -688,20 +695,35 @@ export function SettingsModal({
                       />
                     </div>
 
-                    <div className="py-2.5 flex items-center justify-between gap-4">
-                      <div>
-                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                          Smart AI cleanup
-                        </div>
-                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                          Remove filler words and auto-format punctuation using your AI provider.
-                        </p>
+                    <div className="py-2.5">
+                      <div id="yy-cleanup-heading" className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                        AI cleanup
                       </div>
-                      <Toggle
-                        label="Smart AI cleanup"
-                        checked={settings.smartCleanup}
-                        onChange={(val) => onUpdateSettings({ smartCleanup: val })}
-                      />
+                      <p className="text-[12px] text-[var(--text-secondary)] mt-0.5 mb-2">
+                        How much your AI provider edits a dictation. You can undo it for any dictation in History.
+                      </p>
+                      <div className="yy-style-choices yy-cleanup-choices" role="radiogroup" aria-labelledby="yy-cleanup-heading">
+                        {CLEANUP_CHOICES.map((choice) => {
+                          const checked = choice.id === 'none'
+                            ? !settings.smartCleanup
+                            : settings.smartCleanup && settings.cleanupLevel === choice.id;
+                          return (
+                            <label key={choice.id} className="yy-style-choice" data-checked={checked || undefined}>
+                              <input
+                                type="radio"
+                                name="yy-cleanup-level"
+                                className="sr-only"
+                                checked={checked}
+                                onChange={() => onUpdateSettings(choice.id === 'none'
+                                  ? { smartCleanup: false }
+                                  : { smartCleanup: true, cleanupLevel: choice.id })}
+                              />
+                              <strong>{choice.label}</strong>
+                              <span>{choice.description}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="py-2.5 flex items-center justify-between gap-4">

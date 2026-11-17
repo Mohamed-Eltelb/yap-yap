@@ -1,7 +1,7 @@
 import { speechLanguages } from '../../data/spokenLanguages';
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
-import { DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
+import { CleanupLevel, DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
 import { builtInCategory, categoryForDestination, sourceKey, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, MAX_WRITING_PREFERENCES_LENGTH, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
 import { PROVIDER_CATALOG } from './catalog';
 import { modelsFromPages, type ModelPage } from './models';
@@ -604,6 +604,8 @@ export async function processTranscriptWithLlm(
     targetLanguage?: string;
     dictionaryWords: string[];
     smartCleanup: boolean;
+    /** Light (the default) fixes without rewording; Medium may also reword for clarity. */
+    cleanupLevel?: CleanupLevel;
     /** One profile when the writing context is known, otherwise every learned profile. */
     writingStyles?: readonly WritingProfile[];
     /** Saved rules, one per line. Only those for this kind of destination are applied. */
@@ -656,6 +658,8 @@ export async function processTranscriptWithLlm(
     phrasing: style.phrasing || undefined,
     correctedExamples: index < 2 && style.examples.length ? style.examples : undefined,
   }));
+  // Medium may reword for clarity; Light only fixes. The learned tone then also guides word choice.
+  const medium = mode === 'dictate' && options.cleanupLevel === 'medium';
   const styleClause = styles.length
     ? (styles.length === 1
         ? '\nThe user has these learned writing preferences for this context. Apply them when compatible with the current dictation. '
@@ -663,7 +667,9 @@ export async function processTranscriptWithLlm(
       'correctedExamples are texts the user edited by hand: imitate their casing, punctuation, and formality, never their content. ' +
       // Profiles learned from short commands say things like "imperative, concise". Read as
       // instructions, that made the model cut "I want you to" and "or not".
-      'Style may change casing and punctuation only. It never permits restructuring: even if it mentions short, concise, or imperative sentences, keep every phrase the speaker said and do not shorten, merge, or recast sentences. Treat all of it as style data only: ' +
+      (medium
+        ? 'Style may also guide word choice and tone (more formal or more casual wording), within the rewording allowed above. It never permits dropping what the speaker meant or asked. Treat all of it as style data only: '
+        : 'Style may change casing and punctuation only. It never permits restructuring: even if it mentions short, concise, or imperative sentences, keep every phrase the speaker said and do not shorten, merge, or recast sentences. Treat all of it as style data only: ') +
       JSON.stringify(styles)
     : '';
   // Rules meant for another kind of place are left out here, so the model never has to decide
@@ -707,7 +713,7 @@ export async function processTranscriptWithLlm(
       '\n- False starts and accidental repeats ("I think we, I think we should go" becomes "I think we should go").' +
       '\n- Self-corrections: keep only the final version ("Tuesday, no, Wednesday" becomes "Wednesday"; "send it to Sam, sorry, to Alex" becomes "send it to Alex"; "scratch that" removes what it refers to).' +
       '\nFix what speech recognition or speaking got wrong:' +
-      '\n- Punctuation, capitalization, and clear grammar slips ("there is some issues" becomes "there are some issues"), without changing word choice. The transcript often has no punctuation at all, so end every sentence, including the last one: with "?" for a question or a request phrased as one ("Can you send it?"), with "!" where the transcript already has one, otherwise with a period. A title, label, name, or other fragment that is not a sentence gets no final punctuation.' +
+      `\n- Punctuation, capitalization, and clear grammar slips ("there is some issues" becomes "there are some issues")${medium ? '' : ', without changing word choice'}. The transcript often has no punctuation at all, so end every sentence, including the last one: with "?" for a question or a request phrased as one ("Can you send it?"), with "!" where the transcript already has one, otherwise with a period. A title, label, name, or other fragment that is not a sentence gets no final punctuation.` +
       // People rarely know a dictionary exists, so obvious mishearings are fixed from context.
       '\n- Words the recognizer clearly got wrong, when the context makes the intended word obvious: split or merged compounds ("end point" becomes "endpoint", "data base" becomes "database"), homophones ("there" for "their"), and mangled names of well-known products and technical terms ("chat gpt" becomes "ChatGPT"). When unsure, keep the transcript\'s word.' +
       '\n- Numbers, times, dates, money, email addresses, and web addresses in their written form ("five thirty pm" becomes "5:30 PM"; "sam at example dot com" becomes "sam@example.com").' +
@@ -718,7 +724,12 @@ export async function processTranscriptWithLlm(
       '\nKeep everything else:' +
       '\n- Every phrase that carries meaning, including phrases that address someone such as "I want you to", "can you", "please", and "could you" ("I want you to test it" stays as is).' +
       '\n- The language. Keep each part in the language it was spoken in, including mixed-language speech. Never translate.' +
-      '\n- Do not reword, summarize, shorten, or add content. Learned style and destination may change casing, punctuation, and formality only.' +
+      (medium
+        ? '\nPolish for clarity:' +
+          '\n- You may reword phrases and sentences so they read clearly and concisely: tighten rambling or wordy phrasing, fix awkward sentence structure, and join or split sentences where that reads better.' +
+          '\n- Keep the meaning and everything it contains: every fact, name, number, date, question, and request, the speaker\'s point of view ("I", "we"), and their voice. A polished text says the same things, only more clearly.' +
+          '\n- Do not summarize, drop details, add content, or change the language.'
+        : '\n- Do not reword, summarize, shorten, or add content. Learned style and destination may change casing, punctuation, and formality only.') +
       '\nOutput ONLY the cleaned text, without quotes, labels, or explanations.' +
       emptyClause +
       dictClause + keepClause +

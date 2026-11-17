@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   launchAtLogin: true,
   autoPaste: true,
   smartCleanup: true,
+  cleanupLevel: 'light',
   personalizationEnabled: true,
   writingPreferences: '',
   styleCorrections: {},
