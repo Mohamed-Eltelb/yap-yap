@@ -913,9 +913,13 @@ function withoutCitations(text: string): string {
     .trim();
 }
 
-/** A failure that may mean this key, model, or endpoint cannot search, so the request is worth sending without it. */
+/**
+ * A failure that may mean this key, model, or endpoint cannot search, so the request is worth
+ * sending without it: no search on this plan or model (400, 403, 404, 422), no credit for the
+ * search fees even on a free model (402), or search results too large for a free tier (413).
+ */
 function searchMayBeUnsupported(status: number): boolean {
-  return status === 400 || status === 403 || status === 404 || status === 422;
+  return [400, 402, 403, 404, 413, 422].includes(status);
 }
 
 class SearchRequestError extends Error {

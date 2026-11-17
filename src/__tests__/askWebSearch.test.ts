@@ -165,6 +165,18 @@ describe('Ask anything web search', () => {
     expect(out).toEqual({ finalText: 'Il fait 20° !', answer: 'Il fait 20° !', searchedWeb: true });
   });
 
+  it('answers without search when there is no credit for search fees', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply({ error: { message: 'Insufficient credits' } }, 402))
+      .mockResolvedValueOnce(reply({ choices: [{ message: { content: 'Paris.' } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm('Capital of France?', 'ask', provider('custom', { baseUrl: 'https://openrouter.ai/api/v1' }), options);
+
+    expect(out.answer).toBe('Paris.');
+    expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
+  });
+
   it('still reports a bad key instead of retrying', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ error: { message: 'invalid x-api-key' } }, 401)));
     await expect(processTranscriptWithLlm('Hi?', 'ask', provider('anthropic'), options)).rejects.toThrow('invalid x-api-key');
