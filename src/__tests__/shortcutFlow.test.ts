@@ -5,7 +5,7 @@ import { maskKeys, startsShortcut, swallowedKeys } from '../../electron/shortcut
 
 function setup(status: AppStatus = 'idle') {
   const outputs: FlowOutput[] = [];
-  const flow = new ShortcutFlow({ holdMs: 1000, appStatus: () => status, emit: (out) => outputs.push(out) });
+  const flow = new ShortcutFlow({ holdMs: 1000, pauseHoldMs: 400, appStatus: () => status, emit: (out) => outputs.push(out) });
   return { flow, outputs };
 }
 
@@ -63,12 +63,32 @@ describe('Shortcut flow', () => {
     expect(outputs).toEqual([{ type: 'armed' }, { type: 'closed' }]);
   });
 
-  it('stops on press and ignores that release', () => {
+  it('finishes a recording on a quick tap', () => {
     const { flow, outputs } = setup('recording');
     flow.keyDown(true, 0);
+    vi.advanceTimersByTime(300);
     flow.allReleased();
     vi.advanceTimersByTime(1000);
     expect(outputs).toEqual([{ type: 'stop' }]);
+  });
+
+  it('pauses or resumes a recording once the shortcut is held, and ignores that release', () => {
+    const { flow, outputs } = setup('recording');
+    flow.keyDown(true, 0);
+    vi.advanceTimersByTime(400);
+    expect(outputs).toEqual([{ type: 'toggle-pause' }]);
+    vi.advanceTimersByTime(2000);
+    flow.allReleased();
+    expect(outputs).toEqual([{ type: 'toggle-pause' }]);
+  });
+
+  it('does not wait for a tap to start the next shortcut press', () => {
+    const { flow, outputs } = setup('recording');
+    flow.keyDown(true, 0);
+    flow.allReleased();
+    flow.keyDown(true, 0);
+    vi.advanceTimersByTime(400);
+    expect(outputs).toEqual([{ type: 'stop' }, { type: 'toggle-pause' }]);
   });
 
   it('shows the busy notice instead of starting while processing', () => {

@@ -1,15 +1,15 @@
 export type AppStatus = 'idle' | 'recording' | 'processing';
 export type FlowOutput =
   | { type: 'armed' } | { type: 'list' } | { type: 'closed' }
-  | { type: 'busy' } | { type: 'stop' } | { type: 'start'; binding: number };
+  | { type: 'busy' } | { type: 'stop' } | { type: 'toggle-pause' } | { type: 'start'; binding: number };
 
-type State = 'idle' | 'armed' | 'list' | 'ignoring';
+type State = 'idle' | 'armed' | 'list' | 'holding' | 'ignoring';
 
 /**
  * Decides what a hook shortcut press means: a press shows a placeholder, the
  * release starts the shortcut held, and a long hold shows the shortcut list
- * instead. While recording a press stops at once; while processing it only
- * tells the user to wait.
+ * instead. While recording a quick tap finishes the recording and a short hold
+ * pauses or resumes it; while processing a press only tells the user to wait.
  */
 export class ShortcutFlow {
   private state: State = 'idle';
@@ -18,6 +18,8 @@ export class ShortcutFlow {
 
   constructor(private readonly options: {
     holdMs: number;
+    /** How long to hold the shortcut while recording to pause or resume instead of finishing. */
+    pauseHoldMs: number;
     appStatus: () => AppStatus;
     emit: (out: FlowOutput) => void;
   }) {}
@@ -37,9 +39,19 @@ export class ShortcutFlow {
     }
     if (this.state !== 'idle' || !starts) return;
     const status = this.options.appStatus();
-    if (status === 'recording' || status === 'processing') {
+    if (status === 'recording') {
+      this.state = 'holding';
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        if (this.state !== 'holding') return;
+        this.state = 'ignoring';
+        this.options.emit({ type: 'toggle-pause' });
+      }, this.options.pauseHoldMs);
+      return;
+    }
+    if (status === 'processing') {
       this.state = 'ignoring';
-      this.options.emit({ type: status === 'recording' ? 'stop' : 'busy' });
+      this.options.emit({ type: 'busy' });
       return;
     }
     this.state = 'armed';
@@ -60,6 +72,8 @@ export class ShortcutFlow {
       this.options.emit(match === undefined ? { type: 'closed' } : { type: 'start', binding: match });
     } else if (state === 'list') {
       this.options.emit({ type: 'closed' });
+    } else if (state === 'holding') {
+      this.options.emit({ type: 'stop' });
     }
   }
 

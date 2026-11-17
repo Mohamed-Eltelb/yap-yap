@@ -14,7 +14,7 @@ vi.mock('../../electron/windowsKeyHook', () => ({
 describe.runIf(process.platform === 'win32')('Modifier shortcuts on Windows', () => {
   it('lets the shortcut editor see Right Alt, then swallows it again', async () => {
     const { registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } = await import('../../electron/modifierShortcuts');
-    registerModifierShortcuts([{ combo: ['Right Alt'], trigger: vi.fn() }], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn() });
+    registerModifierShortcuts([{ combo: ['Right Alt'], trigger: vi.fn() }], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn(), onTogglePause: vi.fn() });
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [3640], chords: [], masks: [] });
     // Right Alt chords no longer need a global shortcut to keep them from apps.
     expect(swallowsKeys()).toBe(true);
@@ -28,7 +28,7 @@ describe.runIf(process.platform === 'win32')('Modifier shortcuts on Windows', ()
 
   it('sends mask keys, and none while the editor is focused', async () => {
     const { registerModifierShortcuts, setMenuMasking, stopModifierShortcuts } = await import('../../electron/modifierShortcuts');
-    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn() }, [['Left Alt', '/']]);
+    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn(), onTogglePause: vi.fn() }, [['Left Alt', '/']]);
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [], chords: [], masks: [53] });
     setMenuMasking(false);
     expect(hook.setKeys).toHaveBeenLastCalledWith({ leads: [], chords: [], masks: [] });
@@ -38,10 +38,10 @@ describe.runIf(process.platform === 'win32')('Modifier shortcuts on Windows', ()
 
   it('starts the hook for mask keys alone', async () => {
     const { registerModifierShortcuts, stopModifierShortcuts, swallowsKeys } = await import('../../electron/modifierShortcuts');
-    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn() }, [['Left Alt', '/']]);
+    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn(), onTogglePause: vi.fn() }, [['Left Alt', '/']]);
     expect(swallowsKeys()).toBe(true);
     stopModifierShortcuts();
-    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn() }, [['Left Ctrl', 'K']]);
+    registerModifierShortcuts([], { appStatus: () => 'idle', onPhase: vi.fn(), onStop: vi.fn(), onTogglePause: vi.fn() }, [['Left Ctrl', 'K']]);
     expect(swallowsKeys()).toBe(false);
   });
 });

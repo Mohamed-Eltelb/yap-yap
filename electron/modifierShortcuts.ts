@@ -49,14 +49,16 @@ let maskMenus = true;
 // Never bound by apps, so tapping it has no effect of its own.
 const maskKey = UiohookKey.F24;
 
-type FlowHandlers = { appStatus: () => AppStatus; onPhase: (phase: ShortcutPhase) => void; onStop: () => void };
+type FlowHandlers = { appStatus: () => AppStatus; onPhase: (phase: ShortcutPhase) => void; onStop: () => void; onTogglePause: () => void };
 let handlers: FlowHandlers | undefined;
 const flow = new ShortcutFlow({
   holdMs: 1000,
+  pauseHoldMs: 400,
   appStatus: () => handlers?.appStatus() ?? 'idle',
   emit: (out) => {
     if (out.type === 'start') bindings[out.binding]?.trigger();
     else if (out.type === 'stop') handlers?.onStop();
+    else if (out.type === 'toggle-pause') handlers?.onTogglePause();
     else handlers?.onPhase(out.type);
   },
 });

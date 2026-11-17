@@ -28,7 +28,7 @@ let hudWindow: BrowserWindow | null = null;
 let hudReady = false;
 let hudPayload: {
   show: boolean;
-  state?: { status?: string; mode?: string; busyNotice?: boolean; shortcutList?: unknown[] };
+  state?: { status?: string; mode?: string; paused?: boolean; busyNotice?: boolean; shortcutList?: unknown[] };
 } = { show: false };
 let hudDisplayId: number | undefined;
 let tray: Tray | null = null;
@@ -364,6 +364,9 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
       },
       onPhase: (phase) => mainWindow?.webContents.send('shortcut:phase', phase),
       onStop: () => mainWindow?.webContents.send('hud:action', { type: 'stop' } satisfies HudAction),
+      onTogglePause: () => mainWindow?.webContents.send('hud:action', {
+        type: hudPayload.state?.paused ? 'resume' : 'pause',
+      } satisfies HudAction),
     }, maskCombos);
     // uiohook only observes keys, so there the chord is also claimed to keep it from
     // the focused app (Alt+Space would open its window menu). Yap Yap's own Windows
