@@ -212,8 +212,8 @@ describe('Dictation flow', () => {
     await act(async () => { desktop.action!({ type: 'pause' }); });
     await act(async () => { desktop.action!({ type: 'stop' }); });
     await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
-    expect(desktop.api.toggleHud.mock.calls.some(([, hud]: [boolean, { status: string; paused?: boolean }]) =>
-      hud.status === 'processing' && hud.paused)).toBe(false);
+    const sent = desktop.api.toggleHud.mock.calls.map((call) => call[1] as { status: string; paused?: boolean });
+    expect(sent.some((hud) => hud.status === 'processing' && hud.paused)).toBe(false);
   });
 
   it('quietly drops a recording stopped right after it started', async () => {
