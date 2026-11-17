@@ -1816,6 +1816,16 @@ describe('starting styles', () => {
     expect(stylesForCleanup([], picked)).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: veryCasual.phrasing, corrected: true })]);
   });
 
+  it('uses the default style where nothing is picked or learned, and as the fallback for unknown places', () => {
+    const casual = STYLE_PRESETS.find((preset) => preset.id === 'casual')!;
+    const learned = buildWritingProfiles([1, 2, 3].map(() => ({ mode: 'dictate' as const, writingSample: { category: 'Email', tone: 'Formal', phrasing: '' } })));
+    expect(stylesForCleanup(learned, picked, { category: 'Spreadsheets', defaultStyle: 'casual' })).toEqual([expect.objectContaining({ category: 'Spreadsheets', phrasing: casual.phrasing })]);
+    expect(stylesForCleanup(learned, picked, { category: 'Email', defaultStyle: 'casual' })).toEqual([expect.objectContaining({ category: 'Email', tone: 'Formal' })]);
+    expect(stylesForCleanup(learned, picked, { category: 'Messaging', defaultStyle: 'casual' })).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: veryCasual.phrasing })]);
+    expect(stylesForCleanup(learned, picked, { defaultStyle: 'casual' }).map((style) => style.category)).toEqual(['Email', 'Messaging', 'Everywhere else']);
+    expect(stylesForCleanup(learned, picked, { category: 'Spreadsheets' })).toEqual([]);
+  });
+
   it('keeps a picked style over what is learned, and the learned style once the pick is cleared', () => {
     const learned = buildWritingProfiles([1, 2, 3].map(() => ({ mode: 'dictate' as const, writingSample: { category: 'Messaging', tone: 'Friendly', phrasing: '' } })));
     expect(stylesForCleanup(applyStyleCorrections(learned, picked), picked)).toEqual([expect.objectContaining({ category: 'Messaging', tone: 'Casual', phrasing: veryCasual.phrasing })]);

@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   sourceCategories: {},
   contextAwareness: true,
   learnFromEdits: true,
+  defaultStyle: '',
   floatingHud: true,
   historyRetention: 'forever',
   cloudSyncMock: false,

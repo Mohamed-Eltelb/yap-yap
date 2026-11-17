@@ -533,8 +533,8 @@ export function App() {
               const fixedCategory = chosenCategory ?? categoryForDestination(location) ?? retried?.writingSample?.category;
               knownCategory = fixedCategory ?? (source ? learnedSources.get(source) : undefined);
               writingStyles = knownCategory
-                ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections).filter((item) => item.category === knownCategory)
-                : stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections);
+                ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections, { category: knownCategory, defaultStyle: appState.settings.defaultStyle })
+                : stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections, { defaultStyle: appState.settings.defaultStyle });
               const styleProvider = llmProvider;
               // Text the user wrote before the caret, without Yap Yap's own earlier pastes.
               const existingWriting = shareText
@@ -1200,7 +1200,7 @@ export function App() {
 
     try {
       const writingStyles = item.mode === 'dictate' && appState.settings.personalizationEnabled
-        ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections).filter((entry) => !item.writingSample || entry.category === item.writingSample.category)
+        ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections, { category: item.writingSample?.category, defaultStyle: appState.settings.defaultStyle })
         : undefined;
       const processed = await processTranscriptWithLlm(
         item.rawText,

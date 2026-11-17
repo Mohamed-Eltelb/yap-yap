@@ -151,6 +151,8 @@ export interface SettingsState {
   contextAwareness: boolean;
   /** Watch fixes made right after a paste to learn style and dictionary words. */
   learnFromEdits: boolean;
+  /** A style preset id for places with no style picked or learned, or '' to learn only. */
+  defaultStyle: string;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;
   cloudSyncMock: boolean;

@@ -307,6 +307,15 @@ describe('Starting styles', () => {
   });
 });
 
+describe('Default writing style', () => {
+  it('applies the default style in a kind of place with nothing picked or learned', async () => {
+    seed({ settings: { defaultStyle: 'very-casual' } });
+    desktop.context = { domain: 'app.slack.com', textBefore: '', textAfter: '' };
+    await dictate();
+    expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: expect.stringMatching(/lowercase/) })]);
+  });
+});
+
 describe('Dictionary replacements', () => {
   const handoff: DictionaryEntry = { id: 'd-1', word: 'handoff', source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', heardAs: 'hand of' };
 

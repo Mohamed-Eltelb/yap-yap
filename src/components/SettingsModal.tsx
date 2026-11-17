@@ -151,6 +151,8 @@ export function SettingsModal({
     const preset = STYLE_PRESETS.find((item) => item.id === presetOf(correction));
     return preset ? [`${preset.label} in ${category}`] : [];
   });
+  const defaultPreset = STYLE_PRESETS.find((item) => item.id === settings.defaultStyle);
+  if (defaultPreset) pickedStyles.unshift(`${defaultPreset.label} everywhere else`);
   const stylesSummary = pickedStyles.length
     ? pickedStyles.slice(0, 2).join(' · ') + (pickedStyles.length > 2 ? ` · ${pickedStyles.length - 2} more` : '')
     : 'Pick Formal, Casual, or Very casual for each kind of place, or let Yap Yap learn your style.';
@@ -1105,8 +1107,10 @@ export function SettingsModal({
       {open && activeTab === 'personalization' && stylesOpen && (
         <StartingStylesDialog
           corrections={settings.styleCorrections}
+          defaultStyle={settings.defaultStyle}
           active={settings.personalizationEnabled && settings.smartCleanup}
           onChange={(styleCorrections) => onUpdateSettings({ styleCorrections })}
+          onDefaultChange={(defaultStyle) => onUpdateSettings({ defaultStyle })}
           onClose={() => setStylesOpen(false)}
         />
       )}

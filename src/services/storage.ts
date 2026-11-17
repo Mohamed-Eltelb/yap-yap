@@ -6,7 +6,7 @@ import {
 } from '../data/seedData';
 import { createDefaultProviders, PROVIDER_CATALOG } from './providers/catalog';
 import { assignHistoryIds } from './historyImport';
-import { parseRetainedStyles, readHeardAs, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
+import { parseRetainedStyles, readHeardAs, STYLE_PRESETS, parseSourceCategories, parseStyleCorrections, parseWritingPreferences } from './personalization';
 import {
   DictionaryEntry,
   HistoryItem,
@@ -247,6 +247,7 @@ export function sanitizeLoadedState(
       styleCorrections: stampStyleCorrections(parseStyleCorrections(raw.settings?.styleCorrections)),
       retainedStyleSamples: parseRetainedStyles(raw.settings?.retainedStyleSamples),
       sourceCategories: parseSourceCategories(raw.settings?.sourceCategories),
+      defaultStyle: STYLE_PRESETS.some((preset) => preset.id === raw.settings?.defaultStyle) ? String(raw.settings?.defaultStyle) : '',
       shortcuts: removeDuplicateShortcuts({
         ...DEFAULT_SETTINGS.shortcuts,
         ...(raw.settings?.shortcuts ?? {}),

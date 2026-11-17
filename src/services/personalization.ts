@@ -609,13 +609,30 @@ export function presetOf(correction: StyleCorrections[string] | undefined): Styl
 export function stylesForCleanup<T extends WritingProfile & { corrected?: boolean }>(
   profiles: readonly T[],
   corrections: StyleCorrections,
+  options: {
+    /** The kind of place the dictation goes to, when known. Only its style is used. */
+    category?: string;
+    /** The style for places with nothing picked or learned, and for places Yap Yap can't tell. */
+    defaultStyle?: string;
+  } = {},
 ): (T | WritingProfile & { corrected: true })[] {
   const set = Object.entries(corrections).flatMap(([category, correction]) =>
     !profiles.some((profile) => profile.category === category) && (correction.tone || correction.phrasing)
       ? [{ category, tone: correction.tone ?? 'Neutral', phrasing: correction.phrasing ?? '', count: 0, corrections: 0, examples: [], corrected: true as const }]
       : []);
-  return [...readyStyles(profiles), ...set];
+  const all = [...readyStyles(profiles), ...set];
+  const styles = options.category ? all.filter((style) => style.category === options.category) : all;
+  const preset = STYLE_PRESETS.find((item) => item.id === options.defaultStyle);
+  if (!preset || (options.category && styles.length)) return styles;
+  // A known place with no style takes the default. An unknown place gets it as the fallback entry.
+  return [...styles, {
+    category: options.category ?? EVERYWHERE_ELSE, tone: preset.tone, phrasing: preset.phrasing,
+    count: 0, corrections: 0, examples: [], corrected: true as const,
+  }];
 }
+
+/** The context name cleanup sees for the default style. */
+export const EVERYWHERE_ELSE = 'Everywhere else';
 
 /** Dictations a corrected category needs after the correction before an update is suggested. */
 export const STYLE_UPDATE_MIN_SAMPLES = 5;

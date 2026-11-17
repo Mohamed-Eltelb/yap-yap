@@ -20,7 +20,8 @@ afterEach(cleanup);
 it('saves a picked style and goes back to learning', async () => {
   const onChange = vi.fn();
   const corrections = { Email: { tone: formal.tone, phrasing: formal.phrasing, since: '2026-01-01T00:00:00.000Z' } };
-  render(<StartingStylesDialog corrections={corrections} active onChange={onChange} onClose={vi.fn()} />);
+  const onDefaultChange = vi.fn();
+  render(<StartingStylesDialog corrections={corrections} defaultStyle="" active onChange={onChange} onDefaultChange={onDefaultChange} onClose={vi.fn()} />);
   const user = userEvent.setup();
   const pick = async (category: string, option: RegExp | string) => {
     const menu = screen.getByRole('combobox', { name: `Writing style for ${category}` });
@@ -37,4 +38,9 @@ it('saves a picked style and goes back to learning', async () => {
 
   await pick('Email', 'Learn from me');
   expect(onChange).toHaveBeenLastCalledWith({});
+
+  const everywhere = screen.getByRole('combobox', { name: 'Writing style everywhere else' });
+  await user.click(everywhere);
+  await user.click(within(document.getElementById(everywhere.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Casual', hidden: true }));
+  expect(onDefaultChange).toHaveBeenLastCalledWith('casual');
 });

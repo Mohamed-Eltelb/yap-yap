@@ -1,3 +1,4 @@
+import { Globe } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
 import { SelectMenu } from './SelectMenu';
 import { SettingsSubdialog } from './SettingsSubdialog';
@@ -11,8 +12,11 @@ const CUSTOM = 'custom';
  * How Yap Yap writes in each kind of place from the first dictation. A pick is saved as the
  * user's style for that place, so it applies right away, and learning only ever suggests changes.
  */
-export function StartingStylesDialog({ corrections, active, onChange, onClose }: {
+export function StartingStylesDialog({ corrections, defaultStyle, active, onChange, onDefaultChange, onClose }: {
   corrections: StyleCorrections;
+  /** A preset id for places with no style picked or learned, or '' to learn only. */
+  defaultStyle: string;
+  onDefaultChange: (presetId: string) => void;
   /** Styles apply only with personalization and AI cleanup on. */
   active: boolean;
   onChange: (corrections: StyleCorrections) => void;
@@ -46,6 +50,24 @@ export function StartingStylesDialog({ corrections, active, onChange, onClose }:
         {!active && (
           <p className="yy-pref-note">Styles apply when personalization and AI cleanup are on.</p>
         )}
+        <div className="yy-variant-row yy-source-row">
+          <span className="yy-source-icon"><Globe size={16} aria-hidden="true" /></span>
+          <span className="yy-source-name">
+            <span>Everywhere else</span>
+            <small>
+              {STYLE_PRESETS.some((item) => item.id === defaultStyle)
+                ? 'Used wherever nothing above is set or learned yet'
+                : 'Apps Yap Yap doesn’t recognize, and places with no style yet'}
+            </small>
+          </span>
+          <SelectMenu
+            quiet
+            label="Writing style everywhere else"
+            value={STYLE_PRESETS.some((item) => item.id === defaultStyle) ? defaultStyle : LEARN}
+            options={[{ value: LEARN, label: 'Learn from me' }, ...STYLE_PRESETS.map((item) => ({ value: item.id, label: item.label }))]}
+            onChange={(next) => onDefaultChange(next === LEARN ? '' : next)}
+          />
+        </div>
         {WRITING_CATEGORIES.map((category) => {
           const correction = corrections[category];
           const preset = presetOf(correction);
