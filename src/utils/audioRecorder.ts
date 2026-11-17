@@ -110,7 +110,13 @@ export async function startAudioRecording(
   const source = audioCtx.createMediaStreamSource(stream);
   const filtered = strongNoiseReduction ? await rnnoiseStream(audioCtx, source) : undefined;
   const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 64;
+  // 256 points give ~190 Hz bins, so the bars can follow the voice range (up to ~4 kHz)
+  // instead of mostly showing quiet high frequencies.
+  analyser.fftSize = 256;
+  // Little smoothing so the bars react at once, like a live meter.
+  analyser.smoothingTimeConstant = 0.35;
+  analyser.minDecibels = -85;
+  analyser.maxDecibels = -25;
   (filtered?.node ?? source).connect(analyser);
 
   const recorded = filtered?.stream ?? stream;
@@ -139,10 +145,10 @@ export async function startAudioRecording(
     if (peak >= VOICE_PEAK) loudFrames += 1;
     const barCount = 20;
     const levels: number[] = [];
-    const step = Math.max(1, Math.floor(dataArray.length / barCount));
+    // Bins 1–20 cover roughly 190 Hz to 3.9 kHz, where speech carries its energy.
     for (let i = 0; i < barCount; i++) {
-      const val = dataArray[i * step] ?? 0;
-      levels.push(Math.min(1, Math.max(0.08, val / 200)));
+      const val = dataArray[i + 1] ?? 0;
+      levels.push(Math.min(1, Math.max(0.08, (val / 255) * 1.3)));
     }
     onLevels(levels);
   };

@@ -126,7 +126,10 @@ export function DictationHud({
             </button>
             <div className="yy-hud-wave" aria-hidden="true">
               {bars.map((weight, index) => {
-                const level = hud.levels[Math.floor(index * hud.levels.length / bars.length)] ?? 0;
+                // The center bars show the low, loudest part of the voice; each side a bit apart.
+                const center = (bars.length - 1) / 2;
+                const band = Math.abs(index - center) * 3 + (index > center ? 1 : 0);
+                const level = hud.levels[Math.min(hud.levels.length - 1, band)] ?? 0;
                 return <span key={index} style={{ height: `${2 + Math.min(1, Math.max(0, level)) * weight * 17}px` }} />;
               })}
             </div>
