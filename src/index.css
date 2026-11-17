@@ -1948,7 +1948,9 @@ textarea,
   y: 1px;
   width: calc(100% - 2px);
   height: calc(100% - 2px);
-  rx: 999px;
+  /* Round ends like the button: half the height on both axes (rx follows ry). */
+  rx: auto;
+  ry: 50%;
   fill: none;
   stroke: #fff;
   stroke-width: 1.5;
