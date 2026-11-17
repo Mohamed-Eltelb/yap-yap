@@ -122,16 +122,16 @@ export function DictationHud({
           )}
           <div className="yy-hud-pill" role="group" aria-label="Recording controls">
             <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel}>
-              <X size={15} aria-hidden="true" />
+              <X size={16} aria-hidden="true" />
             </button>
             <div className="yy-hud-wave" aria-hidden="true">
               {bars.map((weight, index) => {
                 const level = hud.levels[Math.floor(index * hud.levels.length / bars.length)] ?? 0;
-                return <span key={index} style={{ height: `${2 + Math.min(1, Math.max(0, level)) * weight * 16}px` }} />;
+                return <span key={index} style={{ height: `${2 + Math.min(1, Math.max(0, level)) * weight * 17}px` }} />;
               })}
             </div>
             <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}>
-              <Check size={16} aria-hidden="true" />
+              <Check size={17} aria-hidden="true" />
             </button>
           </div>
         </>

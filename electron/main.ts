@@ -223,9 +223,9 @@ function updateHudWindow(): void {
     screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   hudDisplayId = display.id;
   const { workArea } = display;
-  let width = 148;
-  let height = 54;
-  if (state?.status === 'recording' && state.mode === 'ask') height = 94;
+  let width = 152;
+  let height = 56;
+  if (state?.status === 'recording' && state.mode === 'ask') height = 96;
   if (state?.status === 'recording' && state.mode === 'translate') {
     width = 290;
     height = 215;

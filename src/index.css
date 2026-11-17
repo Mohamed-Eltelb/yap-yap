@@ -1689,7 +1689,7 @@ textarea,
 .yy-hud-thinking {
   display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 36px;
   border: 1px solid #ffffff4a;
   border-radius: 999px;
   background: #060707;
@@ -1705,8 +1705,8 @@ textarea,
 .yy-hud-pill button {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   cursor: pointer;
 }
@@ -1730,12 +1730,12 @@ textarea,
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 40px;
-  height: 19px;
+  width: 43px;
+  height: 20px;
 }
 
 .yy-hud-wave span {
-  width: 1.5px;
+  width: 2px;
   border-radius: 2px;
   background: #fff;
   transition: height 75ms linear;
@@ -1825,9 +1825,9 @@ textarea,
 .yy-hud-thinking {
   position: relative;
   justify-content: center;
-  min-width: 94px;
+  min-width: 100px;
   overflow: hidden;
-  padding: 0 17px;
+  padding: 0 18px;
   font-size: 12px;
   font-weight: 550;
 }
