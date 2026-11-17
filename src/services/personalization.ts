@@ -215,7 +215,10 @@ export const MAX_SNIPPET_EXPANSION = 4000;
 const UNIT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
   'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS_WORDS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-const NUMBER_SEPARATOR = '[^\\p{L}\\p{M}\\p{N}]+';
+// What may sit between a trigger's words. Strictly: spaces, hyphens and the like, but no sentence
+// punctuation, so "My address: 12 October" is not the trigger "my address 12" (as in Wispr Flow).
+// Loosely: anything, for text cleanup may have punctuated differently.
+const BETWEEN = { strict: '[^\\p{L}\\p{M}\\p{N}.,;:!?…]', loose: '[^\\p{L}\\p{M}\\p{N}]' };
 
 /** English words for a whole number below a million, or undefined for larger ones. */
 function numberWords(value: number): string[] | undefined {
@@ -296,23 +299,46 @@ export function parseSnippets(value: unknown): Snippet[] {
   });
 }
 
-/** Words of a trigger as a pattern: any spacing or punctuation between them, whole words only. */
-function triggerPattern(key: string): string {
+/** Words of a trigger as a pattern, whole words only. */
+function triggerPattern(key: string, strict: boolean): string {
+  const between = strict ? BETWEEN.strict : BETWEEN.loose;
   const words = key.split(' ');
   return words.map((word, index) => {
     // Letters and digits may also be written together ("address12"), with no space between.
-    const gap = index && /^\d+$/u.test(word) !== /^\d+$/u.test(words[index - 1])
-      ? '[^\\p{L}\\p{M}\\p{N}]*'
-      : index ? NUMBER_SEPARATOR : '';
+    const gap = !index ? '' : `${between}${/^\d+$/u.test(word) !== /^\d+$/u.test(words[index - 1]) ? '*' : '+'}`;
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
     // A number matches as digits or as its words, with or without "and" after hundred or thousand.
     const spoken = /^\d+$/u.test(word) ? numberWords(Number(word)) : undefined;
     if (!spoken) return gap + escaped;
     const said = spoken.map((part, at) => at && /^(?:hundred|thousand)$/u.test(spoken[at - 1])
-      ? `(?:and${NUMBER_SEPARATOR})?${part}`
-      : part).join(NUMBER_SEPARATOR);
+      ? `(?:and${between}+)?${part}`
+      : part).join(`${between}+`);
     return `${gap}(?:${escaped}|${said})`;
   }).join('');
+}
+
+/** A whole-word matcher for any of the given triggers, each in its own group. */
+function triggersMatcher(keys: readonly string[], strict: boolean): RegExp {
+  return new RegExp(
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${keys.map((key) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:]*)`,
+    'giu',
+  );
+}
+
+/**
+ * The snippets whose trigger the speech recognizer wrote, with no punctuation inside it. Decided on
+ * the raw transcript, since cleanup may add or remove commas whatever it is told.
+ */
+export function snippetsSaidIn(
+  text: string,
+  snippets: readonly Snippet[],
+  entries: readonly { word: string; heardAs?: string }[] = [],
+): Snippet[] {
+  const texts = [text, applyDictionaryReplacements(text, entries)];
+  return snippets.filter((snippet) => {
+    const matcher = triggersMatcher(triggerKeys(snippet, entries), true);
+    return texts.some((candidate) => candidate.search(matcher) >= 0);
+  });
 }
 
 /** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */
@@ -334,21 +360,20 @@ export function wholeSnippet(
 /**
  * Replaces each trigger phrase in the text with its expansion, longest trigger first, in one pass
  * so an expansion is never matched again. Punctuation cleanup put right after a trigger is dropped
- * when the expansion ends a sentence or spans lines, so a signature gets no stray period.
+ * when the expansion ends a sentence or spans lines, so a signature gets no stray period. With
+ * `loose`, punctuation inside a trigger is allowed: for snippets already found in the raw transcript.
  */
 export function expandSnippets(
   text: string,
   snippets: readonly Snippet[],
   entries: readonly { word: string; heardAs?: string }[] = [],
+  { loose = false }: { loose?: boolean } = {},
 ): { text: string; fired: boolean; startsWithExpansion: boolean } {
   const pairs = snippets
     .flatMap((snippet) => triggerKeys(snippet, entries).map((key) => ({ key, expansion: snippet.expansion })))
     .sort((a, b) => b.key.length - a.key.length);
   if (!pairs.length || !text) return { text, fired: false, startsWithExpansion: false };
-  const matcher = new RegExp(
-    `(?<![\\p{L}\\p{M}\\p{N}])(?:${pairs.map(({ key }) => `(${triggerPattern(key)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:]*)`,
-    'giu',
-  );
+  const matcher = triggersMatcher(pairs.map(({ key }) => key), !loose);
   let fired = false;
   let startsWithExpansion = false;
   const result = text.replace(matcher, (...args) => {

@@ -349,6 +349,16 @@ describe('Snippets', () => {
     expect(lastSaved().dictionary.map((entry) => entry.word)).not.toContain('Sam Lee');
   });
 
+  it('leaves a trigger the recognizer punctuated inside, even when cleanup drops that punctuation', async () => {
+    seed({ snippets: [{ ...signature, trigger: 'my address12', expansion: 'egypt' }] });
+    engine.transcribeAudio.mockResolvedValue('My address: 12 October City.');
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'My address 12 October City.' });
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('My address 12 October City.');
+    expect(engine.processTranscriptWithLlm.mock.calls[0][3].keepPhrases).toEqual([]);
+  });
+
   it('expands with cleanup off and with personalization off', async () => {
     seed({ snippets: [signature], settings: { smartCleanup: false, personalizationEnabled: false } });
     engine.transcribeAudio.mockResolvedValue('talk soon my signature');

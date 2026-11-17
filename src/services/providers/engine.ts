@@ -613,7 +613,7 @@ export async function processTranscriptWithLlm(
   // Only the phrases go out, never the text they insert.
   const keepPhrases = (options.keepPhrases ?? []).map((phrase) => phrase.trim()).filter(Boolean).slice(0, 40);
   const keepClause = keepPhrases.length
-    ? '\nIf the speech contains any phrase inside <keep> tags, write that phrase word for word as listed: same words, numbers spelled the same way, no added punctuation inside it. Casing and the punctuation around it may follow the sentence.' +
+    ? '\nIf the speech contains any phrase inside <keep> tags, keep its words as listed: same words, numbers written the same way. Do not add or remove punctuation between its words, and never drop the words that follow it. Casing and the punctuation around it may follow the sentence.' +
       `\n<keep>\n${keepPhrases.join('\n')}\n</keep>`
     : '';
 

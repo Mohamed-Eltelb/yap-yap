@@ -13,7 +13,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyDictionaryReplacements, expandSnippets, wholeSnippet, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, expandSnippets, snippetsSaidIn, snippetTriggerKey, wholeSnippet, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -498,6 +498,9 @@ export function App() {
 
         // Saying only a snippet's trigger pastes its text as saved, with no cleanup to change it.
         const onlySnippet = mode === 'dictate' ? wholeSnippet(rawText, appState.snippets, appState.dictionary) : undefined;
+        // Which snippets were said is read from the recognizer's text: punctuation inside a trigger
+        // ("My address: 12 October") means it was not meant, and cleanup may move that punctuation.
+        const saidSnippets = mode === 'dictate' ? snippetsSaidIn(rawText, appState.snippets, appState.dictionary) : [];
 
         const needsLlm =
           mode === 'translate' ||
@@ -582,7 +585,8 @@ export function App() {
                   textAfter: shareText ? destination.textAfter || undefined : undefined,
                 },
                 // Snippet phrases must survive cleanup to expand. Their saved text is never sent.
-                keepPhrases: mode === 'dictate' ? appState.snippets.map((snippet) => snippet.trigger) : undefined,
+                // Spaced out ("my address 12"), so cleanup writes the words, not "address12".
+                keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
               }
             );
             if (dropped()) return;
@@ -612,7 +616,7 @@ export function App() {
           beforeSnippets = finalText;
           const expanded = onlySnippet
             ? { text: onlySnippet.expansion, fired: true, startsWithExpansion: true }
-            : expandSnippets(finalText, appState.snippets, appState.dictionary);
+            : expandSnippets(finalText, saidSnippets, appState.dictionary, { loose: true });
           finalText = expanded.text;
           startsWithSnippet = expanded.startsWithExpansion;
           // Saved text says nothing about how the user writes here.
@@ -1225,6 +1229,7 @@ export function App() {
       const writingStyles = item.mode === 'dictate' && appState.settings.personalizationEnabled
         ? stylesForCleanup(stats.categoryBreakdown, appState.settings.styleCorrections, { category: item.writingSample?.category, defaultStyle: appState.settings.defaultStyle })
         : undefined;
+      const saidSnippets = item.mode === 'dictate' ? snippetsSaidIn(item.rawText, appState.snippets, appState.dictionary) : [];
       const processed = await processTranscriptWithLlm(
         item.rawText,
         item.mode,
@@ -1238,13 +1243,13 @@ export function App() {
           writingPreferences: item.mode === 'dictate' ? appState.settings.writingPreferences : undefined,
           // The category learned for this dictation stands in for its destination.
           destinationCategory: item.writingSample?.category,
-          keepPhrases: item.mode === 'dictate' ? appState.snippets.map((snippet) => snippet.trigger) : undefined,
+          keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
         }
       );
       const cleaned = processed.finalText || item.text;
       const nextText = item.mode === 'dictate'
         ? wholeSnippet(item.rawText, appState.snippets, appState.dictionary)?.expansion
-          ?? expandSnippets(applyDictionaryReplacements(cleaned, appState.dictionary), appState.snippets, appState.dictionary).text
+          ?? expandSnippets(applyDictionaryReplacements(cleaned, appState.dictionary), saidSnippets, appState.dictionary, { loose: true }).text
         : cleaned;
       const nextWords = countWords(nextText);
       const nextWpm = Math.max(

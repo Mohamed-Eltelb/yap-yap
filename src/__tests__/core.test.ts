@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, snippetsSaidIn, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1863,7 +1863,17 @@ describe('snippets', () => {
   it('matches a trigger that joins letters and digits however they are written', () => {
     const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };
     expect(snippetTriggerKey('my address12')).toBe('my address 12');
-    expect(expandSnippets('My address, 12.', [glued]).text).toBe('egypt.');
+    expect(expandSnippets('Send it to my address 12, please.', [glued]).text).toBe('Send it to egypt, please.');
+    // Punctuation between its words means it is not the trigger, as in Wispr Flow.
+    expect(expandSnippets('My address, 12 October city.', [glued]).fired).toBe(false);
+  });
+
+  it('picks the snippets said from the raw transcript, then expands them however cleanup punctuated', () => {
+    const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };
+    expect(snippetsSaidIn('My address: 12 October City.', [glued, link])).toEqual([]);
+    expect(snippetsSaidIn('Send it to my address 12, please.', [glued, link])).toEqual([glued]);
+    expect(expandSnippets('Send it to my address, 12, please.', [glued], [], { loose: true }).text).toBe('Send it to egypt, please.');
+    expect(expandSnippets('Send it to my address, 12, please.', [glued]).fired).toBe(false);
     expect(expandSnippets('my address twelve', [glued]).text).toBe('egypt');
     expect(expandSnippets('my address12', [glued]).text).toBe('egypt');
     expect(expandSnippets('my address 123', [glued]).fired).toBe(false);
