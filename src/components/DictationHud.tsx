@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, ChevronsUpDown, Copy, Mic, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
@@ -84,22 +84,20 @@ export function DictationHud({
     if (hud.status !== 'recording' || hud.mode !== 'translate') setShowTargets(false);
   }, [hud.status, hud.mode]);
 
-  // When the HUD closes from a pill, the pill shrinks out before it goes.
+  // When the HUD closes from a pill, the pill shrinks out before it goes. This is
+  // worked out during render, so the same pill element stays and its shrink animates.
   const livePill = pillStateFor(hud);
   const [closing, setClosing] = useState(false);
-  const lastPill = useRef(livePill);
-  useLayoutEffect(() => {
-    const had = lastPill.current;
-    lastPill.current = livePill;
-    if (livePill || hud.status !== 'idle') {
-      setClosing(false);
-      return;
-    }
-    if (!had) return;
-    setClosing(true);
+  const [shown, setShown] = useState({ pill: livePill, status: hud.status });
+  if (shown.pill !== livePill || shown.status !== hud.status) {
+    setShown({ pill: livePill, status: hud.status });
+    setClosing(!livePill && hud.status === 'idle' && (shown.pill !== undefined || closing));
+  }
+  useEffect(() => {
+    if (!closing) return;
     const timer = window.setTimeout(() => setClosing(false), PILL_CLOSE_MS);
     return () => window.clearTimeout(timer);
-  }, [livePill, hud.status]);
+  }, [closing]);
 
   if (hud.status === 'idle' && !closing) return null;
 

@@ -48,3 +48,10 @@ it('drops the closing pill when another screen opens mid-close', () => {
   act(() => { vi.advanceTimersByTime(PILL_CLOSE_MS); });
   expect(container.querySelector('.yy-hud-pill')).toBeNull();
 });
+
+it('keeps the same pill element while it shrinks out, so the shrink animates', () => {
+  const { container, rerender } = render(<Hud status="processing" />);
+  const pill = container.querySelector('.yy-hud-pill');
+  rerender(<Hud status="idle" />);
+  expect(container.querySelector('.yy-hud-pill')).toBe(pill);
+});
