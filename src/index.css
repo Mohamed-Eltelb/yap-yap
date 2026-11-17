@@ -2123,14 +2123,16 @@ textarea,
 }
 
 /* The spelling a dictionary word replaces, after the word. */
+/* The misspelling a word replaces: struck through in a small tag after the word. */
 .yy-dictionary-heard {
   margin-inline-start: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
   color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.yy-dictionary-heard::before {
-  content: "\2190\00a0";
+  font-size: 11.5px;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-secondary) 60%, transparent);
 }
 
 /* What each writing style looks like, above the list of places. */
