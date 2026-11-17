@@ -2132,7 +2132,9 @@ textarea,
 }
 
 .yy-hud-message p {
-  max-height: min(160px, calc(100vh - 106px));
+  /* The HUD window is a fixed size now, so the cap is set here instead of by its height. */
+  max-height: 124px;
+  overflow: auto;
   margin: 4px 0;
 }
 
