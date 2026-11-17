@@ -18,7 +18,7 @@ import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccel
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 import type { HudAction } from './hudActions';
-import { hudHideDelay, HUD_SHRINK_DELAY_MS, planHudResize, type Size } from './hudBounds';
+import { hudHideDelay, HUD_SHRINK_DELAY_MS, HudPlacer, planHudResize, type Size } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -211,6 +211,7 @@ function createHudWindow(): void {
     hudReady = false;
     hudWindow = null;
     clearHudTimer();
+    hudPlacer.forget();
   });
 }
 
@@ -236,14 +237,12 @@ function afterHudAnimation(window: BrowserWindow, pending: Size | 'hide', run: (
   }, HUD_SHRINK_DELAY_MS);
 }
 
+const hudPlacer = new HudPlacer();
+
 /** Places the HUD window at the bottom center of the work area at this size. */
 function setHudSize(window: BrowserWindow, workArea: Electron.Rectangle, width: number, height: number) {
-  const x = workArea.x + Math.round((workArea.width - width) / 2);
-  const y = workArea.y + workArea.height - height - 4;
-  const bounds = window.getBounds();
-  if (bounds.width !== width || bounds.height !== height || bounds.x !== x || bounds.y !== y) {
-    window.setBounds({ x, y, width, height });
-  }
+  const bounds = hudPlacer.place(workArea, { width, height });
+  if (bounds) window.setBounds(bounds);
 }
 
 function updateHudWindow(): void {
@@ -304,7 +303,9 @@ function updateHudWindow(): void {
     clearHudTimer();
     setHudSize(hudWindow, workArea, width, height);
   } else {
-    const plan = planHudResize(hudWindow.getBounds(), target, hudPending === 'hide' ? undefined : hudPending);
+    // Plan from the size last set, not the window's own report, which DPI rounding can put 1px off.
+    const current = hudPlacer.size ?? hudWindow.getBounds();
+    const plan = planHudResize(current, target, hudPending === 'hide' ? undefined : hudPending);
     if (!plan.keepPending) {
       clearHudTimer();
       if (plan.now) setHudSize(hudWindow, workArea, plan.now.width, plan.now.height);
