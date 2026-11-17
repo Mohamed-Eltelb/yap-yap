@@ -42,6 +42,16 @@ const bars = [0.4, 0.55, 0.7, 0.85, 0.95, 1, 0.95, 0.85, 0.7, 0.55, 0.4];
 // neighbours on different bands so each bar moves on its own.
 const barBands = [9, 5, 7, 3, 1, 0, 2, 4, 6, 8, 10];
 
+export type PillState = 'armed' | 'recording' | 'thinking' | 'closing';
+
+/** The pill shape a HUD state uses, or nothing when that state shows another screen. */
+export function pillStateFor(hud: HudState): PillState | undefined {
+  if (hud.status === 'armed') return hud.shortcutList ? undefined : 'armed';
+  if (hud.status === 'recording') return 'recording';
+  if (hud.status === 'processing') return 'thinking';
+  return undefined;
+}
+
 /** How loud the voice is now, from its loudest bands. */
 function loudness(levels: number[]): number {
   const top = [...levels].sort((a, b) => b - a).slice(0, 4);
@@ -75,6 +85,8 @@ export function DictationHud({
 
   const { questionText, resultText } = hud;
   const loud = Math.min(1, Math.max(0, loudness(hud.levels)));
+  const pill = pillStateFor(hud);
+  const recording = pill === 'recording';
   const targets = hud.targets ?? [];
   const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
     ? hud.targetLanguage : targets[0] ?? 'English';
@@ -138,27 +150,7 @@ export function DictationHud({
               {targetMenu}
             </div>
           )}
-          <div className="yy-hud-pill" role="group" aria-label="Recording controls">
-            <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel}>
-              <X size={16} aria-hidden="true" />
-            </button>
-            <div className="yy-hud-wave" aria-hidden="true">
-              {bars.map((_, index) => (
-                <span key={index} style={{ height: `${barHeight(hud.levels, index, loud)}px` }} />
-              ))}
-            </div>
-            <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}>
-              <Check size={17} aria-hidden="true" />
-            </button>
-          </div>
         </>
-      )}
-      {hud.status === 'armed' && !hud.shortcutList && (
-        <div className="yy-hud-pill yy-hud-armed" role="status" aria-label="Waiting for shortcut">
-          <div className="yy-hud-wave" aria-hidden="true">
-            {bars.map((_, index) => <span key={index} style={{ height: '2px' }} />)}
-          </div>
-        </div>
       )}
       {hud.status === 'armed' && hud.shortcutList && (
         <section className="yy-hud-shortcuts" aria-label="Shortcuts">
@@ -177,9 +169,31 @@ export function DictationHud({
           <button type="button" onClick={onCancel}>Cancel</button>
         </section>
       )}
-      {hud.status === 'processing' && (
-        <div className="yy-hud-thinking" role="status">
-          <span>Thinking</span>
+      {pill && (
+        <div
+          className="yy-hud-pill"
+          data-state={pill}
+          role={pill === 'recording' ? 'group' : 'status'}
+          aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : undefined}
+        >
+          <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel}
+            disabled={!recording} tabIndex={recording ? undefined : -1} aria-hidden={recording ? undefined : true}>
+            <X size={16} aria-hidden="true" />
+          </button>
+          <div className="yy-hud-wave" aria-hidden="true">
+            {bars.map((_, index) => (
+              <span key={index} style={{
+                height: `${recording ? barHeight(hud.levels, index, loud) : 2}px`,
+                // The bars fade in from the center outward.
+                transitionDelay: `0ms, ${Math.abs(index - (bars.length - 1) / 2) * 20}ms`,
+              }} />
+            ))}
+          </div>
+          <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}
+            disabled={!recording} tabIndex={recording ? undefined : -1} aria-hidden={recording ? undefined : true}>
+            <Check size={17} aria-hidden="true" />
+          </button>
+          <span className="yy-hud-pill-label" aria-hidden={pill === 'thinking' ? undefined : true}>Thinking</span>
         </div>
       )}
       {hud.status === 'notice' && (

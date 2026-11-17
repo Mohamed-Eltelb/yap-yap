@@ -1685,30 +1685,67 @@ textarea,
   --hud-glow: #416cfdad;
 }
 
-.yy-hud-pill,
-.yy-hud-thinking {
+/* One pill for waiting, recording and Thinking: it changes width, and its parts slide and fade. */
+.yy-hud-pill {
+  --hud-ease: cubic-bezier(0.05, 0.6, 0.4, 0.95);
+  position: relative;
   display: flex;
   align-items: center;
-  min-height: 36px;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 70px;
+  height: 36px;
+  overflow: hidden;
+  padding: 0 4px;
   border: 1px solid #ffffff4a;
   border-radius: 999px;
   background: #060707;
   color: #fff;
+  transition: width 0.2s var(--hud-ease), opacity 0.2s var(--hud-ease), transform 0.2s var(--hud-ease);
 }
 
-.yy-hud-pill {
-  gap: 6px;
-  padding: 3px 5px;
-  background: radial-gradient(ellipse at 50% 0, var(--hud-glow), transparent 64%) #060707;
+.yy-hud-pill[data-state="recording"] { width: 126px; }
+.yy-hud-pill[data-state="thinking"] { width: 100px; }
+.yy-hud-pill[data-state="closing"] {
+  opacity: 0;
+  transform: scale(0.92);
 }
+
+/* The mode color fades in on its own layer, since gradients can't be animated. */
+.yy-hud-pill::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 0, var(--hud-glow), transparent 64%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--hud-ease);
+}
+
+.yy-hud-pill[data-state="recording"]::before { opacity: 1; }
 
 .yy-hud-pill button {
+  position: relative;
   display: grid;
+  flex-shrink: 0;
   place-items: center;
-  width: 26px;
+  width: 0;
   height: 26px;
-  border-radius: 50%;
+  overflow: hidden;
+  border-radius: 999px;
   cursor: pointer;
+  opacity: 0;
+  transition: width 0.2s var(--hud-ease), opacity 0.2s var(--hud-ease), transform 0.2s var(--hud-ease);
+}
+
+.yy-hud-pill .yy-hud-cancel { transform: translateX(8px); }
+.yy-hud-pill .yy-hud-confirm { transform: translateX(-8px); }
+
+.yy-hud-pill[data-state="recording"] button {
+  width: 26px;
+  opacity: 1;
+  transform: none;
 }
 
 .yy-hud-cancel {
@@ -1726,20 +1763,49 @@ textarea,
 }
 
 .yy-hud-wave {
+  position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   gap: 2.5px;
   width: 48px;
   height: 22px;
+  margin: 0 6px;
+  transition: width 0.2s var(--hud-ease), margin 0.2s var(--hud-ease), opacity 0.2s var(--hud-ease);
 }
 
+.yy-hud-pill[data-state="thinking"] .yy-hud-wave,
+.yy-hud-pill[data-state="closing"] .yy-hud-wave {
+  width: 0;
+  margin: 0;
+  opacity: 0;
+}
+
+/* Height follows the voice at once; opacity fades with a per-bar delay set inline. */
 .yy-hud-wave span {
+  flex-shrink: 0;
   width: 2px;
   border-radius: 2px;
   background: #fff;
-  transition: height 40ms linear;
+  transition: height 80ms linear, opacity 0.2s var(--hud-ease);
 }
+
+.yy-hud-pill[data-state="armed"] .yy-hud-wave span { opacity: 0.55; }
+
+.yy-hud-pill-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 550;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--hud-ease);
+}
+
+.yy-hud-pill[data-state="thinking"] .yy-hud-pill-label { opacity: 1; }
 
 .yy-hud-mode {
   padding: 5px 8px;
@@ -1822,16 +1888,6 @@ textarea,
   border-bottom: 1px solid #ffffff24;
 }
 
-.yy-hud-thinking {
-  position: relative;
-  justify-content: center;
-  min-width: 100px;
-  overflow: hidden;
-  padding: 0 18px;
-  font-size: 12px;
-  font-weight: 550;
-}
-
 .yy-hud-cancelled {
   display: flex;
   align-items: center;
@@ -1863,7 +1919,8 @@ textarea,
   background: #ffffff40;
 }
 
-.yy-hud-thinking::before {
+/* Thinking's progress fill. */
+.yy-hud-pill[data-state="thinking"]::after {
   position: absolute;
   inset: 0;
   background: #ffffff29;
@@ -1874,21 +1931,22 @@ textarea,
   animation: yy-hud-fill 8s ease-out forwards;
 }
 
-.yy-hud-thinking span {
-  position: relative;
-}
-
 @keyframes yy-hud-fill {
   to { transform: scaleX(0.9); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .yy-hud-thinking::before {
+  .yy-hud-pill[data-state="thinking"]::after {
     animation: none;
   }
 
+  .yy-hud-pill,
+  .yy-hud-pill::before,
+  .yy-hud-pill button,
+  .yy-hud-pill-label,
+  .yy-hud-wave,
   .yy-hud-wave span {
-    transition: none;
+    transition: none !important;
   }
 }
 
@@ -2067,11 +2125,6 @@ textarea,
 
 .yy-hud-retry:hover {
   background: var(--bg-hover);
-}
-
-.yy-hud-armed {
-  justify-content: center;
-  min-width: 70px;
 }
 
 .yy-hud-shortcuts,
