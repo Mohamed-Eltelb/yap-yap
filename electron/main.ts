@@ -193,10 +193,12 @@ function createHudWindow(): void {
     hudReady = false;
     if (process.platform !== 'linux') hudWindow?.setIgnoreMouseEvents(true, { forward: true });
     hudWindow?.hide();
+    hudEmpty = true;
   });
   hudWindow.webContents.on('render-process-gone', () => {
     hudReady = false;
     hudWindow?.hide();
+    hudEmpty = true;
   });
   if (isDev) {
     void hudWindow.loadURL('http://localhost:5173/#/hud');
@@ -209,12 +211,15 @@ function createHudWindow(): void {
   hudWindow.on('closed', () => {
     hudReady = false;
     hudWindow = null;
+    hudEmpty = true;
     clearHudTimer();
     hudPlacer.forget();
   });
 }
 
 let hudHideTimer: ReturnType<typeof setTimeout> | undefined;
+/** The HUD window shows nothing (it stays on screen, letting clicks through). */
+let hudEmpty = true;
 /** The status the HUD window last showed, to know if a pill has to shrink out. */
 let hudShownStatus: string | undefined;
 
@@ -229,11 +234,16 @@ function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
   if (!hudPayload.show) {
     if (hudHideTimer) return;
+    // The window is never hidden once shown: on Windows a hidden and re-shown window stops
+    // taking clicks. It stays on screen empty, letting every click through.
     const hide = (window: BrowserWindow) => {
-      window.hide();
+      window.webContents.send('hud:state', { status: 'idle', mode: 'dictate', levels: [] });
+      if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
+      hudEmpty = true;
       hudDisplayId = undefined;
       hudShownStatus = undefined;
     };
+    if (hudEmpty) return;
     if (!hudWindow.isVisible() || hudHideDelay(hudShownStatus) === 0) {
       hide(hudWindow);
       return;
@@ -259,13 +269,13 @@ function updateHudWindow(): void {
   if (bounds) hudWindow.setBounds(bounds);
   hudShownStatus = state?.status;
   hudWindow.webContents.send('hud:state', state);
-  if (!hudWindow.isVisible()) {
-    // A window hidden while the mouse was over the HUD may come back taking clicks or not,
-    // so start it letting them through and have the page ask again when hovered.
+  if (hudEmpty) {
+    // Start letting clicks through and have the page ask again when hovered.
+    hudEmpty = false;
     if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
     hudWindow.webContents.send('hud:shown');
-    hudWindow.showInactive();
   }
+  if (!hudWindow.isVisible()) hudWindow.showInactive();
 }
 
 function createTray(): void {
