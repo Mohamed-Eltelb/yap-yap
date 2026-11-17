@@ -2189,6 +2189,7 @@ textarea,
   position: relative;
   display: grid;
   gap: 2px;
+  color: var(--text-primary);
   padding: 8px 10px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
