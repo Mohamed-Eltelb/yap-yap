@@ -426,6 +426,8 @@ export function App() {
       // Cancelling while this runs starts a new run, and this one then stops without a trace.
       const run = ++processingRunRef.current;
       const dropped = () => run !== processingRunRef.current;
+      // Kept so a dictation cancelled while it is processing can be brought back with Undo.
+      processingAudioRef.current = Promise.resolve([audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste]);
 
       setHud({
         status: 'processing',
@@ -813,6 +815,8 @@ export function App() {
   );
 
   const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
+  /** The audio of the dictation now processing, for Undo after it is cancelled. */
+  const processingAudioRef = useRef<Promise<Parameters<typeof processAudioPipeline> | null> | null>(null);
 
   const stopAndProcess = useCallback(async () => {
     const session = recorderRef.current;
@@ -825,11 +829,21 @@ export function App() {
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
     setHud((current) => ({ ...current, status: 'processing' }));
     const run = processingRunRef.current;
+    const stopping = session.stop();
+    const targets = appState.settings.translationTargets;
+    const selectedTarget = currentMode === 'translate'
+      ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
+      : undefined;
+    // Stopped right after starting (a double tap) or nothing was said: nothing to report.
+    const isEmpty = ({ blob, durationMs, heardSpeech }: Awaited<typeof stopping>) =>
+      blob.size === 0 || durationMs < 500 || heardSpeech === false;
+    processingAudioRef.current = stopping.then((audio): Parameters<typeof processAudioPipeline> | null => isEmpty(audio) ? null
+      : [audio.blob, audio.durationMs, currentMode, audio.dataUrl, audio.mimeType, undefined, selectedTarget, allowAutoPaste], () => null);
     try {
-      const { blob, durationMs, dataUrl, mimeType, heardSpeech } = await session.stop();
+      const stopped = await stopping;
+      const { blob, durationMs, dataUrl, mimeType } = stopped;
       if (run !== processingRunRef.current) return;
-      // Stopped right after starting (a double tap) or nothing was said: nothing to report.
-      if (blob.size === 0 || durationMs < 500 || heardSpeech === false) {
+      if (isEmpty(stopped)) {
         // Thinking stays up briefly so the box doesn't vanish, then says why nothing came.
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (run !== processingRunRef.current) return;
@@ -839,10 +853,6 @@ export function App() {
         }, 2000);
         return;
       }
-      const targets = appState.settings.translationTargets;
-      const selectedTarget = currentMode === 'translate'
-        ? targetLanguage && targets.includes(targetLanguage) ? targetLanguage : targets[0] ?? 'English'
-        : undefined;
       await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste, destinationProbe);
     } catch (err) {
       playInteractionSound('error', appState.settings.interactionSounds);
@@ -861,10 +871,22 @@ export function App() {
   const recordingSinceRef = useRef(0);
 
   const cancelRecording = useCallback(() => {
-    // Cancelling a dictation still being processed drops it: no paste, no history entry.
+    // Cancelling a dictation still being processed stops it before it pastes; Undo picks it up again.
     if (hudRef.current.status === 'processing') {
       processingRunRef.current += 1;
-      setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+      const pending = processingAudioRef.current;
+      processingAudioRef.current = null;
+      if (!pending) {
+        setHud({ status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) });
+        return;
+      }
+      cancelledRef.current = pending;
+      setHud({ status: 'cancelled', mode: hudRef.current.mode, levels: Array(20).fill(0.1) });
+      window.clearTimeout(cancelTimerRef.current);
+      cancelTimerRef.current = window.setTimeout(() => {
+        cancelledRef.current = null;
+        setHud((current) => current.status === 'cancelled' ? { ...current, status: 'idle' } : current);
+      }, 5000);
       return;
     }
     retryAudioRef.current = null;

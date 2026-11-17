@@ -167,6 +167,27 @@ describe('Dictation flow', () => {
 
     expect(desktop.api.pasteText).not.toHaveBeenCalled();
     expect(lastSaved().history).toHaveLength(0);
+    expect(lastHud()?.status).toBe('cancelled');
+  });
+
+  it('brings back a dictation cancelled while processing with Undo', async () => {
+    seed();
+    engine.transcribeAudio.mockReturnValueOnce(new Promise<string>(() => undefined));
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(engine.transcribeAudio).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'cancel' }); });
+    expect(lastHud()?.status).toBe('cancelled');
+    await act(async () => {
+      desktop.action!({ type: 'undo' });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(engine.transcribeAudio).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
   });
 
   it('quietly drops a recording stopped right after it started', async () => {

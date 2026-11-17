@@ -74,11 +74,11 @@ function syncShortcutSuspension() {
 
 let escapeRegistered = false;
 
-/** Esc cancels a recording from anywhere, and is left alone the rest of the time. */
+/** Esc cancels a recording or its processing from anywhere, and is left alone the rest of the time. */
 function syncEscapeCancel() {
   const state = hudPayload.state;
-  // Esc also cancels a dictation still processing while the busy notice offers that.
-  const recording = state?.status === 'recording' || (state?.status === 'processing' && state.busyNotice === true);
+  // Esc also cancels a dictation still processing.
+  const recording = state?.status === 'recording' || state?.status === 'processing';
   if (recording === escapeRegistered) return;
   if (recording) {
     escapeRegistered = globalShortcut.register('Escape', () => {
