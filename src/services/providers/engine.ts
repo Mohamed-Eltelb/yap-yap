@@ -706,12 +706,15 @@ export async function processTranscriptWithLlm(
       return { finalText: transcript };
     }
     systemPrompt =
-      'You are Yap Yap, a dictation editor. Turn the transcript of someone speaking into the text they would have typed themselves: the same message in the same words and language, cleanly written.' +
+      (medium
+        ? 'You are Yap Yap, a dictation editor. Turn the transcript of someone speaking into the text they would have typed themselves: the same message in the same language, written clearly.'
+        : 'You are Yap Yap, a dictation editor. Turn the transcript of someone speaking into the text they would have typed themselves: the same message in the same words and language, cleanly written.') +
       transcriptIsData +
       '\nRemove what is only speech noise:' +
       '\n- Filler words such as um, uh, and er. Remove "like", "you know", and "I mean" only when they are filler, never when they carry meaning ("I like it" stays).' +
       '\n- False starts and accidental repeats ("I think we, I think we should go" becomes "I think we should go").' +
       '\n- Self-corrections: keep only the final version ("Tuesday, no, Wednesday" becomes "Wednesday"; "send it to Sam, sorry, to Alex" becomes "send it to Alex"; "scratch that" removes what it refers to).' +
+      '\n- Talk about what the speaker is about to say, at the start of a sentence: phrases like "so basically what I wanted to say is that", "the point I want to make is", "what I mean to tell you is that", "يعني اللي عايز أقوله إن", "الفكرة إن", the same kind of phrase in any language (built on saying, explaining, or making a point), and fillers before them like "okay so" and "بص". Remove them and keep the statement that follows: "what I wanted to say is that the call is at noon" becomes "The call is at noon". Keep openers that carry meaning or ask something: "I think", "I wanted to ask if", "I want you to", "can you".' +
       '\nFix what speech recognition or speaking got wrong:' +
       `\n- Punctuation, capitalization, and clear grammar slips ("there is some issues" becomes "there are some issues")${medium ? '' : ', without changing word choice'}. The transcript often has no punctuation at all, so end every sentence, including the last one: with "?" for a question or a request phrased as one ("Can you send it?"), with "!" where the transcript already has one, otherwise with a period. A title, label, name, or other fragment that is not a sentence gets no final punctuation.` +
       // People rarely know a dictionary exists, so obvious mishearings are fixed from context.
@@ -726,8 +729,12 @@ export async function processTranscriptWithLlm(
       '\n- The language. Keep each part in the language it was spoken in, including mixed-language speech. Never translate.' +
       (medium
         ? '\nPolish for clarity:' +
-          '\n- You may reword phrases and sentences so they read clearly and concisely: tighten rambling or wordy phrasing, fix awkward sentence structure, and join or split sentences where that reads better.' +
+          '\n- You may reword phrases and sentences so they read clearly and concisely: tighten rambling or wordy phrasing, fix awkward sentence structure, and join or split sentences where that reads better. Prefer short, direct sentences.' +
+          '\n- Condense hedges and padding into fewer words, but keep the uncertainty they express: "it was maybe like fifty people or so" becomes "about 50 people".' +
           '\n- Keep the meaning and everything it contains: every fact, name, number, date, question, and request, the speaker\'s point of view ("I", "we"), and their voice. A polished text says the same things, only more clearly.' +
+          '\n- Keep request phrases ("I want you to", "can you", "please") and the alternatives the speaker gave ("or not").' +
+          '\n- Keep the speaker\'s dialect and register: polish Egyptian Arabic as Egyptian Arabic, casual speech as casual speech.' +
+          '\n- Never reword names, terms from the dictionary below, or phrases in <keep> tags.' +
           '\n- Do not summarize, drop details, add content, or change the language.'
         : '\n- Do not reword, summarize, shorten, or add content. Learned style and destination may change casing, punctuation, and formality only.') +
       '\nOutput ONLY the cleaned text, without quotes, labels, or explanations.' +
