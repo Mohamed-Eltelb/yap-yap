@@ -115,13 +115,14 @@ it('shows how to pause above the recording pill', () => {
   expect(html).toContain('yy-hud-tip');
   expect(html).toMatch(/Hold <kbd>Right Alt<\/kbd> to pause/);
   // Finish is drawn as a small copy of the real button, not a text ✓.
-  expect(html).toMatch(/hover <span class="yy-hud-tip-finish" aria-label="Finish"[^>]*><svg[^]*<\/span> and click pause/);
+  expect(html).toMatch(/hover <span class="yy-hud-tip-finish" aria-label="Finish"[^>]*><svg[^]*<\/span> and click <span class="yy-hud-tip-pause" aria-label="Pause"[^>]*><svg[^]*?<\/span><\/p>/);
   expect(html).not.toContain('✓');
+  expect(html).not.toContain('click pause');
   expect(html.indexOf('yy-hud-tip')).toBeLessThan(html.indexOf('data-state="recording"'));
 });
 
 it('leaves out holding when no shortcut can be held', () => {
   const html = renderHud({ status: 'recording', mode: 'dictate', levels: [], pauseTip: {} });
   expect(html).not.toContain('Hold');
-  expect(html).toMatch(/Hover <span class="yy-hud-tip-finish"[^]*<\/span> and click pause/);
+  expect(html).toMatch(/Hover <span class="yy-hud-tip-finish"[^]*<\/span> and click <span class="yy-hud-tip-pause"[^]*<\/span> to pause the recording/);
 });

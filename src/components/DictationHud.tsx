@@ -60,6 +60,13 @@ const finishIcon = (
   </span>
 );
 
+/** A small copy of the Pause button that hovering Finish reveals. */
+const pauseIcon = (
+  <span className="yy-hud-tip-pause" aria-label="Pause" role="img">
+    <Pause size={10} strokeWidth={2.75} aria-hidden="true" />
+  </span>
+);
+
 export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
 
 /** The pill shape a HUD state uses, or nothing when that state shows another screen. */
@@ -210,8 +217,8 @@ export function DictationHud({
       {hud.status === 'recording' && hud.pauseTip && !hud.paused && (
         <p className="yy-hud-tip" role="status">
           {hud.pauseTip.keys
-            ? <>Hold <kbd>{hud.pauseTip.keys.join(' + ')}</kbd> to pause, or hover {finishIcon} and click pause</>
-            : <>Hover {finishIcon} and click pause to pause the recording</>}
+            ? <>Hold <kbd>{hud.pauseTip.keys.join(' + ')}</kbd> to pause, or hover {finishIcon} and click {pauseIcon}</>
+            : <>Hover {finishIcon} and click {pauseIcon} to pause the recording</>}
         </p>
       )}
       {pill && (

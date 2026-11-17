@@ -2362,6 +2362,7 @@ textarea,
     yy-hud-notice-out 0.25s ease-in 5.75s forwards;
 }
 
+.yy-hud-tip-pause,
 .yy-hud-tip-finish {
   display: inline-flex;
   align-items: center;
@@ -2373,6 +2374,11 @@ textarea,
   background: #fff;
   color: #17191a;
   vertical-align: -1.5px;
+}
+
+.yy-hud-tip-pause {
+  background: #404142;
+  color: #fff;
 }
 
 .yy-hud-tip kbd,
