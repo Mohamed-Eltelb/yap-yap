@@ -1935,8 +1935,31 @@ textarea,
   to { transform: scaleX(0.9); }
 }
 
+/* The other HUD screens fade and rise in rather than popping. */
+.yy-hud-mode,
+.yy-hud-shortcuts,
+.yy-hud-busy,
+.yy-hud-cancelled,
+.yy-hud-answer,
+.yy-hud-message {
+  animation: yy-hud-rise 0.2s cubic-bezier(0.05, 0.6, 0.4, 0.95);
+}
+
+@keyframes yy-hud-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .yy-hud-pill[data-state="thinking"]::after {
+  .yy-hud-pill[data-state="thinking"]::after,
+  .yy-hud-mode,
+  .yy-hud-shortcuts,
+  .yy-hud-busy,
+  .yy-hud-cancelled,
+  .yy-hud-answer,
+  .yy-hud-message {
     animation: none;
   }
 

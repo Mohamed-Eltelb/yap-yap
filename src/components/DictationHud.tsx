@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Copy, Mic, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
@@ -42,6 +42,9 @@ const bars = [0.4, 0.55, 0.7, 0.85, 0.95, 1, 0.95, 0.85, 0.7, 0.55, 0.4];
 // neighbours on different bands so each bar moves on its own.
 const barBands = [9, 5, 7, 3, 1, 0, 2, 4, 6, 8, 10];
 
+/** How long the pill takes to shrink out after the HUD closes. */
+export const PILL_CLOSE_MS = 200;
+
 export type PillState = 'armed' | 'recording' | 'thinking' | 'closing';
 
 /** The pill shape a HUD state uses, or nothing when that state shows another screen. */
@@ -81,11 +84,28 @@ export function DictationHud({
     if (hud.status !== 'recording' || hud.mode !== 'translate') setShowTargets(false);
   }, [hud.status, hud.mode]);
 
-  if (hud.status === 'idle') return null;
+  // When the HUD closes from a pill, the pill shrinks out before it goes.
+  const livePill = pillStateFor(hud);
+  const [closing, setClosing] = useState(false);
+  const lastPill = useRef(livePill);
+  useLayoutEffect(() => {
+    const had = lastPill.current;
+    lastPill.current = livePill;
+    if (livePill || hud.status !== 'idle') {
+      setClosing(false);
+      return;
+    }
+    if (!had) return;
+    setClosing(true);
+    const timer = window.setTimeout(() => setClosing(false), PILL_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [livePill, hud.status]);
+
+  if (hud.status === 'idle' && !closing) return null;
 
   const { questionText, resultText } = hud;
   const loud = Math.min(1, Math.max(0, loudness(hud.levels)));
-  const pill = pillStateFor(hud);
+  const pill = livePill ?? (closing ? 'closing' : undefined);
   const recording = pill === 'recording';
   const targets = hud.targets ?? [];
   const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
