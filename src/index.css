@@ -1982,9 +1982,11 @@ textarea,
   position: absolute;
   inset: 0;
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='6' viewBox='0 0 40 6'%3E%3Cpath d='M0 3 Q10 0 20 3 T40 3 V6 H0Z' fill='%23ffffff29'/%3E%3C/svg%3E") 0 0 / 40px 6px repeat-x,
-    linear-gradient(#ffffff29, #ffffff29) 0 6px / 100% 100% no-repeat;
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='6' viewBox='0 0 40 6'%3E%3Cpath d='M0 3 Q10 0 20 3 T40 3 V6 H0Z' fill='%23fff'/%3E%3C/svg%3E") 0 0 / 40px 6px repeat-x,
+    linear-gradient(#fff, #fff) 0 5px / 100% 100% no-repeat;
   content: "";
+  /* Solid layers that overlap by 1px, faded as one, so no seam shows at display scaling. */
+  opacity: 0.16;
   pointer-events: none;
   transform: translateY(85%);
   animation:
@@ -1997,7 +1999,7 @@ textarea,
 }
 
 @keyframes yy-hud-water-wave {
-  to { background-position: 40px 0, 0 6px; }
+  to { background-position: 40px 0, 0 5px; }
 }
 
 /* The other HUD screens fade and rise in rather than popping. */
