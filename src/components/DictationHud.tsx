@@ -79,6 +79,7 @@ export const THINKING_WORD_MS = 2400;
 const thinkingWords = [
   'Transcribing', 'Yapping', 'Untangling', 'Polishing', 'Wordsmithing', 'Decoding',
   'Tidying up', 'Punctuating', 'Pondering', 'Proofreading', 'Distilling', 'Unmumbling',
+  'Noodling', 'Riffing', 'Cooking',
 ];
 /** The Thinking pill is never narrower than this, so short words do not shrink it. */
 const THINKING_MIN_WIDTH = 100;
