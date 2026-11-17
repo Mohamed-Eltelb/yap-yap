@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, expandSnippets, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1844,6 +1844,20 @@ describe('snippets', () => {
     expect(expandSnippets('Join with the Zoom link, thanks.', snippets).text).toBe('Join with the https://zoom.us/j/1, thanks.');
     expect(expandSnippets('Send it to home address 2.', snippets).text).toBe('Send it to 12 Elm St.');
     expect(expandSnippets('Zoom link: join early.', snippets)).toMatchObject({ text: 'https://zoom.us/j/1: join early.', startsWithExpansion: true });
+  });
+
+  it('matches numbers above twenty, said or written as digits', () => {
+    const room = { ...link, id: 's5', trigger: 'room one hundred five', expansion: 'Room 105, 3rd floor' };
+    const office = { ...link, id: 's6', trigger: 'office address twenty-one', expansion: '21 Main St' };
+    expect(snippetTriggerKey('Room one hundred and five')).toBe('room 105');
+    expect(snippetTriggerKey('twenty one')).toBe('21');
+    expect(snippetTriggerKey('one two three')).toBe('1 2 3');
+    expect(snippetTriggerKey('two thousand twenty six')).toBe('2026');
+    expect(expandSnippets('Meet in room 105 at noon.', [room]).text).toBe('Meet in Room 105, 3rd floor at noon.');
+    expect(expandSnippets('Meet in room one hundred and five.', [room]).fired).toBe(true);
+    expect(expandSnippets('Send it to office address 21.', [office]).text).toBe('Send it to 21 Main St.');
+    expect(expandSnippets('Send it to office address twenty one.', [office]).fired).toBe(true);
+    expect(expandSnippets('Send it to office address 215.', [office]).fired).toBe(false);
   });
 
   it('matches whole words only and never expands an expansion again', () => {

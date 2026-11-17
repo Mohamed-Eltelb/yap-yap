@@ -581,6 +581,8 @@ export function App() {
                   textBefore: shareText ? destination.textBefore || undefined : undefined,
                   textAfter: shareText ? destination.textAfter || undefined : undefined,
                 },
+                // Snippet phrases must survive cleanup to expand. Their saved text is never sent.
+                keepPhrases: mode === 'dictate' ? appState.snippets.map((snippet) => snippet.trigger) : undefined,
               }
             );
             if (dropped()) return;
@@ -1236,6 +1238,7 @@ export function App() {
           writingPreferences: item.mode === 'dictate' ? appState.settings.writingPreferences : undefined,
           // The category learned for this dictation stands in for its destination.
           destinationCategory: item.writingSample?.category,
+          keepPhrases: item.mode === 'dictate' ? appState.snippets.map((snippet) => snippet.trigger) : undefined,
         }
       );
       const cleaned = processed.finalText || item.text;

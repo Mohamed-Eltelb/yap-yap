@@ -211,15 +211,71 @@ export function readHeardAs(value: unknown): string | undefined {
 export const MAX_SNIPPET_TRIGGER = 60;
 export const MAX_SNIPPET_EXPANSION = 4000;
 
-/** Cleanup may write a spoken number as digits ("address two" becomes "address 2"). */
-const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+/** Cleanup may write a spoken number as digits ("room one hundred five" becomes "room 105"). */
+const UNIT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS_WORDS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const NUMBER_SEPARATOR = '[^\\p{L}\\p{M}\\p{N}]+';
+
+/** English words for a whole number below a million, or undefined for larger ones. */
+function numberWords(value: number): string[] | undefined {
+  if (!Number.isInteger(value) || value < 0 || value >= 1_000_000) return undefined;
+  if (value < 20) return [UNIT_WORDS[value]];
+  if (value < 100) return [TENS_WORDS[Math.floor(value / 10)], ...(value % 10 ? [UNIT_WORDS[value % 10]] : [])];
+  const [size, name] = value < 1000 ? [100, 'hundred'] : [1000, 'thousand'];
+  const rest = value % size;
+  return [...numberWords(Math.floor(value / size))!, name, ...(rest ? numberWords(rest)! : [])];
+}
+
+/**
+ * Folds spoken numbers into digits: "twenty one" is 21, "one hundred and five" is 105. Digits said
+ * one by one stay apart ("one two" is 1 2), since a unit never follows a unit in a single number.
+ */
+function foldNumberWords(words: string[]): string[] {
+  const out: string[] = [];
+  let total = 0;
+  let current = 0;
+  let last: 'unit' | 'teen' | 'tens' | 'hundred' | 'thousand' | null = null;
+  const flush = () => {
+    if (last) out.push(String(total + current));
+    total = 0;
+    current = 0;
+    last = null;
+  };
+  words.forEach((word, index) => {
+    const unit = UNIT_WORDS.indexOf(word);
+    const tens = TENS_WORDS.indexOf(word);
+    if (unit >= 0) {
+      const kind = unit < 10 ? 'unit' : 'teen';
+      // "twenty one" joins; "one two" or "twenty twelve" do not.
+      if (last === 'unit' || last === 'teen' || (last === 'tens' && kind === 'teen')) flush();
+      current += unit;
+      last = kind;
+    } else if (tens > 1) {
+      if (last === 'unit' || last === 'teen' || last === 'tens') flush();
+      current += tens * 10;
+      last = 'tens';
+    } else if (word === 'hundred' && last && last !== 'hundred' && current > 0 && current < 10) {
+      current *= 100;
+      last = 'hundred';
+    } else if (word === 'thousand' && last && last !== 'thousand' && current > 0) {
+      total += current * 1000;
+      current = 0;
+      last = 'thousand';
+    } else if (word === 'and' && (last === 'hundred' || last === 'thousand') && UNIT_WORDS.concat(TENS_WORDS).includes(words[index + 1] ?? '')) {
+      // "one hundred and five": the "and" belongs to the number.
+    } else {
+      flush();
+      out.push(word);
+    }
+  });
+  flush();
+  return out;
+}
 
 /** A trigger's words, lowercase, without punctuation, numbers as digits: how it is compared. */
 export function snippetTriggerKey(trigger: string): string {
-  return (trigger.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [])
-    .map((word) => NUMBER_WORDS.includes(word) ? String(NUMBER_WORDS.indexOf(word)) : word)
-    .join(' ');
+  return foldNumberWords(trigger.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).join(' ');
 }
 
 /** Saved snippets, keeping valid ones only: a trigger with a letter or digit, used once. */
@@ -243,9 +299,14 @@ export function parseSnippets(value: unknown): Snippet[] {
 function triggerPattern(key: string): string {
   return key.split(' ').map((word) => {
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-    // A number matches as digits or as its word.
-    return /^\d+$/u.test(word) && NUMBER_WORDS[Number(word)] ? `(?:${escaped}|${NUMBER_WORDS[Number(word)]})` : escaped;
-  }).join('[^\\p{L}\\p{M}\\p{N}]+');
+    // A number matches as digits or as its words, with or without "and" after hundred or thousand.
+    const spoken = /^\d+$/u.test(word) ? numberWords(Number(word)) : undefined;
+    if (!spoken) return escaped;
+    const words = spoken.map((part, index) => index && /^(?:hundred|thousand)$/u.test(spoken[index - 1]) && index < spoken.length
+      ? `(?:and${NUMBER_SEPARATOR})?${part}`
+      : part).join(NUMBER_SEPARATOR);
+    return `(?:${escaped}|${words})`;
+  }).join(NUMBER_SEPARATOR);
 }
 
 /** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */

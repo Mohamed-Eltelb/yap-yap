@@ -341,6 +341,10 @@ describe('Snippets', () => {
 
     expect(desktop.api.pasteText).toHaveBeenCalledWith('Talk soon. best,\nSam Lee');
     expect(engine.processTranscriptWithLlm.mock.calls[0][0]).toBe('talk soon my signature');
+    // Cleanup is asked to keep the phrase, and never sees the text it inserts.
+    const options = engine.processTranscriptWithLlm.mock.calls[0][3];
+    expect(options.keepPhrases).toEqual(['my signature']);
+    expect(JSON.stringify(options)).not.toContain('Sam Lee');
     expect(engine.detectWritingStyle).not.toHaveBeenCalled();
     expect(lastSaved().dictionary.map((entry) => entry.word)).not.toContain('Sam Lee');
   });

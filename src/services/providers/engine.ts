@@ -593,6 +593,8 @@ export async function processTranscriptWithLlm(
     destinationCategory?: string;
     /** Where the text will be pasted, with the text on either side of the caret when shared. */
     destination?: Partial<WritingDestination> & { textBefore?: string; textAfter?: string };
+    /** Snippet trigger phrases. Yap Yap swaps them for saved text afterwards, so they must stay word for word. */
+    keepPhrases?: string[];
   }
 ): Promise<{ finalText: string; answer?: string }> {
   if (!transcript.trim()) {
@@ -607,6 +609,13 @@ export async function processTranscriptWithLlm(
   if (meta.requiresKey && !key) {
     throw new Error(`Missing API key for ${provider.name}.`);
   }
+
+  // Only the phrases go out, never the text they insert.
+  const keepPhrases = (options.keepPhrases ?? []).map((phrase) => phrase.trim()).filter(Boolean).slice(0, 40);
+  const keepClause = keepPhrases.length
+    ? '\nIf the speech contains any phrase inside <keep> tags, write that phrase word for word as listed: same words, numbers spelled the same way, no added punctuation inside it. Casing and the punctuation around it may follow the sentence.' +
+      `\n<keep>\n${keepPhrases.join('\n')}\n</keep>`
+    : '';
 
   // The dictionary holds terms the user added or Yap Yap learned from their corrections,
   // often in another language than the speech (an English product name in Arabic speech).
@@ -693,7 +702,7 @@ export async function processTranscriptWithLlm(
       '\n- Do not reword, summarize, shorten, or add content. Learned style and destination may change casing, punctuation, and formality only.' +
       '\nOutput ONLY the cleaned text, without quotes, labels, or explanations.' +
       emptyClause +
-      dictClause +
+      dictClause + keepClause +
       styleClause + destinationClause + preferenceClause;
   } else if (mode === 'translate') {
     const targets = options.targetLanguages.length ? options.targetLanguages : ['English'];
