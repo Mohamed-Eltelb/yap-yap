@@ -180,6 +180,8 @@ function createHudWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Never focused, so keep it drawing at full speed.
+      backgroundThrottling: false,
     },
   });
 

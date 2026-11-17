@@ -126,7 +126,7 @@ export async function startAudioRecording(
   const waveform = new Uint8Array(analyser.fftSize);
   let frames = 0;
   let loudFrames = 0;
-  let rafId = 0;
+  let timerId: ReturnType<typeof setInterval> | undefined;
   let stopped = false;
 
   const tick = () => {
@@ -145,16 +145,17 @@ export async function startAudioRecording(
       levels.push(Math.min(1, Math.max(0.08, val / 200)));
     }
     onLevels(levels);
-    rafId = requestAnimationFrame(tick);
   };
 
   const startTime = Date.now();
   recorder.start(100);
-  rafId = requestAnimationFrame(tick);
+  // A timer, not requestAnimationFrame: animation frames nearly stop while the main
+  // window is minimized or covered, and the HUD meter then crawls at about 1 FPS.
+  timerId = setInterval(tick, 1000 / 60);
 
   const cleanup = () => {
     stopped = true;
-    cancelAnimationFrame(rafId);
+    clearInterval(timerId);
     stream.getTracks().forEach((t) => t.stop());
     void audioCtx.close().catch(() => {});
   };
