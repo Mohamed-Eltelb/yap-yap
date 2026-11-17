@@ -1729,13 +1729,13 @@ textarea,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 2.5px;
   width: 48px;
   height: 22px;
 }
 
 .yy-hud-wave span {
-  width: 2.5px;
+  width: 2px;
   border-radius: 2px;
   background: #fff;
   transition: height 40ms linear;

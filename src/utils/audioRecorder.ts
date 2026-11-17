@@ -115,7 +115,8 @@ export async function startAudioRecording(
   analyser.fftSize = 256;
   // Little smoothing so the bars react at once, like a live meter.
   analyser.smoothingTimeConstant = 0.35;
-  analyser.minDecibels = -85;
+  // Room noise sits below this, so the bars fall flat between words.
+  analyser.minDecibels = -72;
   analyser.maxDecibels = -25;
   (filtered?.node ?? source).connect(analyser);
 
@@ -148,7 +149,7 @@ export async function startAudioRecording(
     // Bins 1–20 cover roughly 190 Hz to 3.9 kHz, where speech carries its energy.
     for (let i = 0; i < barCount; i++) {
       const val = dataArray[i + 1] ?? 0;
-      levels.push(Math.min(1, Math.max(0.08, (val / 255) * 1.3)));
+      levels.push(Math.min(1, (val / 255) * 1.3));
     }
     onLevels(levels);
   };
