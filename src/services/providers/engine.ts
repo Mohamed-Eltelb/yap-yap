@@ -235,6 +235,23 @@ async function requestProviderModels(provider: ProviderConfig): Promise<Provider
     next = cursor;
   }
 
+  // OpenRouter's /models leaves out speech-to-text models unless asked for them. Servers that
+  // ignore the filter list the same models again, and one that refuses it changes nothing.
+  if (id === 'custom' && pages.length) {
+    const remaining = deadline - Date.now();
+    const res = remaining > 0
+      ? await performRequest(`${base}/models?output_modalities=transcription`, { headers, timeoutMs: remaining }).catch(() => undefined)
+      : undefined;
+    if (res?.ok) {
+      try {
+        const page = JSON.parse(res.text) as ModelPage;
+        if (page && typeof page === 'object') pages.push(page);
+      } catch {
+        // Not a model list: keep what /models returned.
+      }
+    }
+  }
+
   const models = modelsFromPages(id, pages);
   return { ok: true, message: 'Connected & verified', models };
 }

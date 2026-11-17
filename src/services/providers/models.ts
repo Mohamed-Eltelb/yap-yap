@@ -65,12 +65,15 @@ export function modelsFromPages(id: ProviderId, pages: (ModelPage | CatalogModel
           }
           break;
         default: {
-          if (/(?:whisper|transcrib|transcript|(?:^|[-_])stt(?:$|[-_]))/i.test(model)) {
+          const inputs = row.architecture?.input_modalities;
+          const outputs = row.architecture?.output_modalities;
+          if (
+            (Array.isArray(outputs) && outputs.includes('transcription')) ||
+            /(?:whisper|transcrib|transcript|(?:^|[-_])stt(?:$|[-_]))/i.test(model)
+          ) {
             speech.set(model, name);
             break;
           }
-          const inputs = row.architecture?.input_modalities;
-          const outputs = row.architecture?.output_modalities;
           if (Array.isArray(inputs) && Array.isArray(outputs)) {
             if (inputs.includes('text') && outputs.includes('text')) ai.set(model, name);
           } else if (!nonChat.test(model) && (id !== 'openai' || /^(?:gpt-|o[134](?:-|$)|ft:(?:gpt-|o[134]))/i.test(model))) {

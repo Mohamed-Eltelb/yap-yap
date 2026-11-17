@@ -564,6 +564,40 @@ describe('Multi-Provider Engine', () => {
     expect(await listProviderModels(provider)).toMatchObject({ ok: true, models: { speech, ai: [] } });
   });
 
+  it('asks OpenRouter-style servers for their transcription models, which /models leaves out', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().custom, baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'or-key' };
+    const row = (id: string, inputs: string[], outputs: string[]) => ({ id, architecture: { input_modalities: inputs, output_modalities: outputs } });
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: url.includes('output_modalities=transcription')
+          ? [row('deepgram/nova-3', ['audio'], ['transcription']), row('openai/whisper-1', ['audio'], ['transcription'])]
+          : [row('nvidia/nemotron-omni:free', ['text', 'audio'], ['text'])],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await listProviderModels(provider);
+    expect(result.models?.speech.map((model) => model.id)).toEqual(['deepgram/nova-3', 'openai/whisper-1']);
+    // A chat model that hears audio is not a transcription model.
+    expect(result.models?.ai.map((model) => model.id)).toEqual(['nvidia/nemotron-omni:free']);
+  });
+
+  it('keeps the models a server listed when it refuses the transcription filter', async () => {
+    vi.stubGlobal('window', undefined);
+    const provider = { ...createDefaultProviders().custom, baseUrl: 'http://localhost:8000/v1' };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('?')
+      ? { ok: false, status: 400, text: async () => 'bad query' }
+      : { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'whisper-large-v3' }, { id: 'llama-3' }] }) }));
+
+    expect(await listProviderModels(provider)).toMatchObject({
+      ok: true,
+      models: { speech: [{ id: 'whisper-large-v3' }], ai: [{ id: 'llama-3' }] },
+    });
+  });
+
   it('calls Groq OpenAI-compatible transcription endpoint with dictionary hints', async () => {
     const providers = createDefaultProviders();
     providers.groq.apiKey = 'gsk_test_123';
