@@ -218,7 +218,9 @@ const TENS_WORDS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seve
 // What may sit between a trigger's words. Strictly: spaces, hyphens and the like, but no sentence
 // punctuation, so "My address: 12 October" is not the trigger "my address 12" (as in Wispr Flow).
 // Loosely: anything, for text cleanup may have punctuated differently.
-const BETWEEN = { strict: '[^\\p{L}\\p{M}\\p{N}.,;:!?…،؛؟]', loose: '[^\\p{L}\\p{M}\\p{N}]' };
+// Sentence punctuation in Latin, Arabic, Urdu, Hindi and East Asian scripts.
+const SENTENCE_MARKS = '.,;:!?…،؛؟۔।॥，。、！？；：';
+const BETWEEN = { strict: `[^\\p{L}\\p{M}\\p{N}${SENTENCE_MARKS}]`, loose: '[^\\p{L}\\p{M}\\p{N}]' };
 
 /** English words for a whole number below a million, or undefined for larger ones. */
 function numberWords(value: number): string[] | undefined {
@@ -382,6 +384,12 @@ function arabicNumberValue(word: string): number {
   return ARABIC_NUMBER_WORDS.findIndex((forms) => forms.some((form) => sameArabicLetters(form) === sameArabicLetters(word)));
 }
 
+/** Words that make the number before them bigger, in English and Arabic, as a pattern. */
+function largerNumberWords(): string {
+  const arabic = ['عشر', 'عشرة', 'مية', 'مئة', 'مائة', 'ميت', 'ألف', 'آلاف', 'مليون'].map(arabicLetters);
+  return `(?:hundreds?|thousands?|millions?|${arabic.join('|')})(?![\\p{L}\\p{M}])`;
+}
+
 /** Arabic-Indic and Persian digits, by value, so "١٢" and "12" are the same number. */
 const OTHER_DIGITS = ['٠١٢٣٤٥٦٧٨٩', '۰۱۲۳۴۵۶۷۸۹'];
 
@@ -440,14 +448,17 @@ function triggerPattern(key: string, strict: boolean): string {
     const spelled = [said, year?.join(`${between}+`), arabic].filter(Boolean).join('|');
     // Written digits may follow letters directly ("address12"); number words need a space ("d one", not "done").
     const digitGap = index && !isNumber(words[index - 1]) ? `${between}*` : gap;
-    return `(?:${digitGap}${digits}${spelled ? `|${gap}(?:${spelled})` : ''})`;
+    // A number is not the trigger's number when a bigger number word follows it: "two hundred",
+    // "خمسة عشر" (15), "تلات مية" (300).
+    const notBigger = `(?!${between}+${largerNumberWords()})`;
+    return `(?:${digitGap}${digits}${spelled ? `|${gap}(?:${spelled})` : ''})${notBigger}`;
   }).join('');
 }
 
 /** A whole-word matcher for any of the given triggers, each in its own group. */
 function triggersMatcher(triggers: readonly { key: string; strict: boolean }[]): RegExp {
   return new RegExp(
-    `(?<![\\p{L}\\p{M}\\p{N}])(?:${triggers.map(({ key, strict }) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:،؛؟]*)`,
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${triggers.map(({ key, strict }) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([${SENTENCE_MARKS}]*)`,
     'giu',
   );
 }
@@ -481,7 +492,29 @@ export function snippetsFromCleanup(
   snippets: readonly Snippet[],
   entries: readonly { word: string; heardAs?: string }[] = [],
 ): Snippet[] {
-  return snippets.filter((snippet) => !hasTrigger(rawText, snippet, entries, false) && hasTrigger(cleanedText, snippet, entries, true));
+  return snippets.filter((snippet) => !hasTrigger(rawText, snippet, entries, false)
+    && !punctuatedBesideNumber(rawText, snippet.trigger)
+    && hasTrigger(cleanedText, snippet, entries, true));
+}
+
+/**
+ * Whether the raw text has the words of a trigger with punctuation where its number goes: "Mon
+ * adresse: vingt et un" for "mon adresse 21". The app cannot read every language's numbers, but
+ * it can see the punctuation that says the words were not meant as the trigger.
+ */
+function punctuatedBesideNumber(rawText: string, trigger: string): boolean {
+  const runs = snippetTriggerKey(trigger).split(/\s*\b\d+\b\s*/u);
+  if (runs.length < 2) return false;
+  const marks = `[${SENTENCE_MARKS}]`;
+  return runs.some((run, index) => {
+    if (!run.trim()) return false;
+    const words = triggerPattern(run.trim(), false);
+    const start = '(?<![\\p{L}\\p{M}\\p{N}])';
+    const end = '(?![\\p{L}\\p{M}\\p{N}])';
+    const before = index < runs.length - 1 ? `${start}${words}\\s*${marks}` : '';
+    const after = index > 0 ? `${marks}\\s*${words}${end}` : '';
+    return [before, after].filter(Boolean).some((pattern) => new RegExp(pattern, 'iu').test(rawText));
+  });
 }
 
 /** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */

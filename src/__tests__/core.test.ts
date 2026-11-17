@@ -1925,6 +1925,11 @@ describe('snippets', () => {
     expect(snippetsFromCleanup('My address: 12 October City.', 'My address 12 October City.', [glued])).toEqual([]);
     expect(snippetsFromCleanup('Send it to my address 12.', 'Send it to my address 12.', [glued])).toEqual([]);
     expect(snippetsFromCleanup('hello', 'hello, my address: 12', [glued])).toEqual([]);
+    // Numbers the app cannot read: the punctuation beside them still says it was not meant.
+    const french = { ...link, id: 'fr', trigger: 'mon adresse 21', expansion: '[X]' };
+    expect(snippetsFromCleanup('Mon adresse: vingt et un octobre', 'Mon adresse 21 octobre', [french])).toEqual([]);
+    expect(snippetsFromCleanup('Envoie à mon adresse vingt et un', 'Envoie à mon adresse 21', [french])).toEqual([french]);
+    expect(snippetsFromCleanup('vingt et un, rue', '21 rue', [{ ...french, trigger: '21 rue' }])).toEqual([]);
     // Each snippet loosens on its own: one kept strict does not stop another cleanup re-punctuated.
     expect(expandSnippets('my address, 12 and the zoom link', [glued, link], [], { loose: true }).text).toBe('egypt and the https://zoom.us/j/1');
     // Where cleanup kept the punctuation, only the meant trigger expands.
@@ -1964,6 +1969,14 @@ describe('snippets', () => {
     expect(expandSnippets('على عنوان واحد وعشرين، مصر', [address, twentyOne]).text).toBe('على مثر، مصر');
     expect(expandSnippets('عنوان واحد و عشرون', [twentyOne]).fired).toBe(true);
     expect(expandSnippets('عنوان عشرين', [{ ...twentyOne, trigger: 'عنوان 20' }]).fired).toBe(true);
+    // A bigger number word after it means a different number: 15, 300, two hundred.
+    expect(expandSnippets('عنوان خمسة عشر', [{ ...address, trigger: 'عنوان 5' }]).fired).toBe(false);
+    expect(expandSnippets('عنوان تلات مية', [{ ...address, trigger: 'عنوان 3' }]).fired).toBe(false);
+    expect(expandSnippets('my address two hundred', [{ ...address, trigger: 'my address 2' }]).fired).toBe(false);
+    expect(expandSnippets('my address 2 thousand', [{ ...address, trigger: 'my address 2' }]).fired).toBe(false);
+    expect(expandSnippets('my address two, hundreds of times', [{ ...address, trigger: 'my address 2' }]).fired).toBe(true);
+    // Punctuation from other scripts counts too.
+    expect(snippetsSaidIn('मेरा पता। बारह', [{ ...address, trigger: 'मेरा पता 12' }])).toEqual([]);
     // Alef maqsura, diacritics and tatweel do not matter.
     const on = { ...address, trigger: 'على الهاتف' };
     expect(['علي الهاتف', 'عَلى الهاتِف', 'على الهـاتف'].map((text) => expandSnippets(text, [on]).fired)).toEqual([true, true, true]);
