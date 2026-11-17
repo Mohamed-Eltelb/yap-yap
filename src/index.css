@@ -406,6 +406,12 @@ html.dark .yy-home-insights {
   .yy-dictionary-word:focus-within .yy-dictionary-row-action {
     opacity: 1;
   }
+
+  .yy-dictionary-word:not(:hover):not(:focus-within) .yy-dictionary-actions:not([data-keep]) {
+    width: 0;
+    margin-inline-start: -8px;
+    overflow: hidden;
+  }
 }
 
 .yy-dictionary-checkbox {
@@ -2125,7 +2131,12 @@ textarea,
 /* The spelling a dictionary word replaces, after the word. */
 /* The misspelling a word replaces: struck through in a small tag after the word. */
 .yy-dictionary-heard {
-  margin-inline-start: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: 6px;
   background: var(--bg-subtle);

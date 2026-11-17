@@ -313,11 +313,12 @@ export function DictionaryView({
               return (
                 <li key={entry.id} className="yy-dictionary-word group relative flex min-w-0 items-center gap-2 px-3 rounded-xl" data-selected={checked}>
                   <Icon aria-hidden="true" size={13} className={entry.source === 'auto' ? 'yy-dictionary-auto shrink-0' : 'yy-dictionary-manual shrink-0'} />
-                  <span dir="auto" data-tooltip={entry.heardAs ? `${entry.word}, replaces “${entry.heardAs}”` : entry.word} className="flex-1 min-w-0 truncate text-sm">
-                    {entry.word}
-                    {entry.heardAs && <span className="yy-dictionary-heard"><span className="sr-only">, replaces </span>{entry.heardAs}</span>}
+                  <span data-tooltip={entry.heardAs ? `${entry.word}, replaces “${entry.heardAs}”` : entry.word} className="flex flex-1 min-w-0 items-center gap-1.5 text-sm">
+                    <span dir="auto" className="min-w-0 truncate">{entry.word}</span>
+                    {entry.heardAs && <span dir="auto" className="yy-dictionary-heard"><span className="sr-only">, replaces </span>{entry.heardAs}</span>}
                   </span>
-                  <div className="flex shrink-0 items-center gap-2" onBlur={(event) => {
+                  {/* Hidden actions take no room, so the word gets the whole row until hover or focus. */}
+                  <div className="yy-dictionary-actions flex shrink-0 items-center gap-2" data-keep={selecting || menuOpen || undefined} onBlur={(event) => {
                     if (menuOpen && !event.currentTarget.contains(event.relatedTarget)) setMenuId(null);
                   }}>
                     {!selecting && (
