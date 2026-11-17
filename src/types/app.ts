@@ -61,6 +61,8 @@ export interface HistoryItem {
   providerId: ProviderId;
   model: string;
   audioDataUrl?: string;
+  /** The recording is in the desktop store; fetch it with loadHistoryAudio when needed. */
+  audioSaved?: boolean;
   audioMimeType?: string;
   flagged?: boolean;
   category?: PersonalizationCategory;

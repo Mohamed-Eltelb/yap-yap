@@ -22,6 +22,7 @@ import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindo
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
+import { isAudioId, markSavedAudio } from './audioStore';
 
 let mainWindow: BrowserWindow | null = null;
 let hudWindow: BrowserWindow | null = null;
@@ -522,21 +523,20 @@ app.whenReady().then(() => {
         [k: string]: unknown;
       };
       const audioDir = path.join(app.getPath('userData'), 'audio');
+      // Recordings stay on disk until a dictation is played, downloaded or retried.
       if (Array.isArray(parsed.history) && fs.existsSync(audioDir)) {
-        for (const item of parsed.history) {
-          if (!item.audioDataUrl && item.id) {
-            const audioFile = path.join(audioDir, `${item.id}.txt`);
-            if (fs.existsSync(audioFile)) {
-              try {
-                item.audioDataUrl = fs.readFileSync(audioFile, 'utf8');
-              } catch {
-                // ignore
-              }
-            }
-          }
-        }
+        markSavedAudio(parsed.history, new Set(fs.readdirSync(audioDir)));
       }
       return parsed;
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('store:load-audio', async (_e, id: unknown) => {
+    if (!isAudioId(id)) return null;
+    try {
+      return await fs.promises.readFile(path.join(app.getPath('userData'), 'audio', `${id}.txt`), 'utf8');
     } catch {
       return null;
     }

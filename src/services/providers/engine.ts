@@ -50,6 +50,8 @@ declare global {
       ) => () => void;
       loadStore: () => Promise<Record<string, unknown> | null>;
       saveStore: (data: Record<string, unknown>) => Promise<boolean | undefined>;
+      /** A dictation's recording from the desktop store, or null when there is none. */
+      loadAudio?: (id: string) => Promise<string | null>;
       apiRequest: (req: {
         url: string;
         method: string;

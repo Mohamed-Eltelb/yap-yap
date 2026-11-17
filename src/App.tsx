@@ -32,6 +32,7 @@ import {
   getInitialState,
   loadPersistedState,
   savePersistedState,
+  loadHistoryAudio,
 } from './services/storage';
 import {
   ActiveNav,
@@ -1264,14 +1265,15 @@ export function App() {
   };
 
   const handleRetryHistoryItem = async (item: HistoryItem) => {
-    if (item.audioDataUrl) {
+    const audioDataUrl = await loadHistoryAudio(item);
+    if (audioDataUrl) {
       try {
-        const blob = await dataUrlToBlob(item.audioDataUrl);
+        const blob = await dataUrlToBlob(audioDataUrl);
         await processAudioPipeline(
           blob,
           item.durationMs,
           item.mode,
-          item.audioDataUrl,
+          audioDataUrl,
           item.audioMimeType,
           item.id,
           item.targetLanguage
@@ -1400,8 +1402,9 @@ export function App() {
     showToast(redo ? 'AI edit restored' : 'AI edit undone');
   };
 
-  const handleDownloadAudio = (item: HistoryItem) => {
-    if (!item.audioDataUrl) {
+  const handleDownloadAudio = async (item: HistoryItem) => {
+    const audioDataUrl = await loadHistoryAudio(item);
+    if (!audioDataUrl) {
       showToast('No audio recording stored for this sample entry.');
       return;
     }
@@ -1411,13 +1414,13 @@ export function App() {
       ? 'ogg'
       : 'webm';
     const a = document.createElement('a');
-    a.href = item.audioDataUrl;
+    a.href = audioDataUrl;
     a.download = `yapyap-${item.id}.${ext}`;
     a.click();
   };
 
   const handleExportHistory = () => {
-    const clean = appState.history.map(({ audioDataUrl: _a, ...rest }) => rest);
+    const clean = appState.history.map(({ audioDataUrl: _a, audioSaved: _s, ...rest }) => rest);
     const blob = new Blob([JSON.stringify(clean, null, 2)], {
       type: 'application/json',
     });

@@ -492,6 +492,20 @@ describe('Snippets', () => {
     expect(screen.queryByRole('button', { name: 'Undo AI edit' })).toBeNull();
   });
 
+  it('retries a cancelled dictation with its recording fetched from the desktop store', async () => {
+    seed({ history: [dictation(undefined, { rawText: '', text: '', outcome: 'cancelled', audioSaved: true })] });
+    const loadAudio = vi.fn(async () => 'data:audio/webm;base64,AAAA');
+    (window as unknown as { yapyap: Record<string, unknown> }).yapyap.loadAudio = loadAudio;
+    // The recording comes back as a data URL, which the app turns into audio with fetch.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['audio']))));
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^History$/ }));
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(loadAudio).toHaveBeenCalledWith(lastSaved().history[0].id));
+    await waitFor(() => expect(engine.transcribeAudio).toHaveBeenCalled());
+  });
+
   it('expands with cleanup off and with personalization off', async () => {
     seed({ snippets: [signature], settings: { smartCleanup: false, personalizationEnabled: false } });
     engine.transcribeAudio.mockResolvedValue('talk soon my signature');

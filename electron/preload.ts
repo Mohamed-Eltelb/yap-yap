@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('yapyap', {
   },
   loadStore: () => ipcRenderer.invoke('store:load'),
   saveStore: (data: Record<string, unknown>) => ipcRenderer.invoke('store:save', data),
+  loadAudio: (id: string) => ipcRenderer.invoke('store:load-audio', id) as Promise<string | null>,
   apiRequest: (req: {
     url: string;
     method: string;

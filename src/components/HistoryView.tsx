@@ -1,4 +1,5 @@
 import { SelectMenu } from './SelectMenu';
+import { hasHistoryAudio, loadHistoryAudio } from '../services/storage';
 import { AnswerMarkdown } from './AnswerMarkdown';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -151,8 +152,8 @@ export function HistoryView({
     return Array.from(map.entries());
   }, [filtered]);
 
-  const handleTogglePlay = (item: HistoryItem) => {
-    if (!item.audioDataUrl) return;
+  const handleTogglePlay = async (item: HistoryItem) => {
+    if (!hasHistoryAudio(item)) return;
     if (playingId === item.id && audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       setPlayingId(null);
@@ -161,7 +162,9 @@ export function HistoryView({
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
     }
-    const audio = new Audio(item.audioDataUrl);
+    const source = await loadHistoryAudio(item);
+    if (!source) return;
+    const audio = new Audio(source);
     audioPlayerRef.current = audio;
     setPlayingId(item.id);
     audio.onended = () => setPlayingId(null);
@@ -351,7 +354,7 @@ export function HistoryView({
                     const isEditing = editingId === item.id;
                     const isPlaying = playingId === item.id;
                     const hasAnswer = Boolean(getHistoryAnswer(item));
-                    const needsRetry = !hasAnswer && !item.text.trim() && Boolean(item.audioDataUrl || item.outcome);
+                    const needsRetry = !hasAnswer && !item.text.trim() && (hasHistoryAudio(item) || Boolean(item.outcome));
                     const emptyNote = item.outcome === 'silent'
                       ? ['Audio is silent.', "Yap Yap didn't detect any words in this dictation, so the transcript is empty."]
                       : item.outcome === 'cancelled'
@@ -441,16 +444,16 @@ export function HistoryView({
                               <span>View answer</span>
                             </button>
                           )}
-                          {needsRetry && item.audioDataUrl && (
+                          {needsRetry && hasHistoryAudio(item) && (
                             <button type="button" onClick={() => onRetryItem(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5 text-sm hover:bg-[var(--bg-subtle-hover)]">
                               <RotateCcw className="size-3.5" />
                               Retry
                             </button>
                           )}
-                          {item.audioDataUrl && !needsRetry && !hasAnswer && (
+                          {hasHistoryAudio(item) && !needsRetry && !hasAnswer && (
                             <button
                               type="button"
-                              onClick={() => handleTogglePlay(item)}
+                              onClick={() => void handleTogglePlay(item)}
                               aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
                               className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-active-nav)] hover:text-[var(--text-primary)] transition-colors"
                             >
@@ -505,10 +508,10 @@ export function HistoryView({
                                 onClick={(e) => e.stopPropagation()}
                                 className="absolute right-0 top-9 z-40 w-44 overflow-hidden rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl text-[13px]"
                               >
-                                {hasAnswer && item.audioDataUrl && (
+                                {hasAnswer && hasHistoryAudio(item) && (
                                   <button
                                     type="button"
-                                    onClick={() => { handleTogglePlay(item); setOpenMenuId(null); }}
+                                    onClick={() => { void handleTogglePlay(item); setOpenMenuId(null); }}
                                     className="w-full px-3.5 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2.5"
                                   >
                                     {isPlaying ? <Pause size={14} /> : <Play size={14} />}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getInitialState, loadPersistedState, savePersistedState } from '../services/storage';
+import { getInitialState, hasHistoryAudio, loadHistoryAudio, loadPersistedState, savePersistedState } from '../services/storage';
 import type { HistoryItem } from '../types/app';
 
 type Saved = { history: Array<Partial<HistoryItem> & { audioSaved?: boolean }> };
@@ -10,6 +10,7 @@ function desktopStore(loaded: unknown, result: boolean | undefined = true) {
     yapyap: {
       loadStore: vi.fn(async () => loaded),
       saveStore: vi.fn(async (data: Saved) => { saves.push(data); return result; }),
+      loadAudio: vi.fn(async (id: string) => (id === 'e' ? 'data:audio/webm;base64,EEE' : null)),
     },
   });
   return saves;
@@ -45,5 +46,27 @@ describe('Desktop store saves', () => {
     await savePersistedState(state);
     await savePersistedState(state);
     expect(saves[1].history[0].audioDataUrl).toBe('data:audio/webm;base64,DDD');
+  });
+});
+
+describe('Recordings loaded on demand', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The desktop store sends a marker instead of each recording, so startup does not move them all.
+  it('keeps the marker when saving, so the store never deletes recordings it did not send', async () => {
+    const loaded = { ...getInitialState(), history: [{ ...item('e'), audioSaved: true }] };
+    const saves = desktopStore(loaded);
+    const state = await loadPersistedState();
+    expect(hasHistoryAudio(state.history[0])).toBe(true);
+    await savePersistedState(state);
+    expect(saves[0].history[0]).toMatchObject({ id: 'e', audioSaved: true });
+  });
+
+  it('fetches a stored recording only when asked', async () => {
+    desktopStore(null);
+    expect(await loadHistoryAudio({ ...item('e'), audioSaved: true })).toBe('data:audio/webm;base64,EEE');
+    expect(await loadHistoryAudio(item('f', 'data:audio/webm;base64,FFF'))).toBe('data:audio/webm;base64,FFF');
+    expect(await loadHistoryAudio(item('g'))).toBeUndefined();
+    expect(hasHistoryAudio(item('g'))).toBe(false);
   });
 });

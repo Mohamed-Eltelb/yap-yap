@@ -299,6 +299,18 @@ export function withoutSavedAudio(state: PersistedAppState): PersistedAppState {
   };
 }
 
+/** Whether a dictation has a recording, in memory or in the desktop store. */
+export function hasHistoryAudio(item: HistoryItem): boolean {
+  return Boolean(item.audioDataUrl || item.audioSaved);
+}
+
+/** A dictation's recording, fetched from the desktop store when it is not in memory. */
+export async function loadHistoryAudio(item: HistoryItem): Promise<string | undefined> {
+  if (item.audioDataUrl) return item.audioDataUrl;
+  if (!item.audioSaved || typeof window === 'undefined') return undefined;
+  return (await window.yapyap?.loadAudio?.(item.id)) ?? undefined;
+}
+
 export async function loadPersistedState(): Promise<PersistedAppState> {
   try {
     let raw: Partial<PersistedAppState> | null = null;
