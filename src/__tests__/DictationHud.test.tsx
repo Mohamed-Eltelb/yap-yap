@@ -86,3 +86,8 @@ it('maps HUD states to pill states', () => {
   expect(pillStateFor({ status: 'armed', mode: 'dictate', levels: [], shortcutList: [] })).toBeUndefined();
   expect(pillStateFor({ status: 'result', mode: 'dictate', levels: [] })).toBeUndefined();
 });
+
+it('draws a countdown ring around Undo', () => {
+  const html = renderHud({ status: 'cancelled', mode: 'dictate', levels: [] });
+  expect(html).toMatch(/<button[^>]*>.*class="yy-hud-undo-ring".*Undo<\/button>|<button[^>]*>Undo.*class="yy-hud-undo-ring".*<\/button>/s);
+});

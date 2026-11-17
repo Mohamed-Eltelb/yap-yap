@@ -870,6 +870,16 @@ export function App() {
   const cancelTimerRef = useRef<number | undefined>(undefined);
   const recordingSinceRef = useRef(0);
 
+  // The HUD runs the Undo countdown itself (pausing while hovered) and dismisses the notice
+  // when it ends. This only clears it if the HUD never got to, say in a hidden window.
+  const scheduleCancelBackstop = useCallback(() => {
+    window.clearTimeout(cancelTimerRef.current);
+    cancelTimerRef.current = window.setTimeout(() => {
+      cancelledRef.current = null;
+      setHud((current) => current.status === 'cancelled' ? { ...current, status: 'idle' } : current);
+    }, 60_000);
+  }, []);
+
   const cancelRecording = useCallback(() => {
     // Cancelling a dictation still being processed stops it before it pastes; Undo picks it up again.
     if (hudRef.current.status === 'processing') {
@@ -882,11 +892,7 @@ export function App() {
       }
       cancelledRef.current = pending;
       setHud({ status: 'cancelled', mode: hudRef.current.mode, levels: Array(20).fill(0.1) });
-      window.clearTimeout(cancelTimerRef.current);
-      cancelTimerRef.current = window.setTimeout(() => {
-        cancelledRef.current = null;
-        setHud((current) => current.status === 'cancelled' ? { ...current, status: 'idle' } : current);
-      }, 5000);
+      scheduleCancelBackstop();
       return;
     }
     retryAudioRef.current = null;
@@ -931,12 +937,8 @@ export function App() {
       return [blob, durationMs, mode, dataUrl, mimeType, id, selectedTarget, allowAutoPaste] as Parameters<typeof processAudioPipeline>;
     }).catch(() => null);
     setHud({ status: 'cancelled', mode, levels: Array(20).fill(0.1) });
-    window.clearTimeout(cancelTimerRef.current);
-    cancelTimerRef.current = window.setTimeout(() => {
-      cancelledRef.current = null;
-      setHud((current) => current.status === 'cancelled' ? { ...current, status: 'idle' } : current);
-    }, 5000);
-  }, [appState.settings.activeSttProvider, appState.settings.translationTargets, restoreAudioMute]);
+    scheduleCancelBackstop();
+  }, [appState.settings.activeSttProvider, appState.settings.translationTargets, restoreAudioMute, scheduleCancelBackstop]);
 
   const undoCancel = useCallback(async () => {
     const pending = cancelledRef.current;
@@ -1083,6 +1085,11 @@ export function App() {
 
   const dismissHud = useCallback(() => {
     retryAudioRef.current = null;
+    // A Transcript cancelled notice that ran out can't be undone any more.
+    if (hudRef.current.status === 'cancelled') {
+      cancelledRef.current = null;
+      window.clearTimeout(cancelTimerRef.current);
+    }
     setHud((current) => ({ ...current, status: 'idle' }));
   }, []);
 

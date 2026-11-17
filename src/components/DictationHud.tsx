@@ -220,9 +220,19 @@ export function DictationHud({
         </div>
       )}
       {hud.status === 'cancelled' && (
-        <div className="yy-hud-cancelled" role="status">
+        <div
+          className="yy-hud-cancelled yy-hud-countdown"
+          role="status"
+          onAnimationEnd={(event) => {
+            // The ring runs down, the notice fades out, then it goes. Hovering pauses both.
+            if (event.animationName === 'yy-hud-notice-out') onDismissResult();
+          }}
+        >
           <span>Transcript cancelled</span>
-          <button type="button" onClick={onUndo}>Undo</button>
+          <button type="button" onClick={onUndo}>
+            <svg className="yy-hud-undo-ring" aria-hidden="true"><rect pathLength={100} /></svg>
+            Undo
+          </button>
         </div>
       )}
       {hud.status === 'result' && hud.mode === 'ask' && (

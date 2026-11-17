@@ -66,3 +66,22 @@ it('keeps the Thinking pill in place when the still-processing notice appears', 
   expect(container.querySelector('.yy-hud-busy')).not.toBeNull();
   expect(container.querySelector('.yy-hud-pill')).toBe(pill);
 });
+
+it('dismisses Transcript cancelled once its countdown has faded it out', () => {
+  const onDismiss = vi.fn();
+  const noop = vi.fn();
+  const { container } = render(
+    <DictationHud hud={{ status: 'cancelled', mode: 'dictate', levels: [] }} onStop={noop} onCancel={noop} onUndo={noop}
+      onRetry={noop} onSelectTarget={noop} onEditTargets={noop} onCopyResult={noop} onDismissResult={onDismiss} />,
+  );
+  const notice = container.querySelector('.yy-hud-cancelled')!;
+  // jsdom has no AnimationEvent, so React listens for the prefixed name there and the
+  // animation name is set by hand.
+  const animationEnd = (animationName: string) => act(() => {
+    notice.dispatchEvent(Object.assign(new Event('webkitAnimationEnd', { bubbles: true }), { animationName }));
+  });
+  animationEnd('yy-hud-rise');
+  expect(onDismiss).not.toHaveBeenCalled();
+  animationEnd('yy-hud-notice-out');
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+});
