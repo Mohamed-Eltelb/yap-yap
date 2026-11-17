@@ -248,7 +248,7 @@ function updateHudWindow(): void {
   width = Math.min(width, workArea.width);
   height = Math.min(height, workArea.height - 12);
   const x = workArea.x + Math.round((workArea.width - width) / 2);
-  const y = workArea.y + workArea.height - height - 12;
+  const y = workArea.y + workArea.height - height - 4;
   const bounds = hudWindow.getBounds();
   if (bounds.width !== width || bounds.height !== height || bounds.x !== x || bounds.y !== y) {
     hudWindow.setBounds({ x, y, width, height });
