@@ -1860,6 +1860,16 @@ describe('snippets', () => {
     expect(expandSnippets('Send it to office address 215.', [office]).fired).toBe(false);
   });
 
+  it('matches a trigger that joins letters and digits however they are written', () => {
+    const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };
+    expect(snippetTriggerKey('my address12')).toBe('my address 12');
+    expect(expandSnippets('My address, 12.', [glued]).text).toBe('egypt.');
+    expect(expandSnippets('my address twelve', [glued]).text).toBe('egypt');
+    expect(expandSnippets('my address12', [glued]).text).toBe('egypt');
+    expect(expandSnippets('my address 123', [glued]).fired).toBe(false);
+    expect(wholeSnippet('My address, 12.', [glued])?.id).toBe('s7');
+  });
+
   it('matches whole words only and never expands an expansion again', () => {
     expect(expandSnippets('The zoom linkage broke.', snippets)).toMatchObject({ text: 'The zoom linkage broke.', fired: false });
     expect(expandSnippets('a b', [{ ...link, trigger: 'a', expansion: 'b' }, { ...link, id: 's4', trigger: 'b', expansion: 'c' }]).text).toBe('b c');

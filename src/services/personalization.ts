@@ -275,7 +275,8 @@ function foldNumberWords(words: string[]): string[] {
 
 /** A trigger's words, lowercase, without punctuation, numbers as digits: how it is compared. */
 export function snippetTriggerKey(trigger: string): string {
-  return foldNumberWords(trigger.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).join(' ');
+  // "address12" is said as "address 12", so letters and digits are separate words.
+  return foldNumberWords(trigger.toLowerCase().match(/\p{N}+|[\p{L}\p{M}]+/gu) ?? []).join(' ');
 }
 
 /** Saved snippets, keeping valid ones only: a trigger with a letter or digit, used once. */
@@ -297,16 +298,21 @@ export function parseSnippets(value: unknown): Snippet[] {
 
 /** Words of a trigger as a pattern: any spacing or punctuation between them, whole words only. */
 function triggerPattern(key: string): string {
-  return key.split(' ').map((word) => {
+  const words = key.split(' ');
+  return words.map((word, index) => {
+    // Letters and digits may also be written together ("address12"), with no space between.
+    const gap = index && /^\d+$/u.test(word) !== /^\d+$/u.test(words[index - 1])
+      ? '[^\\p{L}\\p{M}\\p{N}]*'
+      : index ? NUMBER_SEPARATOR : '';
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
     // A number matches as digits or as its words, with or without "and" after hundred or thousand.
     const spoken = /^\d+$/u.test(word) ? numberWords(Number(word)) : undefined;
-    if (!spoken) return escaped;
-    const words = spoken.map((part, index) => index && /^(?:hundred|thousand)$/u.test(spoken[index - 1]) && index < spoken.length
+    if (!spoken) return gap + escaped;
+    const said = spoken.map((part, at) => at && /^(?:hundred|thousand)$/u.test(spoken[at - 1])
       ? `(?:and${NUMBER_SEPARATOR})?${part}`
       : part).join(NUMBER_SEPARATOR);
-    return `(?:${escaped}|${words})`;
-  }).join(NUMBER_SEPARATOR);
+    return `${gap}(?:${escaped}|${said})`;
+  }).join('');
 }
 
 /** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */
