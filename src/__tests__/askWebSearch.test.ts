@@ -142,6 +142,29 @@ describe('Ask anything web search', () => {
     expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
   });
 
+  it('asks again without search when the search reply has no answer', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply({ output: [{ type: 'web_search_call' }] }))
+      .mockResolvedValueOnce(reply({ choices: [{ message: { content: 'Paris.' } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm('Capital of France?', 'ask', provider('openai'), options);
+
+    expect(out.answer).toBe('Paris.');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.openai.com/v1/chat/completions');
+  });
+
+  it('counts OpenRouter searches from its usage report, and leaves other spacing alone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({
+      choices: [{ message: { content: 'Il fait 20° ! ([meteo.fr](https://meteo.fr))' } }],
+      usage: { server_tool_use_details: { web_search_requests: 1 } },
+    })));
+
+    const out = await processTranscriptWithLlm('Quel temps ?', 'ask', provider('custom', { baseUrl: 'https://openrouter.ai/api/v1' }), options);
+
+    expect(out).toEqual({ finalText: 'Il fait 20° !', answer: 'Il fait 20° !', searchedWeb: true });
+  });
+
   it('still reports a bad key instead of retrying', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ error: { message: 'invalid x-api-key' } }, 401)));
     await expect(processTranscriptWithLlm('Hi?', 'ask', provider('anthropic'), options)).rejects.toThrow('invalid x-api-key');

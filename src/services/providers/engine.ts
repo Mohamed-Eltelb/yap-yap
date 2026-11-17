@@ -906,10 +906,10 @@ function anthropicSearchTool(model: string): string {
 
 /** Citation marks some providers leave in the text: Groq's 【1†L2-L5】 and inline ([site](url)) links. */
 function withoutCitations(text: string): string {
+  // The space before a mark goes with it, so "at $5 【1】." becomes "at $5." and nothing else moves.
   return text
-    .replace(/【[^】]*】/g, '')
-    .replace(/ ?\(\[[^\]]*\]\([^)]*\)\)/g, '')
-    .replace(/[ \t]+([.,;:!?])/g, '$1')
+    .replace(/[ \t]*【[^】]*】/g, '')
+    .replace(/[ \t]*\(\[[^\]]*\]\([^)]*\)\)/g, '')
     .trim();
 }
 
@@ -938,13 +938,15 @@ async function callLlmWithWebSearch(
   if (!kind) return { text: await callLlm(provider, systemPrompt, userPrompt) };
   try {
     const out = await requestWithWebSearch(kind, provider, systemPrompt, userPrompt);
-    return out.searchedWeb ? { text: withoutCitations(out.text), searchedWeb: true } : { text: out.text };
+    const text = out.searchedWeb ? withoutCitations(out.text) : out.text;
+    if (text) return out.searchedWeb ? { text, searchedWeb: true } : { text };
+    console.warn(`Ask anything: ${provider.name} returned no answer with web search on; asking again without it.`);
   } catch (err) {
-    if (err instanceof SearchRequestError && searchMayBeUnsupported(err.status)) {
-      return { text: await callLlm(provider, systemPrompt, userPrompt) };
-    }
-    throw err;
+    if (!(err instanceof SearchRequestError && searchMayBeUnsupported(err.status))) throw err;
+    // Kept in the log so a rejected search can be told apart from a model that chose not to search.
+    console.warn(`Ask anything: ${provider.name} rejected web search (${err.status}: ${err.message}); answering without it.`);
   }
+  return { text: await callLlm(provider, systemPrompt, userPrompt) };
 }
 
 async function requestWithWebSearch(
@@ -1041,17 +1043,19 @@ async function requestWithWebSearch(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
+    // With a tool listed and no tool_choice, the model decides whether to search.
     tools: [{ type: kind === 'groq' ? 'browser_search' : 'openrouter:web_search' }],
-    tool_choice: 'auto',
     ...(kind === 'groq' ? { reasoning_effort: 'low' } : {}),
   }) as {
     choices?: Array<{
       message?: { content?: string; executed_tools?: unknown[]; annotations?: Array<{ type?: string }> };
     }>;
+    usage?: { server_tool_use_details?: { web_search_requests?: number } };
   };
   const message = json.choices?.[0]?.message;
   const text = (message?.content ?? '').trim();
   const searchedWeb = !!message?.executed_tools?.length
+    || !!json.usage?.server_tool_use_details?.web_search_requests
     || !!message?.annotations?.some((a) => a.type === 'url_citation')
     || /【[^】]*†[^】]*】/.test(text);
   return { text, searchedWeb };
