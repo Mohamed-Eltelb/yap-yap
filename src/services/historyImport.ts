@@ -70,6 +70,7 @@ export function parseHistoryImport(source: string, defaultProvider: ProviderId):
       providerId: Object.hasOwn(PROVIDER_CATALOG, item.providerId) ? item.providerId : defaultProvider,
       model: typeof item.model === 'string' ? item.model : 'imported',
       answer: typeof item.answer === 'string' ? item.answer : undefined,
+      searchedWeb: item.searchedWeb === true || undefined,
       targetLanguage: typeof item.targetLanguage === 'string' ? item.targetLanguage : undefined,
       flagged: item.flagged === true,
       category: categories.has(item.category) ? item.category : classifyTranscriptCategory(text, mode),

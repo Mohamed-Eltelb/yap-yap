@@ -18,6 +18,7 @@ import {
   Redo2,
   RotateCcw,
   Sparkles,
+  Globe,
   Trash2,
   Undo2,
   Upload,
@@ -651,7 +652,9 @@ export function HistoryView({
           <section className="mt-2 min-h-[min(300px,45dvh)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)]">
             <header className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-3">
               <Sparkles aria-hidden="true" className="size-4" />
-              <h3 className="flex-1 font-semibold">Answer</h3>
+              <h3 className="font-semibold">Answer</h3>
+              {answerItem?.searchedWeb && <span className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)]"><Globe aria-hidden="true" className="size-3.5" />Searched the web</span>}
+              <span className="flex-1" />
               {answer && <button type="button" aria-label="Copy answer" onClick={() => onCopyText(answer)} className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>}
             </header>
             <AnswerMarkdown text={answer ?? undefined} className="px-4 py-3 text-sm leading-relaxed select-text" />

@@ -2238,6 +2238,15 @@ textarea,
   margin-left: auto;
 }
 
+.yy-hud-answer-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .yy-hud-message p {
   overflow: auto;
   overflow-wrap: anywhere;

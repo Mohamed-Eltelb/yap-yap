@@ -54,6 +54,8 @@ export interface HistoryItem {
   rawText: string;
   text: string;
   answer?: string;
+  /** The Ask anything answer used a web search. */
+  searchedWeb?: boolean;
   targetLanguage?: string;
   durationMs: number;
   wordCount: number;

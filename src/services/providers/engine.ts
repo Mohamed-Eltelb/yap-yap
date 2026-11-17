@@ -621,7 +621,7 @@ export async function processTranscriptWithLlm(
     /** Snippet trigger phrases. Yap Yap swaps them for saved text afterwards, so they must stay word for word. */
     keepPhrases?: string[];
   }
-): Promise<{ finalText: string; answer?: string }> {
+): Promise<{ finalText: string; answer?: string; searchedWeb?: boolean }> {
   if (!transcript.trim()) {
     return { finalText: '' };
   }
@@ -769,13 +769,15 @@ export async function processTranscriptWithLlm(
       'Provide a concise, clear, ready-to-paste answer with no preamble. ' +
       'Answer in the same language the user spoke in, unless they ask for another language. ' +
       'Write plain text with no Markdown: no asterisks, pound signs, or backticks. Use simple line breaks, and "-" bullets only when a list is clearer.' +
+      (webSearchFor(provider)
+        ? ` Today is ${new Date().toDateString()}. You can search the web. Search only when the answer depends on current information (news, prices, scores, weather, schedules, recent releases) or on a specific fact you are not sure of. Otherwise answer from what you know, without searching. Do not include links, source names, or citation marks unless the user asks for them.`
+        : '') +
       dictClause;
+    const { text, searchedWeb } = await callLlmWithWebSearch(provider, systemPrompt, userPrompt);
+    return { finalText: text, answer: text, searchedWeb };
   }
 
   const result = await callLlm(provider, systemPrompt, userPrompt);
-  if (mode === 'ask') {
-    return { finalText: result, answer: result };
-  }
   // Some models echo the wrapper despite the instruction.
   return { finalText: result.replace(/^\s*<transcript>\s*|\s*<\/transcript>\s*$/g, '') };
 }
@@ -872,6 +874,187 @@ async function callLlm(
   }
 
   throw new Error(`LLM processing not supported for ${provider.name}`);
+}
+
+/** The provider's built-in web search for this model, or undefined when it has none. */
+export type WebSearchKind = 'anthropic' | 'openai' | 'gemini' | 'groq' | 'openrouter';
+
+export function webSearchFor(provider: ProviderConfig): WebSearchKind | undefined {
+  const model = (provider.llmModel || PROVIDER_CATALOG[provider.id].llmModels[0]?.id || '').toLowerCase();
+  switch (provider.id) {
+    case 'anthropic':
+    case 'openai':
+    case 'gemini':
+      return provider.id;
+    case 'groq':
+      // Groq's browser search runs only on its GPT-OSS models.
+      return model.startsWith('openai/gpt-oss') ? 'groq' : undefined;
+    case 'custom':
+      // Local servers and other gateways have no search of their own.
+      return /(^|\.|\/\/)openrouter\.ai(\/|:|$)/i.test(provider.baseUrl ?? '') ? 'openrouter' : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** Anthropic's newer search tool runs on these models; Haiku and older models take the basic one. */
+function anthropicSearchTool(model: string): string {
+  return /fable|mythos|opus-(5|4-[678])|sonnet-(5|4-6)/.test(model.toLowerCase())
+    ? 'web_search_20260209'
+    : 'web_search_20250305';
+}
+
+/** Citation marks some providers leave in the text: Groq's 【1†L2-L5】 and inline ([site](url)) links. */
+function withoutCitations(text: string): string {
+  return text
+    .replace(/【[^】]*】/g, '')
+    .replace(/ ?\(\[[^\]]*\]\([^)]*\)\)/g, '')
+    .replace(/[ \t]+([.,;:!?])/g, '$1')
+    .trim();
+}
+
+/** A failure that may mean this key, model, or endpoint cannot search, so the request is worth sending without it. */
+function searchMayBeUnsupported(status: number): boolean {
+  return status === 400 || status === 403 || status === 404 || status === 422;
+}
+
+class SearchRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/**
+ * Ask anything: sends the request with the provider's built-in web search, which the model uses
+ * only when it decides it needs to. Providers and models without one answer as before. If the
+ * provider rejects the search, the request is sent again without it.
+ */
+async function callLlmWithWebSearch(
+  provider: ProviderConfig,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<{ text: string; searchedWeb?: boolean }> {
+  const kind = webSearchFor(provider);
+  if (!kind) return { text: await callLlm(provider, systemPrompt, userPrompt) };
+  try {
+    const out = await requestWithWebSearch(kind, provider, systemPrompt, userPrompt);
+    return out.searchedWeb ? { text: withoutCitations(out.text), searchedWeb: true } : { text: out.text };
+  } catch (err) {
+    if (err instanceof SearchRequestError && searchMayBeUnsupported(err.status)) {
+      return { text: await callLlm(provider, systemPrompt, userPrompt) };
+    }
+    throw err;
+  }
+}
+
+async function requestWithWebSearch(
+  kind: WebSearchKind,
+  provider: ProviderConfig,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<{ text: string; searchedWeb: boolean }> {
+  const meta = PROVIDER_CATALOG[provider.id];
+  const key = provider.apiKey.trim();
+  const base = cleanBaseUrl(provider.baseUrl, meta.defaultBaseUrl ?? '');
+  const model = provider.llmModel || meta.llmModels[0]?.id || '';
+  const send = async (url: string, headers: Record<string, string>, body: unknown) => {
+    const res = await performRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+    if (!res.ok) throw new SearchRequestError(extractErrorMessage(res.text, res.status), res.status);
+    return JSON.parse(res.text) as unknown;
+  };
+  const bearer: Record<string, string> = key ? { Authorization: `Bearer ${key}` } : {};
+
+  if (kind === 'anthropic') {
+    type Block = { type: string; text?: string; name?: string };
+    const messages: Array<{ role: 'user' | 'assistant'; content: string | Block[] }> = [{ role: 'user', content: userPrompt }];
+    const blocks: Block[] = [];
+    // A long search can pause the turn; sending it back lets the model carry on.
+    for (let round = 0; round < 3; round++) {
+      const json = await send(`${base}/messages`, {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      }, {
+        model: model || 'claude-haiku-5-5',
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages,
+        tools: [{ type: anthropicSearchTool(model), name: 'web_search', max_uses: 3 }],
+      }) as { content?: Block[]; stop_reason?: string };
+      blocks.push(...(json.content ?? []));
+      if (json.stop_reason !== 'pause_turn') break;
+      messages.push({ role: 'assistant', content: json.content ?? [] });
+    }
+    const searchedWeb = blocks.some((b) => b.type === 'server_tool_use' && b.name === 'web_search');
+    // Text written before or between searches ("Let me look that up") is not the answer.
+    const lastTool = blocks.map((b) => b.type !== 'text').lastIndexOf(true);
+    const text = blocks.slice(lastTool + 1).map((b) => b.text ?? '').join('').trim();
+    return { text, searchedWeb };
+  }
+
+  if (kind === 'openai') {
+    const body: Record<string, unknown> = {
+      model: model || 'gpt-6-luna',
+      instructions: systemPrompt,
+      input: userPrompt,
+      tools: [{ type: 'web_search' }],
+    };
+    if (!omitsSamplingTemperature(body.model as string)) body.temperature = 0.2;
+    const json = await send(`${base}/responses`, bearer, body) as {
+      output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }>;
+    };
+    const output = json.output ?? [];
+    const messages = output.filter((item) => item.type === 'message');
+    const text = (messages[messages.length - 1]?.content ?? [])
+      .filter((part) => part.type === 'output_text')
+      .map((part) => part.text ?? '')
+      .join('')
+      .trim();
+    return { text, searchedWeb: output.some((item) => item.type === 'web_search_call') };
+  }
+
+  if (kind === 'gemini') {
+    const json = await send(
+      `${base}/models/${encodeURIComponent(model || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(key)}`,
+      {},
+      {
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        tools: [{ google_search: {} }],
+      }
+    ) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+        groundingMetadata?: { webSearchQueries?: string[]; groundingChunks?: unknown[] };
+      }>;
+    };
+    const candidate = json.candidates?.[0];
+    const text = (candidate?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim();
+    const grounding = candidate?.groundingMetadata;
+    return { text, searchedWeb: !!(grounding?.webSearchQueries?.length || grounding?.groundingChunks?.length) };
+  }
+
+  // Groq and OpenRouter: Chat Completions with a search tool the provider runs itself.
+  const json = await send(`${base}/chat/completions`, bearer, {
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    tools: [{ type: kind === 'groq' ? 'browser_search' : 'openrouter:web_search' }],
+    tool_choice: 'auto',
+    ...(kind === 'groq' ? { reasoning_effort: 'low' } : {}),
+  }) as {
+    choices?: Array<{
+      message?: { content?: string; executed_tools?: unknown[]; annotations?: Array<{ type?: string }> };
+    }>;
+  };
+  const message = json.choices?.[0]?.message;
+  const text = (message?.content ?? '').trim();
+  const searchedWeb = !!message?.executed_tools?.length
+    || !!message?.annotations?.some((a) => a.type === 'url_citation')
+    || /【[^】]*†[^】]*】/.test(text);
+  return { text, searchedWeb };
 }
 
 /** Reads the first JSON object in a model reply, ignoring code fences and reasoning text. */

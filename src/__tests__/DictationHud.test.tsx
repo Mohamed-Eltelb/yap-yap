@@ -24,6 +24,13 @@ it('renders Markdown formatting in an Ask answer', () => {
   expect(html).toContain('<p><strong>Second</strong> paragraph.</p>');
 });
 
+it('marks an Ask answer that searched the web', () => {
+  const searched = renderHud({ status: 'result', mode: 'ask', levels: [], resultText: 'Answer.', searchedWeb: true });
+  const known = renderHud({ status: 'result', mode: 'ask', levels: [], resultText: 'Answer.' });
+  expect(searched).toContain('Searched the web');
+  expect(known).not.toContain('Searched the web');
+});
+
 function renderHud(hud: Parameters<typeof DictationHud>[0]['hud']) {
   const noop = vi.fn();
   return renderToStaticMarkup(

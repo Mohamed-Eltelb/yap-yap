@@ -496,6 +496,7 @@ export function App() {
 
         let finalText = rawText;
         let answer: string | undefined;
+        let searchedWeb: boolean | undefined;
         let learnStyle: (() => Promise<WritingSample | undefined>) | undefined;
         /** Learns from the casing and punctuation the user fixes in the pasted text. */
         let learnFromEdit: ((edited: string, pasted: string) => Promise<WritingSample | undefined>) | undefined;
@@ -599,6 +600,7 @@ export function App() {
             if (dropped()) return;
             finalText = processed.finalText || rawText;
             answer = processed.answer;
+            searchedWeb = processed.searchedWeb;
             if (mode !== 'dictate') {
               usedProviderId = llmProvider.id;
               usedModel = llmProvider.llmModel;
@@ -662,6 +664,7 @@ export function App() {
                     plainText,
                     aiText: undefined,
                     answer,
+                    searchedWeb,
                     wordCount: words,
                     wpm,
                     providerId: usedProviderId,
@@ -686,6 +689,7 @@ export function App() {
             text: finalText,
             plainText,
             answer,
+            searchedWeb,
             targetLanguage:
               mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
             durationMs,
@@ -799,6 +803,7 @@ export function App() {
           levels: Array(20).fill(0.1),
           resultText: finalText,
           questionText: mode === 'ask' ? rawText : undefined,
+          searchedWeb,
         });
       } catch (err) {
         if (dropped()) return;
@@ -1342,6 +1347,7 @@ export function App() {
                 ...h,
                 text: nextText,
                 answer: processed.answer ?? h.answer,
+                searchedWeb: processed.answer ? processed.searchedWeb : h.searchedWeb,
                 wordCount: nextWords,
                 wpm: nextWpm,
                 providerId: llmId,

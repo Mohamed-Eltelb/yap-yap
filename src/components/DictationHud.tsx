@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronsUpDown, Copy, Mic, Pause, Play, Sparkles, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Copy, Globe, Mic, Pause, Play, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
 import { YapLogo } from './YapLogo';
@@ -10,6 +10,8 @@ export interface HudState {
   levels: number[];
   resultText?: string;
   questionText?: string;
+  /** The Ask anything answer used a web search. */
+  searchedWeb?: boolean;
   errorText?: string;
   targets?: string[];
   targetLanguage?: string;
@@ -348,6 +350,7 @@ export function DictationHud({
           )}
           <div className="yy-hud-answer-card">
             <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
+              {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}
               {resultText && <button type="button" className="yy-hud-icon" aria-label="Copy answer" onClick={() => onCopyResult(resultText)}><Copy size={15} /></button>}
             </header>
             <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
