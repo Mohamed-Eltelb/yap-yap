@@ -2185,6 +2185,8 @@ textarea,
 }
 
 .yy-style-choice {
+  /* Keeps the hidden radio inside the card: placed far away, focusing it scrolled the page. */
+  position: relative;
   display: grid;
   gap: 2px;
   padding: 8px 10px;
