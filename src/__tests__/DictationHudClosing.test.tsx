@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { DictationHud, PILL_CLOSE_MS, type HudState } from '../components/DictationHud';
+import { DictationHud, PILL_CLOSE_MS, THINKING_WORD_MS, type HudState } from '../components/DictationHud';
 
 function Hud({ status }: { status: HudState['status'] }) {
   const noop = vi.fn();
@@ -98,4 +98,29 @@ it('pauses and resumes from the pill buttons', () => {
   rerender(<DictationHud hud={{ status: 'recording', mode: 'dictate', levels: [], paused: true }} {...props} />);
   act(() => { getByLabelText('Resume recording').click(); });
   expect(onResume).toHaveBeenCalledTimes(1);
+});
+
+const label = (container: HTMLElement) => container.querySelector('.yy-hud-pill-label')?.textContent;
+
+it('starts on Thinking and moves through other words while processing', () => {
+  const { container } = render(<Hud status="processing" />);
+  expect(label(container)).toBe('Thinking');
+  const seen = new Set<string>();
+  let last = 'Thinking';
+  for (let i = 0; i < 6; i += 1) {
+    act(() => { vi.advanceTimersByTime(THINKING_WORD_MS); });
+    const word = label(container)!;
+    expect(word).not.toBe(last);
+    seen.add(word);
+    last = word;
+  }
+  expect(seen.size).toBeGreaterThan(2);
+});
+
+it('starts on Thinking again for the next dictation', () => {
+  const { container, rerender } = render(<Hud status="processing" />);
+  act(() => { vi.advanceTimersByTime(THINKING_WORD_MS * 2); });
+  rerender(<Hud status="recording" />);
+  rerender(<Hud status="processing" />);
+  expect(label(container)).toBe('Thinking');
 });

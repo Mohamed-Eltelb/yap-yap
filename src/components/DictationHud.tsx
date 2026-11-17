@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Copy, Mic, Pause, Play, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
@@ -73,6 +73,48 @@ const pauseIcon = (
   </svg>
 );
 
+/** How long each word shows in the Thinking pill. */
+export const THINKING_WORD_MS = 2400;
+/** The Thinking pill starts on "Thinking", then moves through these in random order. */
+const thinkingWords = [
+  'Transcribing', 'Yapping', 'Untangling', 'Polishing', 'Wordsmithing', 'Decoding',
+  'Tidying up', 'Punctuating', 'Pondering', 'Proofreading', 'Distilling', 'Unmumbling',
+];
+/** The Thinking pill is never narrower than this, so short words do not shrink it. */
+const THINKING_MIN_WIDTH = 100;
+/** Room around the word inside the Thinking pill. */
+const THINKING_PADDING = 40;
+
+function nextThinkingWord(current: string): string {
+  const choices = thinkingWords.filter((word) => word !== current);
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+/** The Thinking pill's word. It changes while `active`, and starts over on "Thinking" each time. */
+function ThinkingLabel({ active, onWidth }: { active: boolean; onWidth: (width: number) => void }) {
+  const [word, setWord] = useState('Thinking');
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (active) setWord('Thinking');
+  }
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setWord(nextThinkingWord), THINKING_WORD_MS);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  const wordRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (active && wordRef.current) onWidth(wordRef.current.offsetWidth);
+  }, [active, word, onWidth]);
+  return (
+    <span className="yy-hud-pill-label" aria-hidden="true">
+      {/* A new key remounts the word, so each one slides in. */}
+      <span key={word} ref={wordRef} className="yy-hud-pill-word">{word}</span>
+    </span>
+  );
+}
+
 export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
 
 /** The pill shape a HUD state uses, or nothing when that state shows another screen. */
@@ -116,6 +158,7 @@ export function DictationHud({
 
   // When the HUD closes from a pill, the pill shrinks out before it goes. This is
   // worked out during render, so the same pill element stays and its shrink animates.
+  const [thinkingWordWidth, setThinkingWordWidth] = useState(0);
   const livePill = pillStateFor(hud);
   const [closing, setClosing] = useState(false);
   const [shown, setShown] = useState({ pill: livePill, status: hud.status });
@@ -232,7 +275,11 @@ export function DictationHud({
           className="yy-hud-pill"
           data-state={pill}
           role={pill === 'recording' ? 'group' : 'status'}
-          aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : undefined}
+          aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : pill === 'thinking' ? 'Thinking' : undefined}
+          // The Thinking pill fits its current word; the other shapes have fixed widths in CSS.
+          style={pill === 'thinking' && thinkingWordWidth
+            ? { width: Math.max(THINKING_MIN_WIDTH, thinkingWordWidth + THINKING_PADDING) }
+            : undefined}
         >
           <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel} {...reach(live)}>
             <X size={16} aria-hidden="true" />
@@ -261,7 +308,7 @@ export function DictationHud({
               <Play size={15} aria-hidden="true" />
             </button>
           </div>
-          <span className="yy-hud-pill-label" aria-hidden={pill === 'thinking' ? undefined : true}>Thinking</span>
+          <ThinkingLabel active={pill === 'thinking'} onWidth={setThinkingWordWidth} />
         </div>
       )}
       {hud.status === 'notice' && (
