@@ -1,4 +1,6 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -12,5 +14,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+  },
+  test: {
+    // Other sessions' git worktrees live here; their tests are not this checkout's.
+    exclude: [...configDefaults.exclude, '.claude/**'],
   },
 });
