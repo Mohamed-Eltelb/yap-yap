@@ -1,4 +1,3 @@
-import { Globe } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
 import { SelectMenu } from './SelectMenu';
 import { SettingsSubdialog } from './SettingsSubdialog';
@@ -42,32 +41,32 @@ export function StartingStylesDialog({ corrections, defaultStyle, active, onChan
       onClose={onClose}
     >
       <div className="yy-language-body yy-variant-body yy-source-body">
-        <dl className="yy-style-examples">
-          {STYLE_PRESETS.map((item) => (
-            <div key={item.id}><dt>{item.label}</dt><dd>{item.example}</dd></div>
-          ))}
-        </dl>
         {!active && (
           <p className="yy-pref-note">Styles apply when personalization and AI cleanup are on.</p>
         )}
-        <div className="yy-variant-row yy-source-row">
-          <span className="yy-source-icon"><Globe size={16} aria-hidden="true" /></span>
-          <span className="yy-source-name">
-            <span>Everywhere else</span>
-            <small>
-              {STYLE_PRESETS.some((item) => item.id === defaultStyle)
-                ? 'Used wherever nothing above is set or learned yet'
-                : 'Apps Yap Yap doesn’t recognize, and places with no style yet'}
-            </small>
-          </span>
-          <SelectMenu
-            quiet
-            label="Writing style everywhere else"
-            value={STYLE_PRESETS.some((item) => item.id === defaultStyle) ? defaultStyle : LEARN}
-            options={[{ value: LEARN, label: 'Learn from me' }, ...STYLE_PRESETS.map((item) => ({ value: item.id, label: item.label }))]}
-            onChange={(next) => onDefaultChange(next === LEARN ? '' : next)}
-          />
-        </div>
+        <section className="yy-style-section" aria-labelledby="yy-style-default-heading">
+          <h3 id="yy-style-default-heading">Default style</h3>
+          <p>Used wherever you haven’t picked a style below and Yap Yap hasn’t learned one yet, including apps it doesn’t recognize.</p>
+          <div className="yy-style-choices" role="radiogroup" aria-labelledby="yy-style-default-heading">
+            {[{ id: LEARN, label: 'Learn from me', example: 'Picks up how you write' }, ...STYLE_PRESETS].map((item) => {
+              const checked = (item.id === LEARN ? '' : item.id) === (STYLE_PRESETS.some((preset) => preset.id === defaultStyle) ? defaultStyle : '');
+              return (
+                <label key={item.id} className="yy-style-choice" data-checked={checked || undefined}>
+                  <input
+                    type="radio"
+                    name="yy-default-style"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() => onDefaultChange(item.id === LEARN ? '' : item.id)}
+                  />
+                  <strong>{item.label}</strong>
+                  <span>{item.example}</span>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+        <h3 className="yy-style-heading">By kind of place</h3>
         {WRITING_CATEGORIES.map((category) => {
           const correction = corrections[category];
           const preset = presetOf(correction);

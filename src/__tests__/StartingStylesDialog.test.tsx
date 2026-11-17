@@ -39,8 +39,8 @@ it('saves a picked style and goes back to learning', async () => {
   await pick('Email', 'Learn from me');
   expect(onChange).toHaveBeenLastCalledWith({});
 
-  const everywhere = screen.getByRole('combobox', { name: 'Writing style everywhere else' });
-  await user.click(everywhere);
-  await user.click(within(document.getElementById(everywhere.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Casual', hidden: true }));
+  const defaults = screen.getByRole('radiogroup', { name: 'Default style' });
+  expect((within(defaults).getByRole('radio', { name: /Learn from me/ }) as HTMLInputElement).checked).toBe(true);
+  await user.click(within(defaults).getByRole('radio', { name: /^Casual/ }));
   expect(onDefaultChange).toHaveBeenLastCalledWith('casual');
 });
