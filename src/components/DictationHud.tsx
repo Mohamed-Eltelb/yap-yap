@@ -36,7 +36,14 @@ interface Props {
   onDismissResult: () => void;
 }
 
-const bars = [0.22, 0.37, 0.49, 0.67, 0.79, 1, 0.75, 0.55, 0.4, 0.32, 0.2];
+// A bell: the bars rise together with the voice, tallest in the middle.
+const bars = [0.3, 0.45, 0.62, 0.8, 0.94, 1, 0.94, 0.8, 0.62, 0.45, 0.3];
+
+/** How loud the voice is now, from its loudest bands, so all bars move as one. */
+function loudness(levels: number[]): number {
+  const top = [...levels].sort((a, b) => b - a).slice(0, 5);
+  return top.length ? top.reduce((sum, value) => sum + value, 0) / top.length : 0;
+}
 
 export function DictationHud({
   hud,
@@ -57,6 +64,7 @@ export function DictationHud({
   if (hud.status === 'idle') return null;
 
   const { questionText, resultText } = hud;
+  const loud = Math.min(1, Math.max(0, loudness(hud.levels)));
   const targets = hud.targets ?? [];
   const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
     ? hud.targetLanguage : targets[0] ?? 'English';
@@ -126,11 +134,10 @@ export function DictationHud({
             </button>
             <div className="yy-hud-wave" aria-hidden="true">
               {bars.map((weight, index) => {
-                // The center bars show the low, loudest part of the voice; each side a bit apart.
-                const center = (bars.length - 1) / 2;
-                const band = Math.abs(index - center) * 3 + (index > center ? 1 : 0);
-                const level = hud.levels[Math.min(hud.levels.length - 1, band)] ?? 0;
-                return <span key={index} style={{ height: `${2 + Math.min(1, Math.max(0, level)) * weight * 17}px` }} />;
+                // Each bar keeps a little of its own band so the shape stays alive.
+                const band = hud.levels[Math.floor(index * hud.levels.length / bars.length)] ?? 0;
+                const own = loud > 0 ? Math.min(1, band / loud) : 0;
+                return <span key={index} style={{ height: `${2 + loud * weight * (0.8 + 0.2 * own) * 20}px` }} />;
               })}
             </div>
             <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}>
