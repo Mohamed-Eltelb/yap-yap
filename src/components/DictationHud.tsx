@@ -22,6 +22,8 @@ export interface HudState {
   noticeText?: string;
   /** The recording is paused: nothing is captured until it resumes. */
   paused?: boolean;
+  /** Shown on the first recording after the app starts: how to pause. `keys` is the shortcut to hold, if any. */
+  pauseTip?: { keys?: string[] };
 }
 
 const modeLabels: Record<DictationMode, string> = { dictate: 'Dictate', translate: 'Translate', ask: 'Ask anything' };
@@ -48,6 +50,8 @@ const barBands = [9, 5, 7, 3, 1, 0, 2, 4, 6, 8, 10];
 
 /** How long the pill takes to shrink out after the HUD closes. */
 export const PILL_CLOSE_MS = 200;
+/** How long the pause tip stays; it fades out over its last quarter second (see .yy-hud-tip). */
+export const PAUSE_TIP_MS = 6000;
 
 export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
 
@@ -195,6 +199,13 @@ export function DictationHud({
           <p>Press Esc or click Cancel to cancel it.</p>
           <button type="button" onClick={onCancel}>Cancel</button>
         </section>
+      )}
+      {hud.status === 'recording' && hud.pauseTip && !hud.paused && (
+        <p className="yy-hud-tip" role="status">
+          {hud.pauseTip.keys
+            ? <>Hold <kbd>{hud.pauseTip.keys.join(' + ')}</kbd> to pause, or hover ✓ and click pause</>
+            : <>Hover ✓ and click pause to pause the recording</>}
+        </p>
       )}
       {pill && (
         <div

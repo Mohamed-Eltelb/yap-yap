@@ -1,7 +1,7 @@
 import { heardSpeech } from '../utils/audioRecorder';
 import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, snippetsSaidIn, snippetsFromCleanup, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
-import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
+import { addCapturedKey, findShortcutConflict, pauseHoldCombo, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
@@ -81,6 +81,19 @@ describe('Left and Right Alt shortcuts', () => {
 
   it('still counts them as one elsewhere', () => {
     expect(findShortcutConflict(shortcuts, slot, ['Right Alt', 'Q'], 'darwin')).toBe('dictate');
+  });
+});
+
+describe('Holding a shortcut to pause', () => {
+  it('names the first shortcut that can be held, dictation first', () => {
+    expect(pauseHoldCombo({ dictate: [['Left Ctrl', 'K'], ['Right Alt']], translate: [['Left Ctrl', 'Left Shift']], ask: [] }))
+      .toEqual(['Right Alt']);
+    expect(pauseHoldCombo({ dictate: [['Left Ctrl', 'K']], translate: [['Left Ctrl', 'Left Shift']], ask: [] }))
+      .toEqual(['Left Ctrl', 'Left Shift']);
+  });
+
+  it('names none when every shortcut is a key combination the hook does not hold', () => {
+    expect(pauseHoldCombo({ dictate: [['Left Ctrl', 'K']], translate: [], ask: [['Left Alt', 'Q']] })).toBeUndefined();
   });
 });
 

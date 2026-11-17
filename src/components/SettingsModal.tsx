@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
-import { addCapturedKey, findShortcutConflict, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
+import { addCapturedKey, findShortcutConflict, pauseHoldCombo, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
   Globe,
   HelpCircle,
@@ -90,6 +90,28 @@ const shortcutDescriptions = {
   translate: 'Press to start and stop translation.',
   ask: 'Press to start and stop asking anything.',
 };
+
+/** Holding a hook shortcut while recording pauses it; it follows the shortcut, so it has nothing to edit. */
+export function PauseShortcutRow({ combo }: { combo: string[] }) {
+  return (
+    <div className="yy-shortcut-row">
+      <div>
+        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">Pause and resume</div>
+        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">Hold while recording to pause or resume.</p>
+      </div>
+      <div className="yy-shortcut-controls">
+        <div className="yy-shortcut-field" data-readonly="true">
+          <span className="yy-shortcut-edit">
+            <span className="yy-shortcut-hold">Hold</span>
+            {combo.map((key) => (
+              <span key={key} className="yy-keycap">{key}</span>
+            ))}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function PersonalizationIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
@@ -476,6 +498,10 @@ export function SettingsModal({
                         </div>
                       );
                     })}
+                    {(() => {
+                      const holdCombo = pauseHoldCombo(settings.shortcuts);
+                      return holdCombo && <PauseShortcutRow combo={holdCombo} />;
+                    })()}
                   </div>
                 </div>
 

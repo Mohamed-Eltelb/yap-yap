@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { pauseHoldCombo } from '../electron/shortcutBindings';
 import type { DictationContext } from '../electron/dictationContext';
 import { DictionaryView, type ImportedWord } from './components/DictionaryView';
 import { SnippetsView } from './components/SnippetsView';
-import { DictationHud, HudState } from './components/DictationHud';
+import { DictationHud, HudState, PAUSE_TIP_MS } from './components/DictationHud';
 import { HistoryView } from './components/HistoryView';
 import { HomeView } from './components/HomeView';
 import { SettingsModal } from './components/SettingsModal';
@@ -106,6 +107,9 @@ export function App() {
   const lastTriggerTimeRef = useRef<number>(0);
   const processingRunRef = useRef(0);
   const busyNoticeTimer = useRef<number | undefined>(undefined);
+  // The pause tip shows on the first recording after the app starts, then for a few seconds only.
+  const pauseTipShown = useRef(false);
+  const pauseTipTimer = useRef<number | undefined>(undefined);
   const hudRef = useRef<HudState>(hud);
   const openedTargetsDuringRecording = useRef(false);
   hudRef.current = hud;
@@ -826,7 +830,7 @@ export function App() {
     const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
     const destinationProbe = currentMode === 'dictate' || currentMode === 'translate'
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
-    setHud((current) => ({ ...current, status: 'processing', paused: undefined }));
+    setHud((current) => ({ ...current, status: 'processing', paused: undefined, pauseTip: undefined }));
     const run = processingRunRef.current;
     const stopping = session.stop();
     const targets = appState.settings.translationTargets;
@@ -944,7 +948,7 @@ export function App() {
     const session = recorderRef.current;
     if (!session || hudRef.current.status !== 'recording' || hudRef.current.paused) return;
     session.pause();
-    setHud((current) => current.status === 'recording' ? { ...current, paused: true } : current);
+    setHud((current) => current.status === 'recording' ? { ...current, paused: true, pauseTip: undefined } : current);
   }, []);
 
   const resumeRecording = useCallback(() => {
@@ -1043,11 +1047,20 @@ export function App() {
           if (appState.settings.interactionSounds) muteTimer.current = window.setTimeout(mute, 300);
           else mute();
         }
+        const pauseTip = pauseTipShown.current ? undefined : { keys: pauseHoldCombo(appState.settings.shortcuts) };
+        pauseTipShown.current = true;
         setHud({
           status: 'recording',
           mode,
           levels: Array(20).fill(0.12),
+          pauseTip,
         });
+        if (pauseTip) {
+          window.clearTimeout(pauseTipTimer.current);
+          pauseTipTimer.current = window.setTimeout(() => {
+            setHud((current) => current.pauseTip ? { ...current, pauseTip: undefined } : current);
+          }, PAUSE_TIP_MS);
+        }
 
         const session = await startAudioRecording(
           appState.settings.microphoneId,

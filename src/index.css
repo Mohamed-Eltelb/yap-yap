@@ -577,6 +577,24 @@ textarea,
   border-color: var(--text-muted);
 }
 
+.yy-shortcut-field[data-readonly="true"] {
+  border-style: dashed;
+}
+
+.yy-shortcut-field[data-readonly="true"]:hover {
+  border-color: var(--border-strong);
+}
+
+.yy-shortcut-field[data-readonly="true"] .yy-shortcut-edit {
+  cursor: default;
+}
+
+.yy-shortcut-hold {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .yy-shortcut-field[data-capturing="true"] {
   border-color: var(--accent-blue);
 }
@@ -2101,6 +2119,10 @@ textarea,
     animation: yy-hud-notice-out 0.01s linear 5s forwards;
   }
 
+  .yy-hud-tip {
+    animation: none;
+  }
+
   .yy-hud-pill,
   .yy-hud-pill::before,
   .yy-hud-pill button,
@@ -2313,6 +2335,23 @@ textarea,
   font-weight: 550;
 }
 
+.yy-hud-tip {
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid #ffffff2e;
+  border-radius: 999px;
+  background: #060707;
+  color: #ffffffbf;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  /* Rises in, then fades just before PAUSE_TIP_MS (6s) takes it away. */
+  animation:
+    yy-hud-rise 0.2s cubic-bezier(0.05, 0.6, 0.4, 0.95),
+    yy-hud-notice-out 0.25s ease-in 5.75s forwards;
+}
+
+.yy-hud-tip kbd,
 .yy-hud-shortcut kbd {
   padding: 3px 7px;
   border: 1px solid #ffffff2e;

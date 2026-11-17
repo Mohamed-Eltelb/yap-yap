@@ -109,3 +109,17 @@ it('shows a compact paused pill with Resume', () => {
   expect(html).toContain('aria-label="Resume recording"');
   expect(html).toMatch(/<button[^>]*aria-label="Pause recording"[^>]*disabled|<button[^>]*disabled[^>]*aria-label="Pause recording"/);
 });
+
+it('shows how to pause above the recording pill', () => {
+  const html = renderHud({ status: 'recording', mode: 'dictate', levels: [], pauseTip: { keys: ['Right Alt'] } });
+  expect(html).toContain('yy-hud-tip');
+  expect(html).toMatch(/Hold <kbd>Right Alt<\/kbd> to pause/);
+  expect(html).toContain('hover ✓ and click pause');
+  expect(html.indexOf('yy-hud-tip')).toBeLessThan(html.indexOf('data-state="recording"'));
+});
+
+it('leaves out holding when no shortcut can be held', () => {
+  const html = renderHud({ status: 'recording', mode: 'dictate', levels: [], pauseTip: {} });
+  expect(html).not.toContain('Hold');
+  expect(html).toContain('Hover ✓ and click pause');
+});

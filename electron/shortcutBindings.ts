@@ -28,6 +28,17 @@ export function toElectronAccelerator(combo: string[]): string | null {
   return electronKeys(combo)?.join('+') ?? null;
 }
 
+/**
+ * The shortcut the user can hold while recording to pause or resume: one the key hook
+ * watches (modifier keys alone, or anything with Right Alt), dictation's first.
+ * Other key combinations reach the app as a single press, so they cannot be held.
+ */
+export function pauseHoldCombo(shortcuts: ShortcutGroup): string[] | undefined {
+  return shortcutModes
+    .flatMap((mode) => shortcuts[mode])
+    .find((combo) => combo.length > 0 && (toElectronAccelerator(combo) === null || combo.includes('Right Alt')));
+}
+
 function chordSignatures(combo: string[], platform?: string): string[] {
   // The native hook preserves sides for modifier-only and Right Alt chords.
   const accelerator = combo.includes('Right Alt') ? null : electronKeys(combo);

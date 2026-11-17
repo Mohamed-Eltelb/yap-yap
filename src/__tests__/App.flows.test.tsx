@@ -103,7 +103,7 @@ async function dictate(mode = 'dictate') {
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 }
 
-const lastHud = () => desktop.api.toggleHud.mock.calls.at(-1)?.[1] as { status: string } | undefined;
+const lastHud = () => desktop.api.toggleHud.mock.calls.at(-1)?.[1] as { status: string; pauseTip?: unknown } | undefined;
 
 const lastSaved = () => store.saves.at(-1) as { history: HistoryItem[]; dictionary: { word: string }[] };
 const cleanupOptions = () => engine.processTranscriptWithLlm.mock.calls[0][3];
@@ -214,6 +214,32 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
     const sent = desktop.api.toggleHud.mock.calls.map((call) => call[1] as { status: string; paused?: boolean });
     expect(sent.some((hud) => hud.status === 'processing' && hud.paused)).toBe(false);
+  });
+
+  it('shows the pause tip on the first recording only, until the user pauses', async () => {
+    seed();
+    const session = () => ({
+      stop: async () => ({ blob: new Blob(['audio']), durationMs: 3000, dataUrl: undefined, mimeType: 'audio/webm' }),
+      cancel: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(),
+    }) as unknown as Awaited<ReturnType<typeof startAudioRecording>>;
+    vi.mocked(startAudioRecording).mockResolvedValueOnce(session()).mockResolvedValueOnce(session());
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    expect(lastHud()).toMatchObject({ status: 'recording', pauseTip: { keys: ['Right Alt'] } });
+    await act(async () => { desktop.action!({ type: 'pause' }); });
+    expect(lastHud()?.pauseTip).toBeUndefined();
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
+    await waitFor(() => expect(lastHud()?.status).not.toBe('processing'));
+    // Triggers within 350ms of each other count as one press.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(lastHud()?.status).toBe('recording'));
+    expect(lastHud()?.pauseTip).toBeUndefined();
   });
 
   it('quietly drops a recording stopped right after it started', async () => {
