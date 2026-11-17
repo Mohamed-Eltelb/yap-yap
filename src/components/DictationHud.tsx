@@ -216,7 +216,7 @@ export function DictationHud({
             ))}
           </div>
           <span className="yy-hud-pill-paused" aria-hidden={pill === 'paused' ? undefined : true}>
-            <Pause size={12} aria-hidden="true" />Paused
+            Paused
           </span>
           {/* The main action stays put; hovering it slides the other one out beside it. */}
           <div className="yy-hud-actions">

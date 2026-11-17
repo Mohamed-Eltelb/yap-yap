@@ -1705,10 +1705,10 @@ textarea,
 }
 
 .yy-hud-pill[data-state="recording"] { width: 126px; }
-.yy-hud-pill[data-state="paused"] { width: 130px; }
+.yy-hud-pill[data-state="paused"] { width: 118px; }
 /* Hovering the main button slides the other one out beside it, widening the pill. */
 .yy-hud-pill[data-state="recording"]:has(.yy-hud-actions:hover, .yy-hud-actions:focus-within) { width: 158px; }
-.yy-hud-pill[data-state="paused"]:has(.yy-hud-actions:hover, .yy-hud-actions:focus-within) { width: 162px; }
+.yy-hud-pill[data-state="paused"]:has(.yy-hud-actions:hover, .yy-hud-actions:focus-within) { width: 150px; }
 .yy-hud-pill[data-state="thinking"] { width: 100px; }
 .yy-hud-pill[data-state="closing"] {
   opacity: 0;
@@ -1792,7 +1792,6 @@ textarea,
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   width: 0;
   overflow: hidden;
   color: #ffffffa6;
@@ -1804,7 +1803,7 @@ textarea,
 }
 
 .yy-hud-pill[data-state="paused"] .yy-hud-pill-paused {
-  width: 56px;
+  width: 44px;
   margin: 0 6px;
   opacity: 1;
 }
