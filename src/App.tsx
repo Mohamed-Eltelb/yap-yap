@@ -826,7 +826,7 @@ export function App() {
     const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
     const destinationProbe = currentMode === 'dictate' || currentMode === 'translate'
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
-    setHud((current) => ({ ...current, status: 'processing' }));
+    setHud((current) => ({ ...current, status: 'processing', paused: undefined }));
     const run = processingRunRef.current;
     const stopping = session.stop();
     const targets = appState.settings.translationTargets;
@@ -938,6 +938,21 @@ export function App() {
     setHud({ status: 'cancelled', mode, levels: Array(20).fill(0.1) });
     scheduleCancelBackstop();
   }, [appState.settings.activeSttProvider, appState.settings.translationTargets, restoreAudioMute, scheduleCancelBackstop]);
+
+  /** Pauses the recording: nothing is captured until it resumes. */
+  const pauseRecording = useCallback(() => {
+    const session = recorderRef.current;
+    if (!session || hudRef.current.status !== 'recording' || hudRef.current.paused) return;
+    session.pause();
+    setHud((current) => current.status === 'recording' ? { ...current, paused: true } : current);
+  }, []);
+
+  const resumeRecording = useCallback(() => {
+    const session = recorderRef.current;
+    if (!session || hudRef.current.status !== 'recording' || !hudRef.current.paused) return;
+    session.resume();
+    setHud((current) => current.status === 'recording' ? { ...current, paused: false } : current);
+  }, []);
 
   const undoCancel = useCallback(async () => {
     const pending = cancelledRef.current;
@@ -1158,6 +1173,8 @@ export function App() {
     const unsubAction = window.yapyap?.onHudAction?.((action) => {
       if (action.type === 'stop') void stopAndProcess();
       else if (action.type === 'cancel') cancelRecording();
+      else if (action.type === 'pause') pauseRecording();
+      else if (action.type === 'resume') resumeRecording();
       else if (action.type === 'undo') void undoCancel();
       else if (action.type === 'dismiss') dismissHud();
       else if (action.type === 'retry') retryHud();
@@ -1169,7 +1186,7 @@ export function App() {
       unsubPhase?.();
       unsubAction?.();
     };
-  }, [appState.settings, cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel]);
+  }, [appState.settings, cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel, pauseRecording, resumeRecording]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
@@ -1561,6 +1578,8 @@ export function App() {
         onEditTargets={() => window.yapyap?.sendHudAction?.({ type: 'edit-targets' })}
         onStop={() => window.yapyap?.sendHudAction?.({ type: 'stop' })}
         onCancel={() => window.yapyap?.sendHudAction?.({ type: 'cancel' })}
+        onPause={() => window.yapyap?.sendHudAction?.({ type: 'pause' })}
+        onResume={() => window.yapyap?.sendHudAction?.({ type: 'resume' })}
         onUndo={() => window.yapyap?.sendHudAction?.({ type: 'undo' })}
         onRetry={() => window.yapyap?.sendHudAction?.({ type: 'retry' })}
         onCopyResult={(t) => window.yapyap?.sendHudAction?.({ type: 'copy', text: t })}
@@ -1714,6 +1733,8 @@ export function App() {
           onEditTargets={editHudTargets}
           onStop={() => void stopAndProcess()}
           onCancel={cancelRecording}
+          onPause={pauseRecording}
+          onResume={resumeRecording}
           onUndo={() => void undoCancel()}
           onRetry={retryHud}
           onCopyResult={(t) => void handleCopyText(t)}

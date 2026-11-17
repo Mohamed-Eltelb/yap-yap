@@ -1705,6 +1705,10 @@ textarea,
 }
 
 .yy-hud-pill[data-state="recording"] { width: 126px; }
+.yy-hud-pill[data-state="paused"] { width: 130px; }
+/* Hovering the main button slides the other one out beside it, widening the pill. */
+.yy-hud-pill[data-state="recording"]:has(.yy-hud-actions:hover, .yy-hud-actions:focus-within) { width: 158px; }
+.yy-hud-pill[data-state="paused"]:has(.yy-hud-actions:hover, .yy-hud-actions:focus-within) { width: 162px; }
 .yy-hud-pill[data-state="thinking"] { width: 100px; }
 .yy-hud-pill[data-state="closing"] {
   opacity: 0;
@@ -1740,12 +1744,69 @@ textarea,
 }
 
 .yy-hud-pill .yy-hud-cancel { transform: translateX(8px); }
-.yy-hud-pill .yy-hud-confirm { transform: translateX(-8px); }
+.yy-hud-pill .yy-hud-actions button { transform: translateX(-8px); }
 
-.yy-hud-pill[data-state="recording"] button {
+.yy-hud-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+/* Shown: Cancel while recording or paused; Finish while recording; Resume while paused. */
+.yy-hud-pill:is([data-state="recording"], [data-state="paused"]) .yy-hud-cancel,
+.yy-hud-pill[data-state="recording"] .yy-hud-confirm,
+.yy-hud-pill[data-state="paused"] .yy-hud-resume,
+/* Revealed beside them on hover: Pause while recording, Finish while paused. */
+.yy-hud-pill[data-state="recording"] .yy-hud-actions:is(:hover, :focus-within) .yy-hud-pause,
+.yy-hud-pill[data-state="paused"] .yy-hud-actions:is(:hover, :focus-within) .yy-hud-confirm {
   width: 26px;
   opacity: 1;
   transform: none;
+}
+
+.yy-hud-pill[data-state="recording"] .yy-hud-actions:is(:hover, :focus-within) .yy-hud-pause,
+.yy-hud-pill[data-state="paused"] .yy-hud-actions:is(:hover, :focus-within) .yy-hud-confirm {
+  margin-right: 6px;
+}
+
+.yy-hud-pill .yy-hud-actions button {
+  transition: width 0.2s var(--hud-ease), opacity 0.2s var(--hud-ease), transform 0.2s var(--hud-ease),
+    margin 0.2s var(--hud-ease), background-color 0.2s var(--hud-ease), color 0.2s var(--hud-ease);
+}
+
+/* The main action is white; the one revealed beside it is quieter. */
+.yy-hud-pause,
+.yy-hud-pill[data-state="paused"] .yy-hud-confirm {
+  background: #404142;
+  color: #fff;
+}
+
+.yy-hud-resume {
+  background: #fff;
+  color: #17191a;
+}
+
+/* Paused: the waveform gives way to a quiet label. */
+.yy-hud-pill-paused {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 0;
+  overflow: hidden;
+  color: #ffffffa6;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  opacity: 0;
+  transition: width 0.2s var(--hud-ease), margin 0.2s var(--hud-ease), opacity 0.2s var(--hud-ease);
+}
+
+.yy-hud-pill[data-state="paused"] .yy-hud-pill-paused {
+  width: 56px;
+  margin: 0 6px;
+  opacity: 1;
 }
 
 .yy-hud-cancel {
@@ -1776,6 +1837,7 @@ textarea,
 }
 
 .yy-hud-pill[data-state="thinking"] .yy-hud-wave,
+.yy-hud-pill[data-state="paused"] .yy-hud-wave,
 .yy-hud-pill[data-state="closing"] .yy-hud-wave {
   width: 0;
   margin: 0;
@@ -2044,6 +2106,8 @@ textarea,
   .yy-hud-pill::before,
   .yy-hud-pill button,
   .yy-hud-pill-label,
+  .yy-hud-pill-paused,
+  .yy-hud-pill .yy-hud-actions button,
   .yy-hud-wave,
   .yy-hud-wave span {
     transition: none !important;

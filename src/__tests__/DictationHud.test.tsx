@@ -9,6 +9,8 @@ it('renders Markdown formatting in an Ask answer', () => {
       hud={{ status: 'result', mode: 'ask', levels: [], resultText: '**First** paragraph.\n\n**Second** paragraph.' }}
       onStop={noop}
       onCancel={noop}
+      onPause={noop}
+      onResume={noop}
       onUndo={noop}
       onRetry={noop}
       onSelectTarget={noop}
@@ -25,7 +27,7 @@ it('renders Markdown formatting in an Ask answer', () => {
 function renderHud(hud: Parameters<typeof DictationHud>[0]['hud']) {
   const noop = vi.fn();
   return renderToStaticMarkup(
-    <DictationHud hud={hud} onStop={noop} onCancel={noop} onUndo={noop} onRetry={noop}
+    <DictationHud hud={hud} onStop={noop} onCancel={noop} onPause={noop} onResume={noop} onUndo={noop} onRetry={noop}
       onSelectTarget={noop} onEditTargets={noop} onCopyResult={noop} onDismissResult={noop} />,
   );
 }
@@ -90,4 +92,20 @@ it('maps HUD states to pill states', () => {
 it('draws a countdown ring around Undo', () => {
   const html = renderHud({ status: 'cancelled', mode: 'dictate', levels: [] });
   expect(html).toMatch(/<button[^>]*>.*class="yy-hud-undo-ring".*Undo<\/button>|<button[^>]*>Undo.*class="yy-hud-undo-ring".*<\/button>/s);
+});
+
+it('offers Pause next to Finish while recording', () => {
+  const html = renderHud({ status: 'recording', mode: 'dictate', levels: [] });
+  expect(html).toContain('aria-label="Pause recording"');
+  expect(html).toContain('aria-label="Finish recording"');
+});
+
+it('shows a compact paused pill with Resume', () => {
+  const hud = { status: 'recording' as const, mode: 'dictate' as const, levels: [], paused: true };
+  expect(pillStateFor(hud)).toBe('paused');
+  const html = renderHud(hud);
+  expect(html).toContain('data-state="paused"');
+  expect(html).toContain('Paused');
+  expect(html).toContain('aria-label="Resume recording"');
+  expect(html).toMatch(/<button[^>]*aria-label="Pause recording"[^>]*disabled|<button[^>]*disabled[^>]*aria-label="Pause recording"/);
 });

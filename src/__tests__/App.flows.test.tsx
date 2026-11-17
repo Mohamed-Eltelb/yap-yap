@@ -190,6 +190,32 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
   });
 
+  it('pauses and resumes the recording, and finishing clears the pause', async () => {
+    seed();
+    const session = {
+      stop: async () => ({ blob: new Blob(['audio']), durationMs: 3000, dataUrl: undefined, mimeType: 'audio/webm' }),
+      cancel: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(),
+    };
+    vi.mocked(startAudioRecording).mockResolvedValueOnce(session as unknown as Awaited<ReturnType<typeof startAudioRecording>>);
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
+    await act(async () => { desktop.action!({ type: 'pause' }); });
+    expect(session.pause).toHaveBeenCalledTimes(1);
+    expect(lastHud()).toMatchObject({ status: 'recording', paused: true });
+    await act(async () => { desktop.action!({ type: 'resume' }); });
+    expect(session.resume).toHaveBeenCalledTimes(1);
+    expect(lastHud()).toMatchObject({ status: 'recording', paused: false });
+    await act(async () => { desktop.action!({ type: 'pause' }); });
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
+    expect(desktop.api.toggleHud.mock.calls.some(([, hud]: [boolean, { status: string; paused?: boolean }]) =>
+      hud.status === 'processing' && hud.paused)).toBe(false);
+  });
+
   it('quietly drops a recording stopped right after it started', async () => {
     seed();
     vi.mocked(startAudioRecording).mockResolvedValueOnce({

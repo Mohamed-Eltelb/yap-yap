@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, ChevronsUpDown, Copy, Mic, Sparkles, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Copy, Mic, Pause, Play, Sparkles, X } from 'lucide-react';
 import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
 import { YapLogo } from './YapLogo';
@@ -20,6 +20,8 @@ export interface HudState {
   busyNotice?: boolean;
   /** A short note shown in place of a result, such as when nothing was said. */
   noticeText?: string;
+  /** The recording is paused: nothing is captured until it resumes. */
+  paused?: boolean;
 }
 
 const modeLabels: Record<DictationMode, string> = { dictate: 'Dictate', translate: 'Translate', ask: 'Ask anything' };
@@ -28,6 +30,8 @@ interface Props {
   hud: HudState;
   onStop: () => void;
   onCancel: () => void;
+  onPause: () => void;
+  onResume: () => void;
   onUndo: () => void;
   onRetry: () => void;
   onSelectTarget: (target: string) => void;
@@ -45,12 +49,12 @@ const barBands = [9, 5, 7, 3, 1, 0, 2, 4, 6, 8, 10];
 /** How long the pill takes to shrink out after the HUD closes. */
 export const PILL_CLOSE_MS = 200;
 
-export type PillState = 'armed' | 'recording' | 'thinking' | 'closing';
+export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
 
 /** The pill shape a HUD state uses, or nothing when that state shows another screen. */
 export function pillStateFor(hud: HudState): PillState | undefined {
   if (hud.status === 'armed') return hud.shortcutList ? undefined : 'armed';
-  if (hud.status === 'recording') return 'recording';
+  if (hud.status === 'recording') return hud.paused ? 'paused' : 'recording';
   if (hud.status === 'processing') return 'thinking';
   return undefined;
 }
@@ -72,6 +76,8 @@ export function DictationHud({
   hud,
   onStop,
   onCancel,
+  onPause,
+  onResume,
   onUndo,
   onRetry,
   onSelectTarget,
@@ -105,6 +111,9 @@ export function DictationHud({
   const loud = Math.min(1, Math.max(0, loudness(hud.levels)));
   const pill = livePill ?? (closing ? 'closing' : undefined);
   const recording = pill === 'recording';
+  const live = recording || pill === 'paused';
+  /** Hidden buttons stay in the pill for its animations, out of reach. */
+  const reach = (on: boolean) => ({ disabled: !on, tabIndex: on ? undefined : -1, 'aria-hidden': on ? undefined : true });
   const targets = hud.targets ?? [];
   const selectedTarget = hud.targetLanguage && targets.includes(hud.targetLanguage)
     ? hud.targetLanguage : targets[0] ?? 'English';
@@ -194,8 +203,7 @@ export function DictationHud({
           role={pill === 'recording' ? 'group' : 'status'}
           aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : undefined}
         >
-          <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel}
-            disabled={!recording} tabIndex={recording ? undefined : -1} aria-hidden={recording ? undefined : true}>
+          <button type="button" className="yy-hud-cancel" aria-label="Cancel recording" onClick={onCancel} {...reach(live)}>
             <X size={16} aria-hidden="true" />
           </button>
           <div className="yy-hud-wave" aria-hidden="true">
@@ -207,10 +215,21 @@ export function DictationHud({
               }} />
             ))}
           </div>
-          <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop}
-            disabled={!recording} tabIndex={recording ? undefined : -1} aria-hidden={recording ? undefined : true}>
-            <Check size={17} aria-hidden="true" />
-          </button>
+          <span className="yy-hud-pill-paused" aria-hidden={pill === 'paused' ? undefined : true}>
+            <Pause size={12} aria-hidden="true" />Paused
+          </span>
+          {/* The main action stays put; hovering it slides the other one out beside it. */}
+          <div className="yy-hud-actions">
+            <button type="button" className="yy-hud-pause" aria-label="Pause recording" onClick={onPause} {...reach(recording)}>
+              <Pause size={15} aria-hidden="true" />
+            </button>
+            <button type="button" className="yy-hud-confirm" aria-label="Finish recording" onClick={onStop} {...reach(live)}>
+              <Check size={17} aria-hidden="true" />
+            </button>
+            <button type="button" className="yy-hud-resume" aria-label="Resume recording" onClick={onResume} {...reach(pill === 'paused')}>
+              <Play size={15} aria-hidden="true" />
+            </button>
+          </div>
           <span className="yy-hud-pill-label" aria-hidden={pill === 'thinking' ? undefined : true}>Thinking</span>
         </div>
       )}

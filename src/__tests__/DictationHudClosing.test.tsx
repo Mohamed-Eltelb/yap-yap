@@ -6,7 +6,7 @@ import { DictationHud, PILL_CLOSE_MS, type HudState } from '../components/Dictat
 function Hud({ status }: { status: HudState['status'] }) {
   const noop = vi.fn();
   return (
-    <DictationHud hud={{ status, mode: 'dictate', levels: [], resultText: 'Hi' }} onStop={noop} onCancel={noop}
+    <DictationHud hud={{ status, mode: 'dictate', levels: [], resultText: 'Hi' }} onStop={noop} onCancel={noop} onPause={noop} onResume={noop}
       onUndo={noop} onRetry={noop} onSelectTarget={noop} onEditTargets={noop} onCopyResult={noop} onDismissResult={noop} />
   );
 }
@@ -58,7 +58,7 @@ it('keeps the same pill element while it shrinks out, so the shrink animates', (
 
 it('keeps the Thinking pill in place when the still-processing notice appears', () => {
   const noop = vi.fn();
-  const props = { onStop: noop, onCancel: noop, onUndo: noop, onRetry: noop, onSelectTarget: noop,
+  const props = { onStop: noop, onCancel: noop, onPause: noop, onResume: noop, onUndo: noop, onRetry: noop, onSelectTarget: noop,
     onEditTargets: noop, onCopyResult: noop, onDismissResult: noop };
   const { container, rerender } = render(<DictationHud hud={{ status: 'processing', mode: 'dictate', levels: [] }} {...props} />);
   const pill = container.querySelector('.yy-hud-pill');
@@ -71,7 +71,7 @@ it('dismisses Transcript cancelled once its countdown has faded it out', () => {
   const onDismiss = vi.fn();
   const noop = vi.fn();
   const { container } = render(
-    <DictationHud hud={{ status: 'cancelled', mode: 'dictate', levels: [] }} onStop={noop} onCancel={noop} onUndo={noop}
+    <DictationHud hud={{ status: 'cancelled', mode: 'dictate', levels: [] }} onStop={noop} onCancel={noop} onPause={noop} onResume={noop} onUndo={noop}
       onRetry={noop} onSelectTarget={noop} onEditTargets={noop} onCopyResult={noop} onDismissResult={onDismiss} />,
   );
   const notice = container.querySelector('.yy-hud-cancelled')!;
@@ -84,4 +84,18 @@ it('dismisses Transcript cancelled once its countdown has faded it out', () => {
   expect(onDismiss).not.toHaveBeenCalled();
   animationEnd('yy-hud-notice-out');
   expect(onDismiss).toHaveBeenCalledTimes(1);
+});
+
+it('pauses and resumes from the pill buttons', () => {
+  const onPause = vi.fn();
+  const onResume = vi.fn();
+  const noop = vi.fn();
+  const props = { onStop: noop, onCancel: noop, onPause, onResume, onUndo: noop, onRetry: noop,
+    onSelectTarget: noop, onEditTargets: noop, onCopyResult: noop, onDismissResult: noop };
+  const { getByLabelText, rerender } = render(<DictationHud hud={{ status: 'recording', mode: 'dictate', levels: [] }} {...props} />);
+  act(() => { getByLabelText('Pause recording').click(); });
+  expect(onPause).toHaveBeenCalledTimes(1);
+  rerender(<DictationHud hud={{ status: 'recording', mode: 'dictate', levels: [], paused: true }} {...props} />);
+  act(() => { getByLabelText('Resume recording').click(); });
+  expect(onResume).toHaveBeenCalledTimes(1);
 });

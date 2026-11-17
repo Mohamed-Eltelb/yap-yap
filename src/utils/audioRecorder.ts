@@ -1,3 +1,4 @@
+import { createRecordingClock } from './recordingClock';
 export interface RecorderSession {
   stop: () => Promise<{
     blob: Blob;
@@ -8,6 +9,9 @@ export interface RecorderSession {
     heardSpeech?: boolean;
   }>;
   cancel: () => void;
+  /** Stops capturing until resume; the recording stays one file. */
+  pause: () => void;
+  resume: () => void;
 }
 
 // A frame counts as voice when the waveform swings this far from silence (0–128).
@@ -138,6 +142,11 @@ export async function startAudioRecording(
 
   const tick = () => {
     if (stopped) return;
+    // Nothing is recorded while paused, so the meter lies flat and nothing counts as voice.
+    if (clock.paused) {
+      onLevels(new Array(20).fill(0));
+      return;
+    }
     analyser.getByteFrequencyData(dataArray);
     analyser.getByteTimeDomainData(waveform);
     let peak = 0;
@@ -154,7 +163,7 @@ export async function startAudioRecording(
     onLevels(levels);
   };
 
-  const startTime = Date.now();
+  const clock = createRecordingClock();
   recorder.start(100);
   // A timer, not requestAnimationFrame: animation frames nearly stop while the main
   // window is minimized or covered, and the HUD meter then crawls at about 1 FPS.
@@ -172,7 +181,7 @@ export async function startAudioRecording(
       new Promise((resolve, reject) => {
         const finish = async () => {
           cleanup();
-          const durationMs = Math.max(400, Date.now() - startTime);
+          const durationMs = Math.max(400, clock.elapsed());
           const actualMime = recorder.mimeType || mimeType || 'audio/webm';
           const blob = new Blob(chunks, { type: actualMime });
           try {
@@ -192,6 +201,16 @@ export async function startAudioRecording(
         if (recorder.state !== 'inactive') recorder.stop();
         else void finish();
       }),
+    pause: () => {
+      if (stopped || clock.paused || recorder.state !== 'recording') return;
+      recorder.pause();
+      clock.pause();
+    },
+    resume: () => {
+      if (stopped || !clock.paused || recorder.state !== 'paused') return;
+      recorder.resume();
+      clock.resume();
+    },
     cancel: () => {
       try {
         if (recorder.state !== 'inactive') recorder.stop();
