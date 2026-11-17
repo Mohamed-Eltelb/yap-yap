@@ -249,6 +249,7 @@ function foldNumberWords(words: string[]): string[] {
   let total = 0;
   let current = 0;
   let last: 'unit' | 'teen' | 'tens' | 'hundred' | 'thousand' | null = null;
+  let skip = false;
   const flush = () => {
     if (last) out.push(String(total + current));
     total = 0;
@@ -256,11 +257,18 @@ function foldNumberWords(words: string[]): string[] {
     last = null;
   };
   words.forEach((word, index) => {
-    // An Arabic number word stands alone: "عنوان واحد" is "عنوان 1".
+    if (skip) {
+      skip = false;
+      return;
+    }
+    // Arabic numbers stand apart from English ones: "عنوان واحد" is "عنوان 1", "واحد وعشرين" is 21.
     const arabic = arabicNumberValue(word);
-    if (arabic >= 0) {
+    const arabicTens = arabicTensValue(word);
+    if (arabic >= 0 || arabicTens >= 2) {
       flush();
-      out.push(String(arabic));
+      const nextTens = arabic > 0 && arabic < 10 ? arabicTensValue(words[index + 1] ?? '') : -1;
+      skip = nextTens >= 2 && /^و/u.test(words[index + 1]);
+      out.push(String(skip ? nextTens * 10 + arabic : arabic >= 0 ? arabic : arabicTens * 10));
       return;
     }
     const unit = UNIT_WORDS.indexOf(word);
@@ -323,14 +331,50 @@ const ARABIC_NUMBER_WORDS = [
   ['عشرة', 'عشر'],
 ];
 
-/** One Arabic spelling as a pattern: any alef form, and taa marbuta written as haa. */
-function arabicLetters(word: string): string {
-  return word.replace(/[اأإآ]/gu, '[اأإآ]').replace(/ة/gu, '[ةه]');
+/** Arabic tens from twenty to ninety, by tens digit: "واحد وعشرين" is 21. */
+const ARABIC_TENS_WORDS = [
+  [], [],
+  ['عشرين', 'عشرون'],
+  ['ثلاثين', 'ثلاثون', 'تلاتين'],
+  ['أربعين', 'أربعون'],
+  ['خمسين', 'خمسون'],
+  ['ستين', 'ستون'],
+  ['سبعين', 'سبعون'],
+  ['ثمانين', 'ثمانون', 'تمانين'],
+  ['تسعين', 'تسعون'],
+];
+
+/** The tens digit of an Arabic tens word, with or without a leading "و" (and). */
+function arabicTensValue(word: string): number {
+  const plain = sameArabicLetters(word).replace(/^و/u, '');
+  return ARABIC_TENS_WORDS.findIndex((forms) => forms.some((form) => sameArabicLetters(form) === plain));
 }
 
-/** Arabic text with one alef form and taa marbuta as haa, for comparing spellings. */
+/** A number from 0 to 99 as Arabic words, as a pattern: "واحد وعشرين", "عشرين", "خمسة". */
+function arabicNumberPattern(value: number, between: string): string | undefined {
+  const forms = (list: string[]) => `(?:${list.map(arabicLetters).join('|')})`;
+  const tens = Math.floor(value / 10);
+  const unit = value % 10;
+  // A unit said alone is only that number if no "و" and a tens word follow it.
+  const notCompound = `(?!${between}+و${between}*${forms(ARABIC_TENS_WORDS.flat())})`;
+  if (value <= 10) return `${forms(ARABIC_NUMBER_WORDS[value])}${notCompound}`;
+  if (tens < 2 || tens > 9) return undefined;
+  const tensWords = forms(ARABIC_TENS_WORDS[tens]);
+  return unit ? `${forms(ARABIC_NUMBER_WORDS[unit])}${between}+و${between}*${tensWords}` : tensWords;
+}
+
+/**
+ * One Arabic spelling as a pattern, matching the ways the same word is commonly written: any alef
+ * form, taa marbuta as haa, alef maqsura as yaa, with or without diacritics and tatweel.
+ */
+function arabicLetters(word: string): string {
+  const variants: Record<string, string> = { ا: '[اأإآ]', أ: '[اأإآ]', إ: '[اأإآ]', آ: '[اأإآ]', ة: '[ةه]', ه: '[ةه]', ى: '[ىي]', ي: '[ىي]' };
+  return word.replace(/[ء-ي]/gu, (letter) => `${variants[letter] ?? letter}[\\u064B-\\u0652\\u0670\\u0640]*`);
+}
+
+/** Arabic text in one spelling (see arabicLetters), for comparing. */
 function sameArabicLetters(text: string): string {
-  return text.replace(/[أإآ]/gu, 'ا').replace(/ة/gu, 'ه');
+  return text.replace(/[ً-ْٰـ]/gu, '').replace(/[أإآ]/gu, 'ا').replace(/ة/gu, 'ه').replace(/ى/gu, 'ي');
 }
 
 /** The value of an Arabic number word, however its alef and taa marbuta are written. */
@@ -348,7 +392,9 @@ function asciiDigits(text: string): string {
 /** A trigger's words, lowercase, without punctuation, numbers as digits: how it is compared. */
 export function snippetTriggerKey(trigger: string): string {
   // "address12" is said as "address 12", so letters and digits are separate words.
-  return foldNumberWords(asciiDigits(trigger.toLowerCase()).match(/\p{N}+|[\p{L}\p{M}]+/gu) ?? []).join(' ');
+  // Arabic diacritics and tatweel are dropped: the trigger matches with or without them.
+  const plain = asciiDigits(trigger.toLowerCase()).replace(/[ً-ْٰـ]/gu, '');
+  return foldNumberWords(plain.match(/\p{N}+|[\p{L}\p{M}]+/gu) ?? []).join(' ');
 }
 
 /** Saved snippets, keeping valid ones only: a trigger with a letter or digit, used once. */
@@ -390,8 +436,8 @@ function triggerPattern(key: string, strict: boolean): string {
       ? `(?:and${between}+)?${part}`
       : part).join(`${between}+`);
     const year = word.length === 4 ? yearWords(Number(word)) : undefined;
-    const arabic = ARABIC_NUMBER_WORDS[Number(word)]?.map(arabicLetters).join('|');
-    const spelled = [said, year?.join(`${between}+`), word.length <= 2 ? arabic : undefined].filter(Boolean).join('|');
+    const arabic = word.length <= 2 ? arabicNumberPattern(Number(word), between) : undefined;
+    const spelled = [said, year?.join(`${between}+`), arabic].filter(Boolean).join('|');
     // Written digits may follow letters directly ("address12"); number words need a space ("d one", not "done").
     const digitGap = index && !isNumber(words[index - 1]) ? `${between}*` : gap;
     return `(?:${digitGap}${digits}${spelled ? `|${gap}(?:${spelled})` : ''})`;
@@ -399,11 +445,17 @@ function triggerPattern(key: string, strict: boolean): string {
 }
 
 /** A whole-word matcher for any of the given triggers, each in its own group. */
-function triggersMatcher(keys: readonly string[], strict: boolean): RegExp {
+function triggersMatcher(triggers: readonly { key: string; strict: boolean }[]): RegExp {
   return new RegExp(
-    `(?<![\\p{L}\\p{M}\\p{N}])(?:${keys.map((key) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:،؛؟]*)`,
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${triggers.map(({ key, strict }) => `(${triggerPattern(key, strict)})`).join('|')})(?![\\p{L}\\p{M}\\p{N}])([.,!?;:،؛؟]*)`,
     'giu',
   );
+}
+
+/** Whether the text has the snippet's trigger, strictly (no punctuation inside it) or loosely. */
+function hasTrigger(text: string, snippet: Snippet, entries: readonly { word: string; heardAs?: string }[], strict: boolean): boolean {
+  const matcher = triggersMatcher(triggerKeys(snippet, entries).map((key) => ({ key, strict })));
+  return [text, applyDictionaryReplacements(text, entries)].some((candidate) => candidate.search(matcher) >= 0);
 }
 
 /**
@@ -415,11 +467,21 @@ export function snippetsSaidIn(
   snippets: readonly Snippet[],
   entries: readonly { word: string; heardAs?: string }[] = [],
 ): Snippet[] {
-  const texts = [text, applyDictionaryReplacements(text, entries)];
-  return snippets.filter((snippet) => {
-    const matcher = triggersMatcher(triggerKeys(snippet, entries), true);
-    return texts.some((candidate) => candidate.search(matcher) >= 0);
-  });
+  return snippets.filter((snippet) => hasTrigger(text, snippet, entries, true));
+}
+
+/**
+ * Snippets the recognizer wrote in a form the app cannot read ("عنوان واحد وعشرين") that cleanup
+ * wrote plainly ("عنوان 21"). Only when the raw text has no form of the trigger at all: if it has
+ * one with punctuation inside ("My address: 12 October"), the speaker did not mean it.
+ */
+export function snippetsFromCleanup(
+  rawText: string,
+  cleanedText: string,
+  snippets: readonly Snippet[],
+  entries: readonly { word: string; heardAs?: string }[] = [],
+): Snippet[] {
+  return snippets.filter((snippet) => !hasTrigger(rawText, snippet, entries, false) && hasTrigger(cleanedText, snippet, entries, true));
 }
 
 /** Both spellings a trigger can arrive in: as saved, and with dictionary replacements applied. */
@@ -442,7 +504,10 @@ export function wholeSnippet(
  * Replaces each trigger phrase in the text with its expansion, longest trigger first, in one pass
  * so an expansion is never matched again. Punctuation cleanup put right after a trigger is dropped
  * when the expansion ends a sentence or spans lines, so a signature gets no stray period. With
- * `loose`, punctuation inside a trigger is allowed: for snippets already found in the raw transcript.
+ * `loose`, punctuation inside a trigger is allowed, for snippets already found in the raw transcript,
+ * but only for a snippet the text has no unpunctuated form of: where cleanup kept the punctuation,
+ * it still tells the meant trigger from words that look like one ("My address: 12 October City.
+ * Send it to my address 12.").
  */
 export function expandSnippets(
   text: string,
@@ -451,16 +516,13 @@ export function expandSnippets(
   { loose = false }: { loose?: boolean } = {},
 ): { text: string; fired: boolean; startsWithExpansion: boolean } {
   const pairs = snippets
-    .flatMap((snippet) => triggerKeys(snippet, entries).map((key) => ({ key, expansion: snippet.expansion })))
+    .flatMap((snippet) => {
+      const strict = !loose || hasTrigger(text, snippet, entries, true);
+      return triggerKeys(snippet, entries).map((key) => ({ key, strict, expansion: snippet.expansion }));
+    })
     .sort((a, b) => b.key.length - a.key.length);
   if (!pairs.length || !text) return { text, fired: false, startsWithExpansion: false };
-  if (loose) {
-    // Where cleanup kept the punctuation, it still tells a meant trigger from words that only look
-    // like one ("My address: 12 October City. Send it to my address 12."). Loosen only if needed.
-    const strict = expandSnippets(text, snippets, entries);
-    if (strict.fired) return strict;
-  }
-  const matcher = triggersMatcher(pairs.map(({ key }) => key), !loose);
+  const matcher = triggersMatcher(pairs);
   let fired = false;
   let startsWithExpansion = false;
   const result = text.replace(matcher, (...args) => {

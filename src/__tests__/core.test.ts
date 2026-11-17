@@ -1,5 +1,5 @@
 import { heardSpeech } from '../utils/audioRecorder';
-import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, snippetsSaidIn, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
+import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, snippetsSaidIn, snippetsFromCleanup, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
 import { addCapturedKey, findShortcutConflict, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
@@ -1883,6 +1883,14 @@ describe('snippets', () => {
     expect(snippetsSaidIn('Send it to my address 12, please.', [glued, link])).toEqual([glued]);
     expect(expandSnippets('Send it to my address, 12, please.', [glued], [], { loose: true }).text).toBe('Send it to egypt, please.');
     expect(expandSnippets('Send it to my address, 12, please.', [glued]).fired).toBe(false);
+    // Cleanup's spelling counts only when the raw text has no form of the trigger at all.
+    const room = { ...link, id: 'r121', trigger: 'عنوان 121', expansion: '[X]' };
+    expect(snippetsFromCleanup('عنوان مية وواحد وعشرين', 'عنوان 121', [room])).toEqual([room]);
+    expect(snippetsFromCleanup('My address: 12 October City.', 'My address 12 October City.', [glued])).toEqual([]);
+    expect(snippetsFromCleanup('Send it to my address 12.', 'Send it to my address 12.', [glued])).toEqual([]);
+    expect(snippetsFromCleanup('hello', 'hello, my address: 12', [glued])).toEqual([]);
+    // Each snippet loosens on its own: one kept strict does not stop another cleanup re-punctuated.
+    expect(expandSnippets('my address, 12 and the zoom link', [glued, link], [], { loose: true }).text).toBe('egypt and the https://zoom.us/j/1');
     // Where cleanup kept the punctuation, only the meant trigger expands.
     expect(expandSnippets('My address: 12 October City. Send it to my address 12.', [glued], [], { loose: true }).text)
       .toBe('My address: 12 October City. Send it to egypt.');
@@ -1907,11 +1915,23 @@ describe('snippets', () => {
     expect(['عنوان 1', 'عنوان ١', 'عنوان واحده', 'عنوان١'].map((text) => expandSnippets(text, [address]).fired)).toEqual([true, true, true, true]);
     // An Arabic comma inside the phrase means it was not meant.
     expect(snippetsSaidIn('عنوان، واحد', [address])).toEqual([]);
-    expect(expandSnippets('عنوان واحدة وعشرون', [address]).fired).toBe(true);
+    expect(expandSnippets('عنوان واحدة وعشرون', [address]).fired).toBe(false);
     expect(expandSnippets('عنوانين', [address]).fired).toBe(false);
     const three = { ...address, trigger: 'غرفة 3' };
     expect(['غرفة ثلاثة', 'غرفه تلاته', 'غرفة ثلاث'].map((text) => expandSnippets(text, [three]).fired)).toEqual([true, true, true]);
     expect(wholeSnippet('غرفه تلاته.', [three])?.id).toBe('ar');
+    // "واحد وعشرين" is 21, never 1 followed by "وعشرين".
+    const twentyOne = { ...address, id: 'a21', trigger: 'عنوان 21', expansion: 'مثر' };
+    expect(snippetTriggerKey('عنوان واحد وعشرين')).toBe('عنوان 21');
+    expect(snippetTriggerKey('عشرين')).toBe('20');
+    expect(snippetsSaidIn('ابعتها على عنوان واحد وعشرين، مصر', [address, twentyOne])).toEqual([twentyOne]);
+    expect(expandSnippets('على عنوان واحد وعشرين، مصر', [address, twentyOne]).text).toBe('على مثر، مصر');
+    expect(expandSnippets('عنوان واحد و عشرون', [twentyOne]).fired).toBe(true);
+    expect(expandSnippets('عنوان عشرين', [{ ...twentyOne, trigger: 'عنوان 20' }]).fired).toBe(true);
+    // Alef maqsura, diacritics and tatweel do not matter.
+    const on = { ...address, trigger: 'على الهاتف' };
+    expect(['علي الهاتف', 'عَلى الهاتِف', 'على الهـاتف'].map((text) => expandSnippets(text, [on]).fired)).toEqual([true, true, true]);
+    expect(expandSnippets('على الهاتف', [{ ...on, trigger: 'عَلَى الهَاتِف' }]).fired).toBe(true);
     // A number word folds to the same digit in any spelling.
     expect([snippetTriggerKey('أربعة'), snippetTriggerKey('اربعه')]).toEqual(['4', '4']);
     const glued = { ...link, id: 's7', trigger: 'my address12', expansion: 'egypt' };

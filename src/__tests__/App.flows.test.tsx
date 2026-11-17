@@ -359,6 +359,15 @@ describe('Snippets', () => {
     expect(engine.processTranscriptWithLlm.mock.calls[0][3].keepPhrases).toEqual([]);
   });
 
+  it('expands a trigger cleanup wrote plainly when the recognizer wrote it in words the app cannot read', async () => {
+    seed({ snippets: [{ ...signature, trigger: 'عنوان 121', expansion: 'مثر' }] });
+    engine.transcribeAudio.mockResolvedValue('عنوان مية وواحد وعشرين، مصر');
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'عنوان 121، مصر' });
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('مثر، مصر');
+  });
+
   it('expands with cleanup off and with personalization off', async () => {
     seed({ snippets: [signature], settings: { smartCleanup: false, personalizationEnabled: false } });
     engine.transcribeAudio.mockResolvedValue('talk soon my signature');

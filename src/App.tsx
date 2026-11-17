@@ -13,7 +13,7 @@ import { DEFAULT_SETTINGS } from './data/seedData';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, createDefaultProviders, isProviderConfigured } from './services/providers/catalog';
 import { assignHistoryIds, parseHistoryImport, skipDuplicateHistory } from './services/historyImport';
 import { extractCorrections } from '../electron/pasteCorrections';
-import { applyDictionaryReplacements, expandSnippets, snippetsSaidIn, snippetTriggerKey, wholeSnippet, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
+import { applyDictionaryReplacements, expandSnippets, snippetsSaidIn, snippetsFromCleanup, snippetTriggerKey, wholeSnippet, mergeImportedWords, applyStyleCorrections, stylesForCleanup, type WritingProfile, buildSourceCategories, categoryForDestination, dictionaryWordsFor, DONT_LEARN, forgetRetainedStyles, learnableSource, listDestinations, type SourceChoice, forgetWritingStyles, isStyleEdit, restoreRetainedStyles, retainRemovedStyles, toRetainedStyle, userWrittenText, withRetainedStyles, restoreWritingStyles, samplesSinceCorrection, type ForgottenStyles, destinationKey, fitToSurroundingText } from './services/personalization';
 import {
   detectWritingStyle,
   processTranscriptWithLlm,
@@ -616,7 +616,13 @@ export function App() {
           beforeSnippets = finalText;
           const expanded = onlySnippet
             ? { text: onlySnippet.expansion, fired: true, startsWithExpansion: true }
-            : expandSnippets(finalText, saidSnippets, appState.dictionary, { loose: true });
+            : expandSnippets(
+              finalText,
+              // Plus any cleanup wrote plainly that the recognizer wrote in a form the app cannot read.
+              [...saidSnippets, ...snippetsFromCleanup(rawText, finalText, appState.snippets, appState.dictionary)],
+              appState.dictionary,
+              { loose: true },
+            );
           finalText = expanded.text;
           startsWithSnippet = expanded.startsWithExpansion;
           // Saved text says nothing about how the user writes here.
@@ -1249,7 +1255,12 @@ export function App() {
       const cleaned = processed.finalText || item.text;
       const nextText = item.mode === 'dictate'
         ? wholeSnippet(item.rawText, appState.snippets, appState.dictionary)?.expansion
-          ?? expandSnippets(applyDictionaryReplacements(cleaned, appState.dictionary), saidSnippets, appState.dictionary, { loose: true }).text
+          ?? expandSnippets(
+            applyDictionaryReplacements(cleaned, appState.dictionary),
+            [...saidSnippets, ...snippetsFromCleanup(item.rawText, cleaned, appState.snippets, appState.dictionary)],
+            appState.dictionary,
+            { loose: true },
+          ).text
         : cleaned;
       const nextWords = countWords(nextText);
       const nextWpm = Math.max(
