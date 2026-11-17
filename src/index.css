@@ -2362,7 +2362,6 @@ textarea,
     yy-hud-notice-out 0.25s ease-in 5.75s forwards;
 }
 
-.yy-hud-tip-pause,
 .yy-hud-tip-finish {
   display: inline-flex;
   align-items: center;
@@ -2377,8 +2376,10 @@ textarea,
 }
 
 .yy-hud-tip-pause {
-  background: #404142;
-  color: #fff;
+  /* The base styles make every svg a block. */
+  display: inline-block;
+  margin: 0 1px;
+  vertical-align: -3.5px;
 }
 
 .yy-hud-tip kbd,

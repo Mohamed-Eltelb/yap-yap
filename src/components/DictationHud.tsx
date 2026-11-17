@@ -60,11 +60,17 @@ const finishIcon = (
   </span>
 );
 
-/** A small copy of the Pause button that hovering Finish reveals. */
+/**
+ * A small copy of the Pause button that hovering Finish reveals. The circle and bars are
+ * one SVG so they snap to screen pixels together; a separate icon inside a circle drifts
+ * half a pixel off centre at 125% display scaling.
+ */
 const pauseIcon = (
-  <span className="yy-hud-tip-pause" aria-label="Pause" role="img">
-    <Pause size={10} strokeWidth={2.75} aria-hidden="true" />
-  </span>
+  <svg className="yy-hud-tip-pause" role="img" aria-label="Pause" width="16" height="16" viewBox="0 0 16 16">
+    <circle cx="8" cy="8" r="8" fill="#404142" />
+    <rect x="5.1" y="4.6" width="2.2" height="6.8" rx="0.7" fill="#fff" />
+    <rect x="8.7" y="4.6" width="2.2" height="6.8" rx="0.7" fill="#fff" />
+  </svg>
 );
 
 export type PillState = 'armed' | 'recording' | 'paused' | 'thinking' | 'closing';
