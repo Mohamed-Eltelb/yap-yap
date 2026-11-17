@@ -160,7 +160,7 @@ export function DictationHud({
           <button type="button" onClick={onCancel}>Cancel</button>
         </section>
       )}
-      {hud.status === 'processing' && !hud.busyNotice && (
+      {hud.status === 'processing' && (
         <div className="yy-hud-thinking" role="status">
           <span>Thinking</span>
         </div>

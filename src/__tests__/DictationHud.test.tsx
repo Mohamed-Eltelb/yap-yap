@@ -55,6 +55,9 @@ it('tells the user the last dictation is still processing', () => {
   expect(html).toContain('Yap Yap is still processing your last dictation');
   expect(html).toContain('Press Esc or click Cancel to cancel it.');
   expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
+  // The notice sits above the Thinking pill rather than replacing it.
+  expect(html.indexOf('yy-hud-busy')).toBeLessThan(html.indexOf('yy-hud-thinking'));
+  expect(html).toContain('Thinking');
 });
 
 it('says no speech was detected', () => {

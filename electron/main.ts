@@ -236,8 +236,9 @@ function updateHudWindow(): void {
     height = 170;
   }
   if (state?.status === 'processing' && state.busyNotice) {
+    // The notice sits above the Thinking pill, so leave room for both.
     width = 360;
-    height = 170;
+    height = 220;
   }
   if (state?.status === 'error' || state?.status === 'result') {
     const answer = state.status === 'result' && state.mode === 'ask';
