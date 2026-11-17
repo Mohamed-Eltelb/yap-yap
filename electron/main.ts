@@ -18,7 +18,7 @@ import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccel
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
 import type { HudAction } from './hudActions';
-import { HUD_SHRINK_DELAY_MS, hudResizeDelay } from './hudBounds';
+import { hudHideDelay, HUD_SHRINK_DELAY_MS, planHudResize, type Size } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -210,10 +210,31 @@ function createHudWindow(): void {
   hudWindow.on('closed', () => {
     hudReady = false;
     hudWindow = null;
+    clearHudTimer();
   });
 }
 
 let hudResizeTimer: ReturnType<typeof setTimeout> | undefined;
+/** What the waiting timer will do: shrink to this size, or hide the window. */
+let hudPending: Size | 'hide' | undefined;
+/** The status the HUD window last showed, to know if a pill has to shrink out. */
+let hudShownStatus: string | undefined;
+
+function clearHudTimer() {
+  clearTimeout(hudResizeTimer);
+  hudResizeTimer = undefined;
+  hudPending = undefined;
+}
+
+/** Runs after the pill has animated, unless the window is gone by then. */
+function afterHudAnimation(window: BrowserWindow, pending: Size | 'hide', run: () => void) {
+  hudPending = pending;
+  hudResizeTimer = setTimeout(() => {
+    hudResizeTimer = undefined;
+    hudPending = undefined;
+    if (!window.isDestroyed()) run();
+  }, HUD_SHRINK_DELAY_MS);
+}
 
 /** Places the HUD window at the bottom center of the work area at this size. */
 function setHudSize(window: BrowserWindow, workArea: Electron.Rectangle, width: number, height: number) {
@@ -227,23 +248,25 @@ function setHudSize(window: BrowserWindow, workArea: Electron.Rectangle, width: 
 
 function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
-  clearTimeout(hudResizeTimer);
-  hudResizeTimer = undefined;
   if (!hudPayload.show) {
-    if (!hudWindow.isVisible()) {
+    if (hudPending === 'hide') return;
+    clearHudTimer();
+    const hide = (window: BrowserWindow) => {
+      window.hide();
       hudDisplayId = undefined;
+      hudShownStatus = undefined;
+    };
+    if (!hudWindow.isVisible() || hudHideDelay(hudShownStatus) === 0) {
+      hide(hudWindow);
       return;
     }
     // Let the page shrink its pill out before the window goes.
-    hudWindow.webContents.send('hud:state', hudPayload.state ?? { status: 'idle', mode: 'dictate', levels: [] });
+    hudWindow.webContents.send('hud:state', { status: 'idle', mode: 'dictate', levels: [] });
     const window = hudWindow;
-    hudResizeTimer = setTimeout(() => {
-      hudResizeTimer = undefined;
-      window.hide();
-      hudDisplayId = undefined;
-    }, HUD_SHRINK_DELAY_MS);
+    afterHudAnimation(window, 'hide', () => hide(window));
     return;
   }
+  if (hudPending === 'hide') clearHudTimer();
 
   const state = hudPayload.state;
   const display = screen.getAllDisplays().find((item) => item.id === hudDisplayId) ??
@@ -274,19 +297,22 @@ function updateHudWindow(): void {
   }
   width = Math.min(width, workArea.width);
   height = Math.min(height, workArea.height - 12);
-  const bounds = hudWindow.getBounds();
   // A visible window grows at once but shrinks only after the pill has animated,
   // so the pill is never cut off mid-animation.
-  if (hudWindow.isVisible() && hudResizeDelay(bounds, { width, height }) > 0) {
-    setHudSize(hudWindow, workArea, Math.max(width, bounds.width), Math.max(height, bounds.height));
-    const window = hudWindow;
-    hudResizeTimer = setTimeout(() => {
-      hudResizeTimer = undefined;
-      setHudSize(window, workArea, width, height);
-    }, HUD_SHRINK_DELAY_MS);
-  } else {
+  const target = { width, height };
+  if (!hudWindow.isVisible()) {
+    clearHudTimer();
     setHudSize(hudWindow, workArea, width, height);
+  } else {
+    const plan = planHudResize(hudWindow.getBounds(), target, hudPending === 'hide' ? undefined : hudPending);
+    if (!plan.keepPending) {
+      clearHudTimer();
+      if (plan.now) setHudSize(hudWindow, workArea, plan.now.width, plan.now.height);
+      const window = hudWindow;
+      if (plan.later) afterHudAnimation(window, plan.later, () => setHudSize(window, workArea, width, height));
+    }
   }
+  hudShownStatus = state?.status;
   hudWindow.webContents.send('hud:state', state);
   if (!hudWindow.isVisible()) hudWindow.showInactive();
 }
