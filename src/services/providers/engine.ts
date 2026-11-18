@@ -777,7 +777,9 @@ export async function processTranscriptWithLlm(
       'Answer in the same language the user spoke in, unless they ask for another language. ' +
       'Write plain text with no Markdown: no asterisks, pound signs, or backticks. Use simple line breaks, and "-" bullets only when a list is clearer.' +
       (webSearchFor(provider)
-        ? ` Today is ${new Date().toDateString()}. You can search the web. Search only when the answer depends on current information (news, prices, scores, weather, schedules, recent releases) or on a specific fact you are not sure of. Otherwise answer from what you know, without searching. Do not include links, source names, or citation marks unless the user asks for them.`
+        ? ` It is now ${currentTime()}. You can search the web. Search only when the answer depends on current information (news, prices, scores, weather, schedules, recent releases) or on a specific fact you are not sure of. Otherwise answer from what you know, without searching.` +
+          ' For values that change often (prices, exchange rates, scores, weather), use the most recently updated source you find, preferring live pages that show when they were updated over articles or cached snapshots. Give the value with the time it was reported when the source shows one ("as of 3:40 PM UTC"), and otherwise say it may have changed since.' +
+          ' Do not include links, source names, or citation marks unless the user asks for them.'
         : '') +
       ' If the user greets you or asks who you are or what you can do, reply in two or three sentences about what they can do: ask any question by voice and get an answer to copy' +
       (webSearchFor(provider) ? ', including current information from the web' : '') +
@@ -932,6 +934,14 @@ function withoutCitations(text: string): string {
  */
 function searchMayBeUnsupported(status: number): boolean {
   return [400, 402, 403, 404, 413, 422, 429].includes(status);
+}
+
+/** The user's date, time, and time zone, so the model can tell how fresh a search result is. */
+function currentTime(): string {
+  return new Date().toLocaleString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
 }
 
 /**

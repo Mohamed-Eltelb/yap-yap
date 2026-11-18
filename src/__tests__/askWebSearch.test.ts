@@ -31,6 +31,10 @@ describe('Ask anything web search', () => {
     expect(body.tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
     expect(body.system).toContain('Search only when');
     expect(body.system).toContain('including current information from the web');
+    // The model gets the time to judge how fresh results are, and reports when a value was true.
+    expect(body.system).toMatch(/It is now .*\d{4}.*\d:\d\d/);
+    expect(body.system).toContain('most recently updated source');
+    expect(body.system).toContain('may have changed since');
   });
 
   it('gives newer Claude models the newer search tool, and marks nothing when it did not search', async () => {
