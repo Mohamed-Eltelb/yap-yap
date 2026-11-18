@@ -29,7 +29,8 @@ describe('Ask anything web search', () => {
     const body = bodyOf(fetchMock);
     // Haiku takes the basic search tool.
     expect(body.tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
-    expect(body.system).toContain('Search only when');
+    expect(body.system).toContain('You can search the web');
+    expect(body.system).toContain('latest, most recent, current, or newest');
     expect(body.system).toContain('including current information from the web');
     // The model gets the time to judge how fresh results are, and reports when a value was true.
     expect(body.system).toMatch(/It is now .*\d{4}.*\d:\d\d/);
@@ -118,7 +119,8 @@ describe('Ask anything web search', () => {
     for (const call of [0, 1]) {
       const body = bodyOf(fetchMock, call);
       expect(body.tools).toBeUndefined();
-      expect(body.messages[0].content).not.toContain('search the web');
+      expect(body.messages[0].content).not.toContain('You can search the web');
+      expect(body.messages[0].content).toContain('cannot check it right now');
       expect(body.messages[0].content).not.toContain('from the web');
       expect(body.messages[0].content).toContain('who you are');
     }
@@ -149,16 +151,32 @@ describe('Ask anything web search', () => {
     expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
   });
 
-  it('asks again without search when the search reply has no answer', async () => {
+  it('tries the search again when it comes back empty', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(reply({ output: [{ type: 'web_search_call' }] }))
-      .mockResolvedValueOnce(reply({ choices: [{ message: { content: 'Paris.' } }] }));
+      .mockResolvedValueOnce(reply({ choices: [{ message: { content: '', executed_tools: [{}] } }] }))
+      .mockResolvedValueOnce(reply({ choices: [{ message: { content: 'PSG won.', executed_tools: [{}] } }] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const out = await processTranscriptWithLlm('Capital of France?', 'ask', provider('openai'), options);
+    const out = await processTranscriptWithLlm('Who won the final?', 'ask', provider('groq'), options);
 
-    expect(out.answer).toBe('Paris.');
-    expect(fetchMock.mock.calls[1][0]).toBe('https://api.openai.com/v1/chat/completions');
+    expect(out).toEqual({ finalText: 'PSG won.', answer: 'PSG won.', searchedWeb: true });
+    expect(bodyOf(fetchMock, 1).tools).toEqual([{ type: 'browser_search' }]);
+  });
+
+  it('after two empty searches, answers without search and is told it cannot look things up', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply({ output: [{ type: 'web_search_call' }] }))
+      .mockResolvedValueOnce(reply({ output: [{ type: 'web_search_call' }] }))
+      .mockResolvedValueOnce(reply({ choices: [{ message: { content: 'I cannot check that right now.' } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm('Who is president now?', 'ask', provider('openai'), options);
+
+    expect(out.answer).toBe('I cannot check that right now.');
+    expect(fetchMock.mock.calls[2][0]).toBe('https://api.openai.com/v1/chat/completions');
+    const fallback = bodyOf(fetchMock, 2).messages[0].content as string;
+    expect(fallback).toContain('You cannot search the web');
+    expect(fallback).not.toContain('You can search the web');
   });
 
   it('counts OpenRouter searches from its usage report, and leaves other spacing alone', async () => {
