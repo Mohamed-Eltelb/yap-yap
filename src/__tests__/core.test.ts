@@ -1024,7 +1024,8 @@ describe('Multi-Provider Engine', () => {
     // A rule can be limited to one kind of place. An unknown place name is kept as plain text.
     const scoped = '[messaging] No final period.\nWrite numbers as digits.\n[Nowhere] Odd rule.';
     expect(parseWritingPreferences(scoped)).toEqual(['[Messaging] No final period.', 'Write numbers as digits.', '[Nowhere] Odd rule.']);
-    expect(writingRulesFor(scoped, 'Messaging')).toEqual(['No final period.', 'Write numbers as digits.', '[Nowhere] Odd rule.']);
+    // Rules for the place come last, so they win over a rule for everywhere.
+    expect(writingRulesFor(scoped, 'Messaging')).toEqual(['Write numbers as digits.', '[Nowhere] Odd rule.', 'No final period.']);
     expect(writingRulesFor(scoped, 'Email')).toEqual(['Write numbers as digits.', '[Nowhere] Odd rule.']);
     expect(writingRulesFor(scoped, undefined)).toEqual(['Write numbers as digits.', '[Nowhere] Odd rule.']);
     const saved = getInitialState();

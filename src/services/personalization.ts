@@ -764,10 +764,13 @@ export function writeWritingRule(text: string, category?: WritingCategory): stri
 
 /** The rules to follow for a dictation going to the given kind of place. */
 export function writingRulesFor(preferences: unknown, category: string | undefined): string[] {
-  return parseWritingPreferences(preferences)
-    .map(readWritingRule)
-    .filter((rule) => !rule.category || rule.category === category)
-    .map((rule) => rule.text);
+  // Rules for this kind of place come last: the cleanup prompt lets a later rule win, so a place
+  // rule ("Western digits in Email") is an exception to a rule for everywhere.
+  const rules = parseWritingPreferences(preferences).map(readWritingRule);
+  return [
+    ...rules.filter((rule) => !rule.category),
+    ...rules.filter((rule) => rule.category && rule.category === category),
+  ].map((rule) => rule.text);
 }
 
 /**

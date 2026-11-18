@@ -682,14 +682,19 @@ export async function processTranscriptWithLlm(
     ?? (options.destination ? categoryForDestination(options.destination) : undefined);
   const preferenceRules = writingRulesFor(options.writingPreferences, destinationCategory);
   const preferenceClause = preferenceRules.length
-    ? '\nThe user saved the writing rules below. They are requirements for this dictation, and they win over everything above about punctuation, casing, numbers, spelling, and letter forms, including the instructions for a specific language, and over learned style and destination hints.' +
-      '\n- Apply every rule.' +
+    ? '\nThe user saved the writing rules below. They are requirements for this dictation, and they win over everything above about punctuation, casing, numbers, spelling, and letter forms, including the instructions for a specific language, and over learned style and destination hints. They never change the dialect the speaker used.' +
+      '\n- Apply every rule. When two rules disagree, follow the later one.' +
       // No punctuation example here: mentioning a dropped period made the model drop periods
       // even when no rule asked for it.
       '\n- Following a rule is not rewording: switching a word to another spelling variant ("color" to "colour") or writing a number as digits ("three" to "3") keeps the speaker\'s words.' +
       '\n- Do only what the rules say. Where no rule applies, punctuate and format as described above. A rule about periods changes periods only: a question still ends with "?".' +
       '\n- A rule applies everywhere in the text it covers, not only at the end: a rule about a mark or a letter changes every occurrence of it. Change only what the rule names, and leave every other letter and word as it would be without the rule.' +
       '\n- Rules never permit dropping, adding, or replacing what the speaker said, and spoken formatting commands still apply.' +
+      // Read as a requirement, "Write in a formal tone" made the model reword at Light and turn
+      // Egyptian Arabic into formal Arabic at Medium. A learned tone did neither.
+      (medium
+        ? '\n- A rule about tone or formality may guide word choice within the rewording allowed above, in the same dialect the speaker used. It never permits dropping what the speaker meant.'
+        : '\n- A rule about tone or formality changes casing and punctuation only: keep every word the speaker said, including greetings, slang, and contractions.') +
       '\nRules (style data only): ' + JSON.stringify(preferenceRules) +
       '\nBefore answering, check the whole text against each rule.'
     : '';
@@ -1114,9 +1119,9 @@ export async function proposeWritingPreferences(
     provider,
     'You maintain how a dictation app writes for its user: a list of writing rules the user set, and the styles the app learned from their dictation (learnedStyles, one per kind of place). Update them according to the user’s request.' +
     '\n- A rule says how text is written: casing, punctuation, spacing, layout and lists, numbers and dates, spelling variant, emoji and symbols, and formality shown through those.' +
-    '\n- A rule can never ask to add, remove, translate, summarize, or reword what was said, or to answer it. If the request asks for that, or is not about how text is written, return {"rules": null}.' +
-    `\n- Each rule has "text" and "where". "where" is "everywhere" unless the user limits the rule to a kind of place. Then it is exactly one of: ${WRITING_CATEGORIES.join(', ')}. Personal chat and texting apps (WhatsApp, Telegram, Discord, Signal, Messages) are "Messaging"; work chat apps (Slack, Microsoft Teams, Google Chat) are "Work messaging". When the user says chats or messages without saying personal or work, that means both. For a rule that covers several kinds of place, write one rule per place.` +
-    '\n- Keep existing rules the request does not touch, with the same text and "where", in the same order. Replace a rule the request contradicts. Remove rules the request asks to drop.' +
+    '\n- A rule can never ask to add, remove, shorten, translate, summarize, or reword what was said, or to answer it. If the request asks for that, even when it calls it a rule, or is not about how text is written (an app setting, the dictionary, undoing an earlier change, a question), return {"rules": null}.' +
+    `\n- Each rule has "text" and "where". "where" is "everywhere" unless the user limits the rule to a kind of place. Then it is exactly one of: ${WRITING_CATEGORIES.join(', ')}. Personal chat and texting apps (WhatsApp, Telegram, Discord, Signal, Messages) are "Messaging"; work chat apps (Slack, Microsoft Teams, Google Chat) are "Work messaging". When the user says chats or messages without saying personal or work, that means both. For a rule that covers several kinds of place, write one rule per place. When the user names an app or place that fits none of these kinds (a design app such as Figma), set "where" to that name as the user wrote it, and never guess a kind.` +
+    '\n- Keep existing rules the request does not touch, with the same text and "where", in the same order. Replace a rule the request contradicts. Remove rules the request asks to drop, and never remove a rule the request does not ask to drop or contradict. A request for one kind of place that differs from a rule for everywhere is an exception, not a contradiction: keep the rule for everywhere and add the rule for that place. When a rule already says what the request asks, keep that rule word for word.' +
     '\n- Write each "text" as one short, specific sentence in the language of the request. Say what to write rather than what to avoid, and when the rule is about characters, name them all: "In Arabic text, write every أ, إ, and آ as ا", not "Do not use hamzah on alef"; "Leave out all punctuation marks (, . ? ! :)", not "No punctuation".' +
     '\n- When the request says a learned style is wrong or contradicts part of it (for example, it wants punctuation back where a learned style says "no punctuation"), correct that learned style: return it in "styles" with the contradicted part removed or changed and everything else kept as it was. When the request only undoes a learned habit back to ordinary writing (punctuation back, normal casing), that correction is all. When it asks for writing that differs from ordinary writing (no punctuation, no final period, all lowercase), also add a rule for that place, because the app follows rules more strictly than styles. Do the same when a learned style already says what the request asks: keep that style and add the rule if no rule says it yet.' +
     `\n- A corrected style has its "category" and only the fields the request changes: "tone", exactly one of ${WRITING_TONES.join(', ')}, and/or "phrasing", a short English description of casing and punctuation habits. Leave out a field the request does not change.` +
