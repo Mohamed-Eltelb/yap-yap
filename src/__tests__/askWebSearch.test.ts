@@ -30,6 +30,7 @@ describe('Ask anything web search', () => {
     // Haiku takes the basic search tool.
     expect(body.tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
     expect(body.system).toContain('Search only when');
+    expect(body.system).toContain('including current information from the web');
   });
 
   it('gives newer Claude models the newer search tool, and marks nothing when it did not search', async () => {
@@ -114,6 +115,8 @@ describe('Ask anything web search', () => {
       const body = bodyOf(fetchMock, call);
       expect(body.tools).toBeUndefined();
       expect(body.messages[0].content).not.toContain('search the web');
+      expect(body.messages[0].content).not.toContain('from the web');
+      expect(body.messages[0].content).toContain('who you are');
     }
   });
 
