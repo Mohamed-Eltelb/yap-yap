@@ -180,6 +180,28 @@ describe('Ask anything web search', () => {
     expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
   });
 
+  it('answers without search when the search allowance is used up', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply({ error: { message: 'RESOURCE_EXHAUSTED' } }, 429))
+      .mockResolvedValueOnce(reply({ candidates: [{ content: { parts: [{ text: 'Paris.' }] } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm('Capital of France?', 'ask', provider('gemini'), options);
+
+    expect(out.answer).toBe('Paris.');
+    expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
+  });
+
+  it('writes plain spaces and hyphens in answers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({
+      choices: [{ message: { content: 'Priced at $64,727.20 USD, up‑to‑date.' } }],
+    })));
+
+    const out = await processTranscriptWithLlm('Bitcoin?', 'ask', provider('groq'), options);
+
+    expect(out.answer).toBe('Priced at $64,727.20 USD, up-to-date.');
+  });
+
   it('still reports a bad key instead of retrying', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ error: { message: 'invalid x-api-key' } }, 401)));
     await expect(processTranscriptWithLlm('Hi?', 'ask', provider('anthropic'), options)).rejects.toThrow('invalid x-api-key');
