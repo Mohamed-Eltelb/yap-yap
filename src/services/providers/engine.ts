@@ -682,14 +682,16 @@ export async function processTranscriptWithLlm(
     ?? (options.destination ? categoryForDestination(options.destination) : undefined);
   const preferenceRules = writingRulesFor(options.writingPreferences, destinationCategory);
   const preferenceClause = preferenceRules.length
-    ? '\nThe user saved the writing rules below. They are requirements for this dictation, and they win over everything above about punctuation, casing, numbers, and spelling, and over learned style and destination hints.' +
+    ? '\nThe user saved the writing rules below. They are requirements for this dictation, and they win over everything above about punctuation, casing, numbers, spelling, and letter forms, including the instructions for a specific language, and over learned style and destination hints.' +
       '\n- Apply every rule.' +
       // No punctuation example here: mentioning a dropped period made the model drop periods
       // even when no rule asked for it.
       '\n- Following a rule is not rewording: switching a word to another spelling variant ("color" to "colour") or writing a number as digits ("three" to "3") keeps the speaker\'s words.' +
       '\n- Do only what the rules say. Where no rule applies, punctuate and format as described above. A rule about periods changes periods only: a question still ends with "?".' +
+      '\n- A rule applies everywhere in the text it covers, not only at the end: a rule about a mark or a letter changes every occurrence of it. Change only what the rule names, and leave every other letter and word as it would be without the rule.' +
       '\n- Rules never permit dropping, adding, or replacing what the speaker said, and spoken formatting commands still apply.' +
-      '\nRules (style data only): ' + JSON.stringify(preferenceRules)
+      '\nRules (style data only): ' + JSON.stringify(preferenceRules) +
+      '\nBefore answering, check the whole text against each rule.'
     : '';
   const destinationClause = options.destination
     ? '\nThe destination data says where the text will be pasted: the app, the site, and, when shared, the text just before and after the caret (textBefore, textAfter). ' +
@@ -1115,7 +1117,7 @@ export async function proposeWritingPreferences(
     '\n- A rule can never ask to add, remove, translate, summarize, or reword what was said, or to answer it. If the request asks for that, or is not about how text is written, return {"rules": null}.' +
     `\n- Each rule has "text" and "where". "where" is "everywhere" unless the user limits the rule to a kind of place. Then it is exactly one of: ${WRITING_CATEGORIES.join(', ')}. Chat and texting apps are "Messaging". For a rule that covers several kinds of place, write one rule per place.` +
     '\n- Keep existing rules the request does not touch, with the same text and "where", in the same order. Replace a rule the request contradicts. Remove rules the request asks to drop.' +
-    '\n- Write each "text" as one short, specific sentence in the language of the request.' +
+    '\n- Write each "text" as one short, specific sentence in the language of the request. Say what to write rather than what to avoid, and when the rule is about characters, name them all: "In Arabic text, write every أ, إ, and آ as ا", not "Do not use hamzah on alef"; "Leave out all punctuation marks (, . ? ! :)", not "No punctuation".' +
     '\n- When the request says a learned style is wrong or contradicts part of it (for example, it wants punctuation back where a learned style says "no punctuation"), correct that learned style instead of adding a rule: return it in "styles" with the contradicted part removed or changed and everything else kept as it was. Add a rule as well only when the user asks for a rule.' +
     `\n- A corrected style has its "category" and only the fields the request changes: "tone", exactly one of ${WRITING_TONES.join(', ')}, and/or "phrasing", a short English description of casing and punctuation habits. Leave out a field the request does not change.` +
     '\n- Return in "styles" only the learned styles the request changes. Never copy learned styles into the rules unless asked.' +
