@@ -213,7 +213,7 @@ describe('Ask anything web search', () => {
     expect(out.answer).toBe('Paris.');
     expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
     // The answer can tell the user why it could not look anything up.
-    expect(bodyOf(fetchMock, 1).systemInstruction.parts[0].text).toContain('because the Google Gemini web search limit for this API key has been reached');
+    expect(bodyOf(fetchMock, 1).systemInstruction.parts[0].text).toContain('because the web search limit on the user\'s Google Gemini API key has been reached');
   });
 
   it('writes plain spaces and hyphens in answers', async () => {
