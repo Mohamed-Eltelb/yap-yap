@@ -120,7 +120,7 @@ describe('Ask anything web search', () => {
       const body = bodyOf(fetchMock, call);
       expect(body.tools).toBeUndefined();
       expect(body.messages[0].content).not.toContain('You can search the web');
-      expect(body.messages[0].content).toContain('cannot check it right now');
+      expect(body.messages[0].content).toContain('because the selected AI model cannot search the web');
       expect(body.messages[0].content).not.toContain('from the web');
       expect(body.messages[0].content).toContain('who you are');
     }
@@ -212,6 +212,8 @@ describe('Ask anything web search', () => {
 
     expect(out.answer).toBe('Paris.');
     expect(bodyOf(fetchMock, 1).tools).toBeUndefined();
+    // The answer can tell the user why it could not look anything up.
+    expect(bodyOf(fetchMock, 1).systemInstruction.parts[0].text).toContain('because the Google Gemini web search limit for this API key has been reached');
   });
 
   it('writes plain spaces and hyphens in answers', async () => {

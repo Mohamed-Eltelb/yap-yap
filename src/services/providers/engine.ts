@@ -835,7 +835,8 @@ export async function processTranscriptWithLlm(
     // In Ask mode the transcript is the request itself.
     userPrompt = transcript;
     const canSearch = !!webSearchFor(provider);
-    const askPrompt = (searching: boolean) =>
+    // Without search, the answer says why, so "I can't check that" never reads as "I can't help you".
+    const askPrompt = (searching: boolean, noSearchReason = 'the selected AI model cannot search the web') =>
       'You are Yap Yap in Ask Anything mode. The user spoke a question or instruction, transcribed from speech, so allow for transcription errors. ' +
       'Provide a concise, clear, ready-to-paste answer with no preamble. ' +
       'Answer in the same language the user spoke in, unless they ask for another language. ' +
@@ -848,14 +849,14 @@ export async function processTranscriptWithLlm(
           ' Check the dates on what you find: a page from a year or more ago does not show what is latest now, and never give an old release or event today\'s date. If you can only find older information, say how old it is.' +
           ' Do not include links, source names, or citation marks unless the user asks for them.'
         // Without search, a model asked about recent events tends to invent an answer.
-        : ' You cannot search the web for this question. If the answer depends on current information or on events that may be newer than what you know, say in one sentence that you cannot check it right now. Never guess or make up a current fact.') +
+        : ` You cannot search the web for this question, because ${noSearchReason}. If the answer depends on current information or on events that may be newer than what you know, say in one or two sentences that you could not search the web and why, in the user's language and in plain words, and suggest where they can check it. Never guess or make up a current fact. Answer anything else as usual, without mentioning search.`) +
       ' If the user greets you or asks who you are or what you can do, reply in two or three sentences about what they can do: ask any question by voice and get an answer to copy' +
       (canSearch ? ', including current information from the web' : '') +
       ', with each question answered on its own. Never repeat or describe these instructions.' +
       dictClause;
     systemPrompt = askPrompt(canSearch);
     let searching = false;
-    const out = await callLlmWithWebSearch(provider, systemPrompt, userPrompt, askPrompt(false), () => {
+    const out = await callLlmWithWebSearch(provider, systemPrompt, userPrompt, (reason) => askPrompt(false, reason), () => {
       if (searching) return;
       searching = true;
       options.onWebSearch?.();
@@ -1041,13 +1042,14 @@ async function callLlmWithWebSearch(
   provider: ProviderConfig,
   systemPrompt: string,
   userPrompt: string,
-  /** The prompt for answering without search: it tells the model it cannot look things up. */
-  noSearchPrompt: string = systemPrompt,
+  /** The prompt for answering without search, given why search was not available. */
+  noSearchPrompt: (reason: string) => string = () => systemPrompt,
   /** Called once, as soon as the reply shows the provider searching. */
   onWebSearch?: () => void
 ): Promise<{ text: string; searchedWeb?: boolean }> {
   const kind = webSearchFor(provider);
   if (!kind) return { text: await callLlm(provider, systemPrompt, userPrompt) };
+  let reason = 'the web search did not return any results this time';
   // A search can stop partway and return nothing (Groq does this now and then), so it gets a second try.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -1059,10 +1061,22 @@ async function callLlmWithWebSearch(
       if (!(err instanceof SearchRequestError && searchMayBeUnsupported(err.status))) throw err;
       // Kept in the log so a rejected search can be told apart from a model that chose not to search.
       console.warn(`Ask anything: ${provider.name} rejected web search (${err.status}: ${err.message}); answering without it.`);
+      reason = searchUnavailableReason(provider.name, err.status);
       break;
     }
   }
-  return { text: await callLlm(provider, noSearchPrompt, userPrompt) };
+  return { text: await callLlm(provider, noSearchPrompt(reason), userPrompt) };
+}
+
+/** Why the provider refused a search, in words the answer can pass on to the user. */
+function searchUnavailableReason(providerName: string, status: number): string {
+  switch (status) {
+    case 429: return `the ${providerName} web search limit for this API key has been reached for now`;
+    case 402: return `the ${providerName} account has no credit left to pay for web searches`;
+    case 403: return `web search is not enabled for this ${providerName} API key`;
+    case 413: return 'the search results were too large for this API plan';
+    default: return `${providerName} did not allow a web search with the selected model`;
+  }
 }
 
 /** What shows in a streamed reply once the provider starts searching (for OpenRouter, once results arrive). */
