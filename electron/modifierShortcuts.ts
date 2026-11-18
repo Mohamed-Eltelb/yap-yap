@@ -52,7 +52,7 @@ const maskKey = UiohookKey.F24;
 type FlowHandlers = { appStatus: () => AppStatus; onPhase: (phase: ShortcutPhase) => void; onStop: () => void; onTogglePause: () => void };
 let handlers: FlowHandlers | undefined;
 const flow = new ShortcutFlow({
-  holdMs: 1000,
+  holdMs: 600,
   pauseHoldMs: 400,
   appStatus: () => handlers?.appStatus() ?? 'idle',
   emit: (out) => {
