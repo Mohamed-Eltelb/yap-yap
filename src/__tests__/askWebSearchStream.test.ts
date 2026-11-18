@@ -141,6 +141,23 @@ describe('Ask anything streams its answer to show a search as it happens', () =>
     expect(onWebSearch).not.toHaveBeenCalled();
   });
 
+  it('asks again without streaming when the provider refuses to stream, and still searches', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Your organization must be verified to stream this model.', param: 'stream' } }), { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ output: [
+        { type: 'web_search_call' },
+        { type: 'message', content: [{ type: 'output_text', text: 'It is sunny.' }] },
+      ] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await processTranscriptWithLlm('Weather?', 'ask', provider('openai'), options);
+
+    expect(out).toEqual({ finalText: 'It is sunny.', answer: 'It is sunny.', searchedWeb: true });
+    const second = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(second.stream).toBeUndefined();
+    expect(second.tools).toEqual([{ type: 'web_search' }]);
+  });
+
   it('reports an error that arrives in the middle of a stream', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamed(sse([
       { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },

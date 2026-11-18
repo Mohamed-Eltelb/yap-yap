@@ -1074,6 +1074,11 @@ const SEARCH_STARTED: Record<WebSearchKind, RegExp> = {
   openrouter: /"url_citation"/,
 };
 
+/** A rejection of the streamed reply itself, such as "Your organization must be verified to stream this model". */
+function streamingRefused(status: number, body: string): boolean {
+  return (status === 400 || status === 403 || status === 422) && /\bstream/i.test(extractErrorMessage(body, status));
+}
+
 /** Calls `onFound` once, when `marker` appears in a streamed reply, even split across pieces. */
 function streamWatcher(marker: RegExp, onFound?: () => void): (piece: string) => void {
   let tail = '';
@@ -1142,7 +1147,14 @@ async function requestWithWebSearch(
   const model = provider.llmModel || meta.llmModels[0]?.id || '';
   const watch = streamWatcher(SEARCH_STARTED[kind], onWebSearch);
   const stream = async (url: string, headers: Record<string, string>, body: Record<string, unknown>) => {
-    const res = await performStreamingRequest(url, { 'Content-Type': 'application/json', ...headers }, JSON.stringify({ ...body, stream: true }), watch);
+    const allHeaders = { 'Content-Type': 'application/json', ...headers };
+    let res = await performStreamingRequest(url, allHeaders, JSON.stringify({ ...body, stream: true }), watch);
+    // Some accounts or models may not stream (OpenAI has required a verified organization for it).
+    // The same request without streaming still searches; only the live "Searching the web" is lost.
+    if (!res.ok && streamingRefused(res.status, res.text)) {
+      console.warn(`Ask anything: ${provider.name} refused a streamed reply; asking without streaming.`);
+      res = await performRequest(url, { method: 'POST', headers: allHeaders, body: JSON.stringify(body) });
+    }
     if (!res.ok) throw new SearchRequestError(extractErrorMessage(res.text, res.status), res.status);
     return res.text;
   };
