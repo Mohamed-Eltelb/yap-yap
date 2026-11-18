@@ -58,6 +58,7 @@ function installDesktop() {
     copyText: vi.fn(async () => undefined),
     watchPasteCorrections: vi.fn(async () => desktop.edits),
     setSystemMute: vi.fn(async () => undefined),
+    setShortcutEditorOpen: vi.fn(),
   };
   (window as unknown as { yapyap: unknown }).yapyap = { ...desktop.api, platform: 'win32' };
 }
@@ -318,6 +319,31 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(lastHud()?.status).toBe('error'));
     await act(async () => { desktop.phase!('armed'); desktop.phase!('closed'); });
     expect(lastHud()?.status).toBe('error');
+  });
+
+  it('dictates into Yap Yap while Settings is open', async () => {
+    seed();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    await act(async () => { desktop.trigger!('dictate'); });
+    await act(async () => { desktop.action!({ type: 'stop' }); });
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
+    expect(desktop.api.setShortcutEditorOpen).not.toHaveBeenCalledWith(true);
+  });
+
+  it('ignores the dictation shortcut while a shortcut field is recording keys', async () => {
+    seed();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getAllByRole('button', { name: /^Edit Dictate shortcut 1/ })[0]);
+    expect(desktop.api.setShortcutEditorOpen).toHaveBeenLastCalledWith(true);
+    await act(async () => { desktop.trigger!('dictate'); });
+    expect(desktop.api.onHudAction).toHaveBeenCalled();
+    expect(lastHud()?.status ?? 'idle').not.toBe('recording');
+    expect(engine.transcribeAudio).not.toHaveBeenCalled();
   });
 
   it('does not apply a style learned from a single dictation', async () => {

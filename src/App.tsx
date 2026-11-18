@@ -89,6 +89,9 @@ export function App() {
 
   const [activeNav, setActiveNav] = useState<ActiveNav>('home');
   const [modalOpen, setModalOpen] = useState(false);
+  /** True while a Settings shortcut field records keys; the shortcuts are ignored then. */
+  const capturingShortcut = useRef(false);
+  const setCapturingShortcut = useCallback((capturing: boolean) => { capturingShortcut.current = capturing; }, []);
   const [showHudTargetSettings, setShowHudTargetSettings] = useState(false);
   const [modalTab, setModalTab] = useState<SettingsModalTab>('providers');
   const [shareOpen, setShareOpen] = useState(false);
@@ -1159,14 +1162,14 @@ export function App() {
   useEffect(() => {
     if (isHudRoute || !hydrated) return;
     const unsubTrigger = window.yapyap?.onTriggerMode?.((mode) => {
-      if (modalOpen && document.hasFocus()) {
+      if (capturingShortcut.current && document.hasFocus()) {
         setHud((current) => current.status === 'armed' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
         return;
       }
       void triggerDictationMode(mode);
     });
     const unsubPhase = window.yapyap?.onShortcutPhase?.((phase) => {
-      if (modalOpen && document.hasFocus()) return;
+      if (capturingShortcut.current && document.hasFocus()) return;
       const { status } = hudRef.current;
       if (phase === 'armed') {
         // An answer, error or Undo on screen stays until a shortcut actually starts;
@@ -1205,7 +1208,7 @@ export function App() {
       unsubPhase?.();
       unsubAction?.();
     };
-  }, [appState.settings, cancelRecording, dismissHud, hydrated, isHudRoute, modalOpen, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel, pauseRecording, resumeRecording]);
+  }, [appState.settings, cancelRecording, dismissHud, hydrated, isHudRoute, retryHud, stopAndProcess, triggerDictationMode, selectHudTarget, editHudTargets, undoCancel, pauseRecording, resumeRecording]);
 
   // In-window keyboard shortcut listener (ignores key repeat)
   useEffect(() => {
@@ -1722,6 +1725,7 @@ export function App() {
         onChangeTab={setModalTab}
         openTranslationTargets={showHudTargetSettings}
         onTranslationTargetsOpened={() => setShowHudTargetSettings(false)}
+        onCapturingShortcutChange={setCapturingShortcut}
         onClose={() => setModalOpen(false)}
         settings={appState.settings}
         onUpdateSettings={updateSettings}

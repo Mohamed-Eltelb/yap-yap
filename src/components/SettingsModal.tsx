@@ -38,6 +38,8 @@ interface Props {
   open: boolean;
   openTranslationTargets: boolean;
   onTranslationTargetsOpened: () => void;
+  /** Called with true while a shortcut field records keys, and false when it stops. */
+  onCapturingShortcutChange?: (capturing: boolean) => void;
   activeTab: SettingsModalTab;
   onChangeTab: (tab: SettingsModalTab) => void;
   onClose: () => void;
@@ -149,6 +151,7 @@ export function SettingsModal({
   destinations,
   stats,
   toast,
+  onCapturingShortcutChange,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -202,13 +205,19 @@ export function SettingsModal({
       : Object.values(providers).find((provider) => PROVIDER_CATALOG[provider.id].supportsLlm && isProviderConfigured(provider));
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
-  const shortcutEditorOpen = open && activeTab === 'settings';
+  // Shortcuts stay off only while a shortcut field records keys, so pressing the new
+  // shortcut does not also start a dictation. The rest of Settings can be dictated into.
+  const capturingShortcut = open && activeTab === 'settings' && capturingTarget !== null;
 
   useEffect(() => {
-    if (!shortcutEditorOpen) return;
+    if (!capturingShortcut) return;
     window.yapyap?.setShortcutEditorOpen(true);
-    return () => window.yapyap?.setShortcutEditorOpen(false);
-  }, [shortcutEditorOpen]);
+    onCapturingShortcutChange?.(true);
+    return () => {
+      window.yapyap?.setShortcutEditorOpen(false);
+      onCapturingShortcutChange?.(false);
+    };
+  }, [capturingShortcut, onCapturingShortcutChange]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
