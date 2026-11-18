@@ -13,6 +13,8 @@ export interface HudState {
   questionText?: string;
   /** The Ask anything answer used a web search. */
   searchedWeb?: boolean;
+  /** While processing: the provider is searching the web for the Ask anything answer. */
+  searchingWeb?: boolean;
   errorText?: string;
   targets?: string[];
   targetLanguage?: string;
@@ -94,8 +96,14 @@ function nextThinkingWord(current: string): string {
   return choices[Math.floor(Math.random() * choices.length)];
 }
 
-/** The Thinking pill's word. It changes while `active`, and starts over on "Thinking" each time. */
-function ThinkingLabel({ active, onWidth }: { active: boolean; onWidth: (width: number) => void }) {
+/** What the Thinking pill says while an Ask anything answer is searching the web. */
+export const SEARCHING_LABEL = 'Searching the web';
+
+/**
+ * The Thinking pill's word. It changes while `active`, and starts over on "Thinking" each time.
+ * While `searching` it holds on "Searching the web" instead.
+ */
+function ThinkingLabel({ active, searching, onWidth }: { active: boolean; searching: boolean; onWidth: (width: number) => void }) {
   const [word, setWord] = useState('Thinking');
   const [wasActive, setWasActive] = useState(active);
   if (active !== wasActive) {
@@ -103,18 +111,19 @@ function ThinkingLabel({ active, onWidth }: { active: boolean; onWidth: (width: 
     if (active) setWord('Thinking');
   }
   useEffect(() => {
-    if (!active) return;
+    if (!active || searching) return;
     const timer = window.setInterval(() => setWord(nextThinkingWord), THINKING_WORD_MS);
     return () => window.clearInterval(timer);
-  }, [active]);
+  }, [active, searching]);
+  const shown = searching ? SEARCHING_LABEL : word;
   const wordRef = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     if (active && wordRef.current) onWidth(wordRef.current.offsetWidth);
-  }, [active, word, onWidth]);
+  }, [active, shown, onWidth]);
   return (
     <span className="yy-hud-pill-label" aria-hidden="true">
       {/* A new key remounts the word, so each one slides in. */}
-      <span key={word} ref={wordRef} className="yy-hud-pill-word">{word}</span>
+      <span key={shown} ref={wordRef} className="yy-hud-pill-word">{shown}</span>
     </span>
   );
 }
@@ -279,7 +288,7 @@ export function DictationHud({
           className="yy-hud-pill"
           data-state={pill}
           role={pill === 'recording' ? 'group' : 'status'}
-          aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : pill === 'thinking' ? 'Thinking' : undefined}
+          aria-label={pill === 'recording' ? 'Recording controls' : pill === 'armed' ? 'Waiting for shortcut' : pill === 'thinking' ? (hud.searchingWeb ? SEARCHING_LABEL : 'Thinking') : undefined}
           // The Thinking pill fits its current word; the other shapes have fixed widths in CSS.
           style={pill === 'thinking' && thinkingWordWidth
             ? { width: Math.max(THINKING_MIN_WIDTH, thinkingWordWidth + THINKING_PADDING) }
@@ -312,7 +321,7 @@ export function DictationHud({
               <Play size={15} aria-hidden="true" />
             </button>
           </div>
-          <ThinkingLabel active={pill === 'thinking'} onWidth={setThinkingWordWidth} />
+          <ThinkingLabel active={pill === 'thinking'} searching={pill === 'thinking' && !!hud.searchingWeb} onWidth={setThinkingWordWidth} />
         </div>
       )}
       {hud.status === 'notice' && (

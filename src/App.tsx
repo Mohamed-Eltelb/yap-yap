@@ -599,6 +599,10 @@ export function App() {
                 // Snippet phrases must survive cleanup to expand. Their saved text is never sent.
                 // Spaced out ("my address 12"), so cleanup writes the words, not "address12".
                 keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
+                // The Thinking pill says "Searching the web" from the moment the provider starts searching.
+                onWebSearch: () => {
+                  if (!dropped()) setHud((current) => current.status === 'processing' ? { ...current, searchingWeb: true } : current);
+                },
               }
             );
             if (dropped()) return;

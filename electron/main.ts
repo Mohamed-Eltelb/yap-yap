@@ -625,6 +625,29 @@ app.whenReady().then(() => {
     }
   );
 
+  // Like api:request, but sends the reply to the window piece by piece while it arrives, so the app
+  // can react to a streamed reply (such as a web search starting) before it is complete.
+  ipcMain.handle(
+    'api:stream',
+    async (
+      e,
+      req: { id: string; url: string; method: string; headers: Record<string, string>; bodyText?: string }
+    ) => {
+      const res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.bodyText });
+      let text = '';
+      if (res.body) {
+        const decoder = new TextDecoder();
+        for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+          const piece = decoder.decode(chunk, { stream: true });
+          text += piece;
+          if (!e.sender.isDestroyed()) e.sender.send('api:stream-chunk', req.id, piece);
+        }
+        text += decoder.decode();
+      }
+      return { ok: res.ok, status: res.status, text };
+    }
+  );
+
   ipcMain.handle(
     'api:multipart',
     async (

@@ -24,6 +24,15 @@ it('renders Markdown formatting in an Ask answer', () => {
   expect(html).toContain('<p><strong>Second</strong> paragraph.</p>');
 });
 
+it('says "Searching the web" in the Thinking pill while a search runs', () => {
+  const searching = renderHud({ status: 'processing', mode: 'ask', levels: [], searchingWeb: true });
+  const thinking = renderHud({ status: 'processing', mode: 'ask', levels: [] });
+  expect(searching).toContain('>Searching the web</span>');
+  expect(searching).toContain('aria-label="Searching the web"');
+  expect(thinking).toContain('>Thinking</span>');
+  expect(thinking).not.toContain('Searching the web');
+});
+
 it('marks an Ask answer that searched the web', () => {
   const searched = renderHud({ status: 'result', mode: 'ask', levels: [], resultText: 'Answer.', searchedWeb: true });
   const known = renderHud({ status: 'result', mode: 'ask', levels: [], resultText: 'Answer.' });
