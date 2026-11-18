@@ -927,6 +927,14 @@ function searchMayBeUnsupported(status: number): boolean {
   return [400, 402, 403, 404, 413, 422, 429].includes(status);
 }
 
+/**
+ * Some models (GPT-OSS among them) write thin no-break spaces and no-break hyphens ("at $5 USD",
+ * "up‑to‑date"). They look squashed and paste oddly, so answers use plain ones.
+ */
+function withPlainSpacing(text: string): string {
+  return text.replace(/[   ]/g, ' ').replace(/‑/g, '-');
+}
+
 class SearchRequestError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
