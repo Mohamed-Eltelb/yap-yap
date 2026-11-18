@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InsightsStats } from '../services/stats';
 import { isProviderConfigured, PROVIDER_CATALOG } from '../services/providers/catalog';
-import { parseWritingPreferences, presetOf, STYLE_PRESETS, type DestinationEntry, type ForgottenStyles, type SourceChoice, type StyleSampleSinceCorrection } from '../services/personalization';
+import { parseWritingPreferences, presetOf, STYLE_PRESETS, withPickedStyles, type DestinationEntry, type ForgottenStyles, type SourceChoice, type StyleSampleSinceCorrection } from '../services/personalization';
 import {
   ProviderConfig,
   ProviderId,
@@ -1173,7 +1173,7 @@ export function SettingsModal({
       {open && activeTab === 'personalization' && preferencesEditorOpen && (
         <PersonalizationEditor
           preferences={settings.writingPreferences}
-          profiles={stats.categoryBreakdown}
+          profiles={withPickedStyles(stats.categoryBreakdown, settings.styleCorrections)}
           styleCorrections={settings.styleCorrections}
           focusCategory={editorCategory}
           recentSamples={recentStyleSamples}

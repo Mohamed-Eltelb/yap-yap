@@ -3,6 +3,7 @@ import type { DictionaryEntry, HistoryItem, RetainedStyleSample, Snippet, StyleC
 export const WRITING_CATEGORIES = [
   'AI assistants',
   'Messaging',
+  'Work messaging',
   'Email',
   'Social platforms',
   'Document editors',
@@ -26,7 +27,9 @@ const destinationRules: [WritingCategory, domain: RegExp, application: RegExp][]
   ['Presentations', /^slides\.google\.com$|(^|\.)(canva\.com|gamma\.app|pitch\.com|powerpoint\.cloud\.microsoft)$/, /powerpoint|keynote/],
   ['AI assistants', /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|perplexity\.ai|grok\.com|deepseek\.com|poe\.com|mistral\.ai)$|^(gemini|aistudio)\.google\.com$|^copilot\.microsoft\.com$/, /chatgpt|claude|copilot|perplexity/],
   ['Email', /^mail\.|(^|\.)(outlook\.(live|office|office365)\.com|proton\.me|fastmail\.com|superhuman\.com)$/, /outlook|thunderbird|^mail$|spark/],
-  ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|slack\.com|messenger\.com)$|^teams\.(microsoft|live)\.com$|^(messages|chat)\.google\.com$/, /slack|discord|whatsapp|telegram|teams|signal|messages|messenger|phone link/],
+  // Work chat apps get their own place, so work messages and messages to friends can differ.
+  ['Work messaging', /(^|\.)(slack\.com|mattermost\.com|zulipchat\.com)$|^teams\.(microsoft|live)\.com$|^chat\.google\.com$/, /slack|teams|mattermost|zulip|google chat/],
+  ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|messenger\.com)$|^messages\.google\.com$/, /discord|whatsapp|telegram|signal|messages|messenger|phone link/],
   ['Social platforms', /(^|\.)(x\.com|twitter\.com|linkedin\.com|facebook\.com|instagram\.com|reddit\.com|threads\.(net|com)|bsky\.app|tiktok\.com|youtube\.com|mastodon\.social)$/, /^$/],
   ['Project management', /(^|\.)(linear\.app|atlassian\.net|trello\.com|asana\.com|clickup\.com|monday\.com|basecamp\.com)$/, /linear|jira|trello|asana|clickup/],
   ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|^warp$|antigravity|codex/],
@@ -1049,6 +1052,20 @@ export function applyStyleCorrections<T extends WritingProfile>(
       corrected: true,
     };
   });
+}
+
+/** Learned styles plus the styles the user picked for places with no dictations yet. */
+export function withPickedStyles<T extends WritingProfile & { corrected?: boolean }>(
+  profiles: readonly T[],
+  corrections: StyleCorrections,
+): (T | WritingProfile & { corrected: true })[] {
+  const picked = WRITING_CATEGORIES.flatMap((category) => {
+    const correction = corrections[category];
+    return !profiles.some((profile) => profile.category === category) && (correction?.tone || correction?.phrasing)
+      ? [{ category, tone: correction.tone ?? 'Neutral', phrasing: correction.phrasing ?? '', count: 0, corrections: 0, examples: [], corrected: true as const }]
+      : [];
+  });
+  return [...profiles, ...picked];
 }
 
 /** Dictations a category needs before its learned style shapes cleanup. */

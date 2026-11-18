@@ -784,7 +784,7 @@ describe('Multi-Provider Engine', () => {
       .mockResolvedValueOnce(reply('Sure, done!'))
       .mockResolvedValueOnce(reply(JSON.stringify({ rules: Array.from({ length: 21 }, (_, index) => `Rule ${index}.`) })))
       // A correction keeps only the fields that change: an unknown tone or a style returned
-      // unchanged is not a correction. A style for a place not learned yet is reported back.
+      // unchanged is not a correction. A style for a place not learned yet becomes its starting style.
       .mockResolvedValueOnce(reply(JSON.stringify({
         rules: ['Use straight quotes.'],
         styles: [
@@ -833,8 +833,11 @@ describe('Multi-Provider Engine', () => {
     await expect(proposeWritingPreferences(provider, current, 'Add many')).rejects.toThrow('limit of 20 rules');
     await expect(proposeWritingPreferences(provider, current, 'I need punctuation back in messages')).resolves.toEqual({
       rules: ['Use straight quotes.'],
-      styles: { Messaging: { phrasing: 'Standard capitalization, concise, standard punctuation' } },
-      unlearned: ['Spreadsheets'],
+      styles: {
+        Messaging: { phrasing: 'Standard capitalization, concise, standard punctuation' },
+        Spreadsheets: { tone: 'Neutral', phrasing: 'No punctuation' },
+      },
+      unlearned: [],
       unplaced: [],
     });
     await expect(proposeWritingPreferences(provider, current, 'Be friendly in emails and on social media')).resolves.toEqual({
@@ -1071,7 +1074,7 @@ describe('Multi-Provider Engine', () => {
     const gmail = { application: 'Google Chrome', domain: 'mail.google.com' };
 
     await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: gmail });
-    await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: { application: 'Slack' } });
+    await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: { application: 'WhatsApp' } });
     await processTranscriptWithLlm('Clean text', 'dictate', provider, options);
     // A category the app already knows wins over what the destination suggests.
     await processTranscriptWithLlm('Clean text', 'dictate', provider, { ...options, destination: gmail, destinationCategory: 'Messaging' });
@@ -1128,7 +1131,12 @@ it('resolves the writing category from the destination without a model call', ()
   expect(categoryForDestination({ application: 'Google Chrome', domain: 'www.linkedin.com' })).toBe('Social platforms');
   expect(categoryForDestination({ application: 'Google Chrome', domain: 'example.com' })).toBeUndefined();
   expect(categoryForDestination({ application: 'Visual Studio Code' })).toBe('Development tools');
-  expect(categoryForDestination({ application: 'Slack' })).toBe('Messaging');
+  expect(categoryForDestination({ application: 'WhatsApp' })).toBe('Messaging');
+  // Work chat has its own place, so work messages and messages to friends can differ.
+  expect(categoryForDestination({ application: 'Slack' })).toBe('Work messaging');
+  expect(categoryForDestination({ domain: 'teams.microsoft.com' })).toBe('Work messaging');
+  expect(categoryForDestination({ domain: 'web.whatsapp.com' })).toBe('Messaging');
+  expect(categoryForDestination({ application: 'Discord' })).toBe('Messaging');
   expect(categoryForDestination()).toBeUndefined();
 });
 it('keeps categories to the fixed set and lets hand corrections lead the profile', () => {
@@ -1398,7 +1406,8 @@ describe('apps and sites the user sets', () => {
       { key: 'mail.google.com', automatic: 'Email', builtIn: true, choice: undefined, uses: 1 },
       { key: 'notion.so', automatic: 'Document editors', builtIn: true, choice: 'Messaging', uses: 0 },
     ]);
-    expect(builtInCategory('slack')).toBe('Messaging');
+    expect(builtInCategory('slack')).toBe('Work messaging');
+    expect(builtInCategory('telegram')).toBe('Messaging');
   });
 });
 
@@ -1510,7 +1519,8 @@ describe('where a requested rule applies', () => {
   };
 
   it('turns an app name into its kind of place and holds rules for places it cannot tell', async () => {
-    expect((await ask('Slack')).rules).toEqual(['[Messaging] No final period.']);
+    expect((await ask('Slack')).rules).toEqual(['[Work messaging] No final period.']);
+    expect((await ask('WhatsApp')).rules).toEqual(['[Messaging] No final period.']);
     expect((await ask('everywhere')).rules).toEqual(['No final period.']);
     const unknown = await ask('my cousin');
     expect(unknown.rules).toEqual([]);

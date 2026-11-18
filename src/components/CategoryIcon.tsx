@@ -71,6 +71,14 @@ const icons = {
       <path strokeLinejoin="round" d="M8 12H8.009M11.991 12H12M15.991 12H16" />
       </g>
   ),
+  // A square speech bubble, set apart from Messaging's round one.
+  'Work messaging': (
+      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2">
+      <path strokeLinejoin="round" d="M8 18.5H7.5C5 18.5 3.75 18.5 2.88 17.62C2 16.75 2 15.5 2 13V8.5C2 6 2 4.75 2.88 3.88C3.75 3 5 3 7.5 3H16.5C19 3 20.25 3 21.12 3.88C22 4.75 22 6 22 8.5V13C22 15.5 22 16.75 21.12 17.62C20.25 18.5 19 18.5 16.5 18.5H16C15.6 18.5 15.3 18.7 15.1 19L13.2 21.5C12.6 22.3 11.4 22.3 10.8 21.5L8.9 19C8.7 18.7 8.4 18.5 8 18.5Z" />
+      <path d="M7 8.5H17" />
+      <path d="M7 13H13" />
+      </g>
+  ),
   'Data analytics': (
       <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2">
       <path d="M22 22H2" />

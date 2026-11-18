@@ -376,7 +376,7 @@ describe('Dictation flow', () => {
 describe('Starting styles', () => {
   it('applies a picked style from the first dictation in that kind of place', async () => {
     seed({ settings: { styleCorrections: { Messaging: { tone: 'Casual', phrasing: 'all lowercase, light punctuation, no period at the end' } } } });
-    desktop.context = { domain: 'app.slack.com', textBefore: '', textAfter: '' };
+    desktop.context = { domain: 'web.whatsapp.com', textBefore: '', textAfter: '' };
     await dictate();
     expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: 'all lowercase, light punctuation, no period at the end' })]);
   });
@@ -387,7 +387,7 @@ describe('Default writing style', () => {
     seed({ settings: { defaultStyle: 'very-casual' } });
     desktop.context = { domain: 'app.slack.com', textBefore: '', textAfter: '' };
     await dictate();
-    expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Messaging', phrasing: expect.stringMatching(/lowercase/) })]);
+    expect(cleanupOptions().writingStyles).toEqual([expect.objectContaining({ category: 'Work messaging', phrasing: expect.stringMatching(/lowercase/) })]);
   });
 });
 

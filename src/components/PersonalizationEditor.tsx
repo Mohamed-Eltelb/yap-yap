@@ -155,14 +155,17 @@ export function PersonalizationEditor({
 
   /**
    * Saves the reviewed change. Each corrected style also remembers what it replaced, so the
-   * habit the user corrected is never suggested back to them. Styles for a category that is no
-   * longer learned are dropped, since they would apply unseen once it is learned again.
+   * habit the user corrected is never suggested back to them. A place with nothing learned takes
+   * the style as its starting style, like one picked in Writing style.
    */
   const saveProposal = (change: { rules: string[]; styles: StyleCorrections; unplaced?: PlacedRule[] }) => {
     const styles: StyleCorrections = {};
     for (const [category, correction] of Object.entries(change.styles)) {
       const profile = profiles.find((item) => item.category === category);
-      if (!profile) continue;
+      if (!profile) {
+        styles[category] = correction;
+        continue;
+      }
       styles[category] = {
         ...rejectStyles(styleCorrections[category], {
           tone: correction.tone && profile.tone,
@@ -239,6 +242,9 @@ export function PersonalizationEditor({
   const waitingForPlace = unplaced.some((rule) => !rule.category);
   const rulesChanged = rows.some((row) => row.change) || unplaced.length > 0;
   const stylesChanged = Object.keys(proposal?.styles ?? {}).length > 0;
+  // Styles the change sets for places with nothing learned or picked yet.
+  const newStyles = Object.entries(proposal?.styles ?? {})
+    .filter(([category]) => !profiles.some((profile) => profile.category === category));
   // Row actions wait while a change is prepared or reviewed, so Save never works from an old list.
   const idle = !proposal && !busy;
 
@@ -317,7 +323,7 @@ export function PersonalizationEditor({
             <h3 id={stylesHeadingId}>Learned style</h3>
             <p>Picked up from your dictation and kept up to date. Your corrections replace it until you reset them.</p>
           </div>
-          {profiles.length > 0 ? (
+          {profiles.length > 0 || newStyles.length > 0 ? (
             <ul className="yy-pref-rules yy-pref-styles" data-review={stylesChanged ? '' : undefined} aria-labelledby={stylesHeadingId}>
               {profiles.flatMap((profile) => {
                 const next = proposal?.styles[profile.category];
@@ -380,17 +386,21 @@ export function PersonalizationEditor({
                       <button
                         type="button"
                         className="yy-pref-reset"
-                        aria-label={`Go back to the learned ${profile.category} style`}
+                        aria-label={profile.count > 0
+                          ? `Go back to the learned ${profile.category} style`
+                          : `Remove the ${profile.category} style you set`}
                         onClick={() => {
                           const rest = { ...styleCorrections };
                           delete rest[profile.category];
-                          save({ styleCorrections: rest }, `${profile.category} is back to the learned style.`);
+                          save({ styleCorrections: rest }, profile.count > 0
+                            ? `${profile.category} is back to the learned style.`
+                            : `Removed the ${profile.category} style. Yap Yap will learn it as you dictate there.`);
                         }}
                       >
                         Reset
                       </button>
                     )}
-                    {idle && (
+                    {idle && profile.count > 0 && (
                       <button
                         type="button"
                         aria-label={`Forget what Yap Yap learned for ${profile.category}`}
@@ -409,6 +419,16 @@ export function PersonalizationEditor({
                   </li>,
                 ];
               })}
+              {newStyles.map(([category, next]) => (
+                <li key={`added-${category}`} data-change="added">
+                  <Plus aria-hidden="true" size={14} className="yy-pref-mark" />
+                  <CategoryIcon category={category} />
+                  <div>
+                    <strong>{category}</strong>
+                    <span><span className="sr-only">New style: </span>{describeStyle({ tone: next.tone ?? 'Neutral', phrasing: next.phrasing ?? '' })}</span>
+                  </div>
+                </li>
+              ))}
             </ul>
           ) : (
             <p className="yy-pref-empty">Nothing learned yet. Keep dictating and Yap Yap will pick up how you write in each app.</p>

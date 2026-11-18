@@ -94,6 +94,36 @@ describe('Writing preferences editor', () => {
     expect(vi.mocked(onSave).mock.calls[0][0].writingPreferences).toContain('Messaging');
   });
 
+  it('sets a starting style for a place with nothing learned, next to a correction', async () => {
+    engine.proposeWritingPreferences.mockResolvedValue({
+      rules: ['Write numbers as digits'],
+      styles: { Messaging: { tone: 'Friendly' }, 'Work messaging': { tone: 'Formal' } },
+      unlearned: [], unplaced: [],
+    });
+    const { onSave } = renderEditor();
+    const user = await ask('work messages formal, friends friendly');
+
+    expect(await screen.findByText('Review the change before saving.')).toBeTruthy();
+    expect(screen.getByText('Work messaging')).toBeTruthy();
+    expect(screen.getByText('Formal tone.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const saved = vi.mocked(onSave).mock.calls[0][0].styleCorrections;
+    expect(saved['Work messaging']).toEqual({ tone: 'Formal', since: expect.any(String) });
+    expect(saved.Messaging).toEqual(expect.objectContaining({ tone: 'Friendly', rejected: { tones: ['Casual'] } }));
+  });
+
+  it('lets a picked style with no dictations be reset but not forgotten', async () => {
+    const { onSave } = renderEditor({
+      profiles: [messaging, { category: 'Work messaging', tone: 'Formal', phrasing: '', count: 0, corrections: 0, examples: [], corrected: true }],
+      styleCorrections: { 'Work messaging': { tone: 'Formal' } },
+    });
+    expect(screen.queryByRole('button', { name: 'Forget what Yap Yap learned for Work messaging' })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Remove the Work messaging style you set' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ styleCorrections: {} }));
+    expect(screen.getByRole('status').textContent).toContain('Removed the Work messaging style.');
+  });
+
   it('makes Escape discard a pending change before it closes the editor', async () => {
     engine.proposeWritingPreferences.mockResolvedValue({ rules: [], styles: {}, unlearned: [], unplaced: [] });
     const { onClose, onSave } = renderEditor();
