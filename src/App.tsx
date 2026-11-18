@@ -51,6 +51,7 @@ import {
 } from './utils/audioRecorder';
 import { playInteractionSound } from './utils/sounds';
 import { deliverDictationResult } from './utils/dictationResult';
+import { answerAsPlainText } from './utils/answerText';
 import { createHudMouseGate } from './utils/hudMouseGate';
 
 function normalizeKey(e: KeyboardEvent): string {
@@ -757,7 +758,10 @@ export function App() {
 
         const desktop = window.yapyap;
         // A snippet at the start keeps its text exactly; fitting would lowercase its first letter.
-        const delivered = mode === 'dictate' && !startsWithSnippet ? fitToSurroundingText(finalText, destination?.textBefore, dictWords) : finalText;
+        // An Ask answer is copied without the Markdown its card renders.
+        const delivered = mode === 'dictate' && !startsWithSnippet
+          ? fitToSurroundingText(finalText, destination?.textBefore, dictWords)
+          : mode === 'ask' ? answerAsPlainText(finalText) : finalText;
         if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
         const pasted = await deliverDictationResult(

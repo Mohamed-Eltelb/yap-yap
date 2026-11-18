@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { HistoryItem, RetentionPolicy } from '../types/app';
+import { answerAsPlainText } from '../utils/answerText';
 import { WindowControls, YapLogo } from './YapLogo';
 
 interface Props {
@@ -655,7 +656,7 @@ export function HistoryView({
               <h3 className="font-semibold">Answer</h3>
               {answerItem?.searchedWeb && <span className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)]"><Globe aria-hidden="true" className="size-3.5" />Searched the web</span>}
               <span className="flex-1" />
-              {answer && <button type="button" aria-label="Copy answer" onClick={() => onCopyText(answer)} className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>}
+              {answer && <button type="button" aria-label="Copy answer" onClick={() => onCopyText(answerAsPlainText(answer))} className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>}
             </header>
             <AnswerMarkdown text={answer ?? undefined} className="px-4 py-3 text-sm leading-relaxed select-text" />
           </section>
