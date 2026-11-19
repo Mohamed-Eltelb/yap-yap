@@ -1,5 +1,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { FocusedField } from './pasteCorrections';
+import { macProbe, parseMacContext, parseMacField } from './macContext';
 
 export interface DictationContext {
   application: string;
@@ -165,6 +166,7 @@ function askWindowsHelper(command = ''): Promise<string> {
 }
 
 export async function readFocusedField(): Promise<FocusedField | undefined> {
+  if (process.platform === 'darwin') return parseMacField(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('field')], 1 << 20));
   if (process.platform !== 'win32') return;
   try {
     const data = JSON.parse(await askWindowsHelper('field'));
@@ -184,9 +186,9 @@ export function stopDictationContext(): void {
 }
 
 // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
-function runContextProbe(file: string, args: string[]): Promise<string> {
+function runContextProbe(file: string, args: string[], maxBuffer = 8192): Promise<string> {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout: 1500, windowsHide: true, maxBuffer: 8192 }, (error, stdout) => {
+    execFile(file, args, { timeout: 1500, windowsHide: true, maxBuffer }, (error, stdout) => {
       resolve(error ? '' : stdout.trim());
     });
   });
@@ -230,9 +232,14 @@ export async function captureDictationContext(): Promise<DictationContext | unde
     }
   }
 
-  const application = process.platform === 'darwin'
-    ? await runContextProbe('osascript', ['-e', 'tell application "System Events" to get name of first application process whose frontmost is true'])
-    : await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']).then((pid) =>
-        /^\d+$/.test(pid) ? runContextProbe('ps', ['-p', pid, '-o', 'comm=']) : '');
+  if (process.platform === 'darwin') {
+    const mac = parseMacContext(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('context')]));
+    if (!mac) return;
+    const domain = browserDomain(mac.address);
+    return domain ? { application: mac.application, domain } : { application: mac.application };
+  }
+
+  const application = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']).then((pid) =>
+    /^\d+$/.test(pid) ? runContextProbe('ps', ['-p', pid, '-o', 'comm=']) : '');
   if (application) return { application: application.slice(0, 100) };
 }

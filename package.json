@@ -83,7 +83,13 @@
     },
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Yap Yap records your voice while you dictate.",
+        "NSAppleEventsUsageDescription": "Yap Yap pastes your dictation and reads the current website in your browser, so it can match how you write there. It never reads the page's content."
+      }
     },
     "linux": {
       "target": "AppImage"
