@@ -143,6 +143,8 @@ const DEPRECATED_LLM_MIGRATIONS: Partial<Record<ProviderId, Record<string, strin
     'gpt-4.1-mini': 'gpt-6-luna',
     'gpt-4.1': 'gpt-6.1-terra',
     'gpt-5-mini': 'gpt-6-luna',
+    'gpt-6.1-sol': 'gpt-6.2-sol',
+    'gpt-6-astra': 'gpt-6.2-astra',
   },
   groq: {
     'llama-3.3-70b-versatile': 'openai/gpt-oss-20b',
@@ -160,6 +162,7 @@ const DEPRECATED_LLM_MIGRATIONS: Partial<Record<ProviderId, Record<string, strin
     'gemini-2.5-pro': 'gemini-3.8-flash',
     'gemini-3.5-flash': 'gemini-3.8-flash',
     'gemini-3.7-flash': 'gemini-3.8-flash',
+    'gemini-4-carbon': 'gemini-4-argon',
   },
   anthropic: {
     'claude-3-5-haiku-latest': 'claude-haiku-5-5',

@@ -33,8 +33,8 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     llmModels: [
       { id: 'gpt-6-luna', label: 'gpt-6-luna (Fast & efficient)' },
       { id: 'gpt-6.1-terra', label: 'gpt-6.1-terra (Fast writing)' },
-      { id: 'gpt-6.1-sol', label: 'gpt-6.1-sol (Balanced)' },
-      { id: 'gpt-6-astra', label: 'gpt-6-astra (Flagship reasoning)' },
+      { id: 'gpt-6.2-sol', label: 'gpt-6.2-sol (Balanced)' },
+      { id: 'gpt-6.2-astra', label: 'gpt-6.2-astra (Flagship reasoning)' },
     ],
   },
   groq: {
@@ -55,7 +55,6 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
       { id: 'openai/gpt-oss-20b', label: 'openai/gpt-oss-20b (1000 t/s · Fast)' },
       { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b (500 t/s · Reasoning)' },
       { id: 'qwen/qwen3.8-27b', label: 'qwen/qwen3.8-27b (Qwen 3.8)' },
-      { id: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b-versatile (Enterprise)' },
     ],
   },
   gemini: {
@@ -78,8 +77,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     llmModels: [
       { id: 'gemini-3.8-flash', label: 'gemini-3.8-flash (Recommended)' },
       { id: 'gemini-3.5-flash-lite', label: 'gemini-3.5-flash-lite (Fastest)' },
-      { id: 'gemini-4-argon', label: 'gemini-4-argon (Gemini 4 Efficient)' },
-      { id: 'gemini-4-carbon', label: 'gemini-4-carbon (Gemini 4 Flagship)' },
+      { id: 'gemini-4-argon', label: 'gemini-4-argon (Gemini 4 Flagship · Paid tier)' },
     ],
   },
   anthropic: {
@@ -113,7 +111,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     sttModels: [
       { id: 'nova-3', label: 'nova-3 (Latest · Recommended)' },
       { id: 'nova-3-medical', label: 'nova-3-medical (Clinical)' },
-      { id: 'nova-2', label: 'nova-2 (Legacy)' },
+      { id: 'nova-2', label: 'nova-2 (More languages)' },
     ],
     llmModels: [],
   },
