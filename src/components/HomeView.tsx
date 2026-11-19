@@ -2,10 +2,7 @@ import type { CSSProperties } from 'react';
 import { version } from '../../package.json';
 import {
   ArrowUpRight,
-  CheckCircle2,
-  Cpu,
   Share,
-  X,
 } from 'lucide-react';
 import lilacPhoto from '../assets/cards/lilac.webp';
 import skyPhoto from '../assets/cards/sky.webp';
@@ -17,12 +14,9 @@ import {
   formatDurationParts,
   formatWordCount,
 } from '../services/stats';
-import { PROVIDER_CATALOG } from '../services/providers/catalog';
 import {
   DictationMode,
   HistoryItem,
-  ProviderConfig,
-  ProviderId,
   SettingsModalTab,
   SettingsState,
 } from '../types/app';
@@ -34,33 +28,24 @@ interface Props {
   stats: InsightsStats;
   history: HistoryItem[];
   settings: SettingsState;
-  providers: Record<ProviderId, ProviderConfig>;
   onOpenShare: () => void;
   onOpenModal: (tab: SettingsModalTab) => void;
   onStartDictation: (mode: DictationMode) => void;
   onEnablePersonalization: () => void;
-  onDismissPromoCard: () => void;
 }
 
 export function HomeView({
   stats,
   history,
   settings,
-  providers,
   onOpenShare,
   onOpenModal,
   onStartDictation,
   onEnablePersonalization,
-  onDismissPromoCard,
 }: Props) {
   const wordsFmt = formatWordCount(stats.totalWords);
   const saved = formatDurationParts(stats.timeSavedMinutes);
   const totalTime = formatDurationParts(stats.totalDictationMinutes);
-
-  const activeStt = providers[settings.activeSttProvider];
-  const sttReady =
-    activeStt.apiKey.trim().length > 0 ||
-    !PROVIDER_CATALOG[settings.activeSttProvider].requiresKey;
 
   const dictateKeys = settings.shortcuts.dictate[0] ?? ['Right Alt'];
   const translateKeys = settings.shortcuts.translate[0] ?? [];
@@ -274,47 +259,6 @@ export function HomeView({
                 </button>
               </div>
             </div>
-
-            {/* Active Provider Card (matching the featured card slot) */}
-            {!settings.dismissedPromoCard && (
-              <div className="yy-card p-3.5 relative group">
-                <button
-                  type="button"
-                  onClick={onDismissPromoCard}
-                  aria-label="Close provider card"
-                  className="absolute top-2 right-2 w-4 h-4 rounded-full bg-zinc-400/70 hover:bg-zinc-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-                <div className="w-10 h-10 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center mb-2.5">
-                  <Cpu className="w-5 h-5 text-[var(--text-primary)]" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-[var(--text-primary)]">
-                    {activeStt.name}
-                  </span>
-                  {sttReady && (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  )}
-                </div>
-                <p className="text-[11px] text-[var(--text-secondary)] mt-1 leading-relaxed">
-                  {sttReady
-                    ? `Active model: ${activeStt.sttModel || 'Configured'}`
-                    : 'Add your API key to enable voice capture.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    sttReady
-                      ? onStartDictation('dictate')
-                      : onOpenModal('providers')
-                  }
-                  className="w-full mt-3 py-2 rounded-full bg-[var(--btn-dark-bg)] text-[var(--btn-dark-text)] text-[12px] font-semibold hover:opacity-90 transition-opacity"
-                >
-                  {sttReady ? 'Start dictating' : 'Add API key'}
-                </button>
-              </div>
-            )}
 
             {/* Website cards: they open in the browser. */}
             <a

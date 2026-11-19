@@ -38,7 +38,6 @@ export const DEFAULT_SETTINGS: SettingsState = {
   activeSttProvider: 'groq',
   activeLlmProvider: 'groq',
   dismissedQuickCard: false,
-  dismissedPromoCard: false,
 };
 
 export const INITIAL_DICTIONARY: DictionaryEntry[] = [];

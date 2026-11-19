@@ -187,7 +187,6 @@ export interface SettingsState {
   activeSttProvider: ProviderId;
   activeLlmProvider: ProviderId | 'none';
   dismissedQuickCard: boolean;
-  dismissedPromoCard: boolean;
 }
 
 export type ActiveNav = 'home' | 'history' | 'dictionary' | 'snippets';

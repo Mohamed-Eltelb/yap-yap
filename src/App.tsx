@@ -1654,7 +1654,6 @@ export function App() {
             stats={stats}
             history={completedHistory}
             settings={appState.settings}
-            providers={appState.providers}
             onOpenShare={() => setShareOpen(true)}
             onOpenModal={(tab) => {
               setModalTab(tab);
@@ -1662,7 +1661,6 @@ export function App() {
             }}
             onStartDictation={(mode) => void triggerDictationMode(mode)}
             onEnablePersonalization={() => updateSettings({ personalizationEnabled: true })}
-            onDismissPromoCard={() => updateSettings({ dismissedPromoCard: true })}
           />
         )}
 
