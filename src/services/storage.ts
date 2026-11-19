@@ -162,7 +162,6 @@ const DEPRECATED_LLM_MIGRATIONS: Partial<Record<ProviderId, Record<string, strin
     'gemini-2.5-pro': 'gemini-3.8-flash',
     'gemini-3.5-flash': 'gemini-3.8-flash',
     'gemini-3.7-flash': 'gemini-3.8-flash',
-    'gemini-4-carbon': 'gemini-4-argon',
   },
   anthropic: {
     'claude-3-5-haiku-latest': 'claude-haiku-5-5',

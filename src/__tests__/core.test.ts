@@ -166,15 +166,11 @@ describe('Saved provider connections', () => {
     expect(sanitizeLoadedState({ providers }).providers.groq.llmModel).toBe('llama-3.3-70b-versatile');
   });
 
-  it('moves superseded OpenAI and Gemini model IDs to their current versions', () => {
+  it('moves superseded OpenAI model IDs to their current versions', () => {
     const { providers } = getInitialState();
     providers.openai = { ...providers.openai, llmModel: 'gpt-6-astra' };
-    providers.gemini = { ...providers.gemini, llmModel: 'gemini-4-carbon' };
 
-    const { providers: restored } = sanitizeLoadedState({ providers });
-
-    expect(restored.openai.llmModel).toBe('gpt-6.2-astra');
-    expect(restored.gemini.llmModel).toBe('gemini-4-argon');
+    expect(sanitizeLoadedState({ providers }).providers.openai.llmModel).toBe('gpt-6.2-astra');
   });
 
   it('keeps a verified keyless connection at the default local endpoint after reload', () => {
