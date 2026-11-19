@@ -180,6 +180,118 @@ html.dark .yy-home-insights {
   border-radius: 22px;
 }
 
+/* Home rail cards that open a page on the website, like Typeless's. */
+.yy-site-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 13px 14px;
+  border-radius: 18px;
+  color: var(--text-primary);
+  transition: background-color 0.15s ease, filter 0.15s ease;
+}
+
+.yy-site-card-title {
+  position: relative;
+  display: block;
+  padding-right: 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.yy-site-card-text {
+  position: relative;
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.yy-site-card-text strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yy-site-card-arrow {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  width: 15px;
+  height: 15px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.yy-site-card:hover .yy-site-card-arrow,
+.yy-site-card:focus-visible .yy-site-card-arrow {
+  opacity: 1;
+}
+
+.yy-site-card:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.yy-site-card-plain {
+  height: 64px;
+  background: var(--bg-subtle);
+}
+
+.yy-site-card-plain:hover {
+  background: var(--bg-hover);
+}
+
+html:not(.dark) .yy-site-card-plain:hover {
+  background: #e9e9ec;
+}
+
+/* Provider logos peeking up from the bottom edge. */
+.yy-site-card-logos {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  display: flex;
+  gap: 5px;
+  transform: translateX(-50%);
+}
+
+.yy-site-card-logos > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--bg-card);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+html.dark .yy-site-card-logos > span {
+  background: var(--bg-hover);
+}
+
+.yy-site-card-photo {
+  background: var(--yy-card-photo) center / cover, var(--bg-subtle);
+}
+
+/* Wash the sky so the text stays easy to read. */
+.yy-site-card-photo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.22));
+  transition: opacity 0.15s ease;
+}
+
+/* Hover shows a little more of the sky. */
+.yy-site-card-photo:hover::before {
+  opacity: 0.75;
+}
+
+html.dark .yy-site-card-photo::before {
+  background: linear-gradient(115deg, rgb(28 28 30 / 0.82), rgb(28 28 30 / 0.6));
+}
+
 .yy-personalization-report {
   container-type: inline-size;
 }

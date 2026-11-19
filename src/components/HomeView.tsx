@@ -1,12 +1,16 @@
+import type { CSSProperties } from 'react';
 import { version } from '../../package.json';
 import {
+  ArrowUpRight,
   CheckCircle2,
   Cpu,
-  KeyRound,
-  Mic,
   Share,
   X,
 } from 'lucide-react';
+import lilacPhoto from '../assets/cards/lilac.webp';
+import skyPhoto from '../assets/cards/sky.webp';
+import { siteLinks } from '../data/links';
+import { ProviderLogo } from './ProviderIcon';
 import { PersonalizationIcon } from './SettingsModal';
 import {
   InsightsStats,
@@ -312,40 +316,49 @@ export function HomeView({
               </div>
             )}
 
-            {/* Two compact accent cards matching bottom right */}
-            <button
-              type="button"
-              onClick={() => onStartDictation('translate')}
-              className="w-full yy-card p-3.5 text-left hover:bg-[var(--bg-hover)] transition-colors relative overflow-hidden"
+            {/* Website cards: they open in the browser. */}
+            <a
+              href={siteLinks.bestSetups}
+              target="_blank"
+              rel="noreferrer"
+              className="yy-site-card yy-site-card-plain"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-sky-400/10 via-transparent to-blue-500/10 pointer-events-none" />
-              <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-primary)]">
-                <Mic className="w-3.5 h-3.5 text-[var(--accent-blue)]" />
-                <span>Live Translate</span>
-              </div>
-              <p className="text-[11.5px] text-[var(--text-secondary)] mt-1 leading-snug">
-                Speak in any language &amp; paste into{' '}
-                <strong className="text-[var(--text-primary)] font-semibold">
-                  {settings.translationTargets[0] ?? 'English'}
-                </strong>
-                .
-              </p>
-            </button>
+              <span className="yy-site-card-title">Best setups</span>
+              <ArrowUpRight className="yy-site-card-arrow" aria-hidden="true" />
+              <span className="yy-site-card-logos" aria-hidden="true">
+                {(['elevenlabs', 'groq', 'gemini', 'openai', 'anthropic'] as const).map((id) => (
+                  <span key={id}><ProviderLogo id={id} size={14} /></span>
+                ))}
+              </span>
+            </a>
 
-            <button
-              type="button"
-              onClick={() => onOpenModal('providers')}
-              className="w-full yy-card p-3.5 text-left hover:bg-[var(--bg-hover)] transition-colors relative overflow-hidden"
+            <a
+              href={siteLinks.setupGuide}
+              target="_blank"
+              rel="noreferrer"
+              className="yy-site-card yy-site-card-photo"
+              style={{ '--yy-card-photo': `url(${skyPhoto})` } as CSSProperties}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/10 via-transparent to-purple-500/10 pointer-events-none" />
-              <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-primary)]">
-                <KeyRound className="w-3.5 h-3.5 text-[var(--accent-blue)]" />
-                <span>Multi-provider</span>
-              </div>
-              <p className="text-[11.5px] text-[var(--text-secondary)] mt-1 leading-snug">
-                Supports <strong className="text-[var(--text-primary)] font-semibold">7 APIs</strong>: OpenAI, Groq, Gemini, Claude &amp; local.
-              </p>
-            </button>
+              <span className="yy-site-card-title">Setup guide</span>
+              <ArrowUpRight className="yy-site-card-arrow" aria-hidden="true" />
+              <span className="yy-site-card-text">
+                Free plans and prices for <strong>every provider</strong>.
+              </span>
+            </a>
+
+            <a
+              href={siteLinks.releaseNotes}
+              target="_blank"
+              rel="noreferrer"
+              className="yy-site-card yy-site-card-photo"
+              style={{ '--yy-card-photo': `url(${lilacPhoto})` } as CSSProperties}
+            >
+              <span className="yy-site-card-title">What’s new</span>
+              <ArrowUpRight className="yy-site-card-arrow" aria-hidden="true" />
+              <span className="yy-site-card-text">
+                See what’s in <strong>v{version}</strong>.
+              </span>
+            </a>
           </div>
         </div>
       </div>

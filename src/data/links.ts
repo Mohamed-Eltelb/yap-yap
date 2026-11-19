@@ -9,6 +9,8 @@ export const siteLinks = {
   setupGuide: `${SITE_URL}/providers.html`,
   /** Recommended dictation + AI combinations. */
   bestSetups: `${SITE_URL}/use-cases.html`,
+  /** What's new in each release. */
+  releaseNotes: `${SITE_URL}/release-notes.html`,
 };
 
 /** The setup guide's section for one provider. */
