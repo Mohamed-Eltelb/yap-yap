@@ -776,6 +776,22 @@ export function SettingsModal({
                         onChange={(val) => onUpdateSettings({ autoPaste: val })}
                       />
                     </div>
+
+                    <div className="py-2.5 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Keep result on clipboard
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Leave each dictation or answer copied. Off keeps your clipboard as it was.
+                        </p>
+                      </div>
+                      <Toggle
+                        label="Keep result on clipboard"
+                        checked={settings.keepOnClipboard}
+                        onChange={(val) => onUpdateSettings({ keepOnClipboard: val })}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

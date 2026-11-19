@@ -159,6 +159,8 @@ export interface SettingsState {
   appearance: AppearanceMode;
   launchAtLogin: boolean;
   autoPaste: boolean;
+  /** Leaves the dictation on the clipboard after delivery. Off restores what was there before. */
+  keepOnClipboard: boolean;
   /** Whether AI cleanup runs on dictations. Off is the "None" level. */
   smartCleanup: boolean;
   /** How much cleanup edits when on: Light fixes, Medium may also reword for clarity. */

@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  ClipboardItem,
   globalShortcut,
   ipcMain,
   Menu,
@@ -391,6 +392,27 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
   }
 }
 
+type ClipboardSnapshot = Array<Record<string, Blob | Electron.ClipboardBookmark>>;
+
+// Payloads are read out now, since the items returned by read() follow the live clipboard.
+async function snapshotClipboard(): Promise<ClipboardSnapshot> {
+  try {
+    const items = await clipboard.read();
+    return await Promise.all(items.map(async (item) => {
+      const entries = await Promise.all(item.types.map(async (type) => [type, await item.getType(type).catch(() => undefined)] as const));
+      return Object.fromEntries(entries.filter((entry): entry is readonly [string, Blob | Electron.ClipboardBookmark] => entry[1] !== undefined));
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
+  const items = previous.filter((item) => Object.keys(item).length).map((item) => new ClipboardItem(item));
+  if (items.length) await clipboard.write(items);
+  else clipboard.clear();
+}
+
 const keyHistoryFile = () => path.join(app.getPath('userData'), 'key-history.log');
 
 function pasteIntoFocusedField(): Promise<boolean> {
@@ -462,10 +484,20 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  ipcMain.handle('clipboard:paste', async (event, text: string) => {
+  ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
+    const previous = keepOnClipboard === true ? undefined : await snapshotClipboard();
     await clipboard.writeText(text);
-    return pasteIntoFocusedField();
+    try {
+      return await pasteIntoFocusedField();
+    } finally {
+      // The paste goes through the clipboard; put back what the user had there once the target has read it.
+      if (previous) setTimeout(() => {
+        void clipboard.readText()
+          .then((current) => current === text ? restoreClipboard(previous) : undefined)
+          .catch(console.warn);
+      }, 600);
+    }
   });
   ipcMain.on('clipboard:prepare-paste', (event) => {
     if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();

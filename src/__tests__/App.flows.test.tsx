@@ -141,11 +141,29 @@ afterEach(() => {
 });
 
 describe('Dictation flow', () => {
+  it('leaves the clipboard alone when a paste fails and Keep on clipboard is off', async () => {
+    seed();
+    desktop.api.pasteText.mockResolvedValue(false);
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.', false);
+    expect(desktop.api.copyText).not.toHaveBeenCalled();
+  });
+
+  it('keeps the result on the clipboard when Keep on clipboard is on', async () => {
+    seed({ settings: { keepOnClipboard: true } });
+    desktop.api.pasteText.mockResolvedValue(false);
+    await dictate();
+
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.', true);
+    await waitFor(() => expect(desktop.api.copyText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
+  });
+
   it('cleans up, pastes, and learns the style of a dictation', async () => {
     seed();
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.', false);
     expect(engine.detectWritingStyle).toHaveBeenCalledWith('hey sam see you soon', expect.anything(), expect.objectContaining({ category: 'Email' }));
     await waitFor(() => expect(lastSaved().history[0]).toMatchObject({ text: 'Hey Sam. See you soon.', writingSource: 'mail.google.com', writingSample: { category: 'Email' } }));
   });
@@ -188,7 +206,7 @@ describe('Dictation flow', () => {
     });
 
     expect(engine.transcribeAudio).toHaveBeenCalledTimes(2);
-    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.', false));
   });
 
   it('pauses and resumes the recording, and finishing clears the pause', async () => {
@@ -329,7 +347,7 @@ describe('Dictation flow', () => {
     await waitFor(() => expect(desktop.trigger).toBeDefined());
     await act(async () => { desktop.trigger!('dictate'); });
     await act(async () => { desktop.action!({ type: 'stop' }); });
-    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.'));
+    await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalledWith('Hey Sam. See you soon.', false));
     expect(desktop.api.setShortcutEditorOpen).not.toHaveBeenCalledWith(true);
   });
 
@@ -426,7 +444,7 @@ describe('Snippets', () => {
     desktop.context = { domain: 'mail.google.com', textBefore: 'Thanks for the help. ', textAfter: '' };
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('best,\nSam Lee');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('best,\nSam Lee', false);
     expect(engine.processTranscriptWithLlm).not.toHaveBeenCalled();
     expect(engine.detectWritingStyle).not.toHaveBeenCalled();
     await waitFor(() => expect(lastSaved().history[0].text).toBe('best,\nSam Lee'));
@@ -439,7 +457,7 @@ describe('Snippets', () => {
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Talk soon. My signature.' });
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('Talk soon. best,\nSam Lee');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Talk soon. best,\nSam Lee', false);
     expect(engine.processTranscriptWithLlm.mock.calls[0][0]).toBe('talk soon my signature');
     // Cleanup is asked to keep the phrase, and never sees the text it inserts.
     const options = engine.processTranscriptWithLlm.mock.calls[0][3];
@@ -455,7 +473,7 @@ describe('Snippets', () => {
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'My address 12 October City.' });
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('My address 12 October City.');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('My address 12 October City.', false);
     expect(engine.processTranscriptWithLlm.mock.calls[0][3].keepPhrases).toEqual([]);
   });
 
@@ -465,7 +483,7 @@ describe('Snippets', () => {
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'عنوان 121، مصر' });
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('مثر، مصر');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('مثر، مصر', false);
   });
 
   it('undoes and redoes the AI edit of a dictation, keeping dictionary spellings and snippets', async () => {
@@ -536,14 +554,14 @@ describe('Snippets', () => {
     seed({ snippets: [signature], settings: { smartCleanup: false, personalizationEnabled: false } });
     engine.transcribeAudio.mockResolvedValue('talk soon my signature');
     await dictate();
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('talk soon best,\nSam Lee');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('talk soon best,\nSam Lee', false);
   });
 
   it('does not expand a translation', async () => {
     seed({ snippets: [signature], settings: { translationTargets: ['Spanish'] } });
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'my signature' });
     await dictate('translate');
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('my signature');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('my signature', false);
   });
 });
 
@@ -555,7 +573,7 @@ describe('Dictionary replacements', () => {
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Hand of is done.' });
     await dictate();
 
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('Handoff is done.');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Handoff is done.', false);
     expect(engine.transcribeAudio.mock.calls[0][2].dictionaryWords).toEqual(['handoff']);
     await waitFor(() => expect(lastSaved().history[0].text).toBe('Handoff is done.'));
   });
@@ -566,7 +584,7 @@ describe('Dictionary replacements', () => {
     await dictate();
 
     expect(engine.processTranscriptWithLlm).not.toHaveBeenCalled();
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('the handoff is done');
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('the handoff is done', false);
   });
 });
 

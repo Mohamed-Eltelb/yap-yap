@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appearance: 'light',
   launchAtLogin: true,
   autoPaste: true,
+  keepOnClipboard: false,
   smartCleanup: true,
   cleanupLevel: 'light',
   personalizationEnabled: true,

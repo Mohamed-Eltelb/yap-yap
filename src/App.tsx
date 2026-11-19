@@ -413,6 +413,7 @@ export function App() {
     ) => {
       retryAudioRef.current = null;
       const autoPaste = mode !== 'ask' && allowAutoPaste && appState.settings.autoPaste;
+      const keepOnClipboard = appState.settings.keepOnClipboard;
       if (autoPaste) window.yapyap?.preparePaste?.();
       let sttProviderId = appState.settings.activeSttProvider;
       let sttProvider = appState.providers[sttProviderId];
@@ -771,8 +772,10 @@ export function App() {
         const pasted = await deliverDictationResult(
           mode,
           delivered,
-          autoPaste ? desktop?.pasteText : undefined,
+          autoPaste && desktop ? (text) => desktop.pasteText(text, keepOnClipboard) : undefined,
           async (text) => {
+            // With "Keep on clipboard" off, the result stays in the HUD card to copy by hand.
+            if (!keepOnClipboard) return;
             if (desktop) await desktop.copyText(text);
             else await navigator.clipboard?.writeText(text);
           },

@@ -34,7 +34,7 @@ declare global {
       captureDictationContext: () => Promise<DictationContext | undefined>;
       /** Resolves with words the user respelled in the destination after a paste. */
       watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
-      pasteText: (text: string) => Promise<boolean>;
+      pasteText: (text: string, keepOnClipboard?: boolean) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;
