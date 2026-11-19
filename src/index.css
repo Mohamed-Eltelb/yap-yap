@@ -2233,7 +2233,10 @@ textarea,
   font-weight: 650;
 }
 
-.yy-hud-answer-card header button,
+.yy-hud-answer-card header button {
+  margin-left: auto;
+}
+
 /* The title takes the free space, so the header's icons sit together on the right. */
 .yy-hud-message header span {
   margin-right: auto;
