@@ -542,6 +542,17 @@ describe('Multi-Provider Engine', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('pageToken=next%2B%2F%3D');
   });
 
+  it('offers every Gemini 4 model for both speech and AI', async () => {
+    const provider = { ...createDefaultProviders().gemini, apiKey: 'test-key' };
+    const ids = ['gemini-4-hydrogen', 'gemini-4-neon', 'gemini-4-argon', 'gemini-4-carbon'];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      models: ids.map((id) => ({ name: `models/${id}`, supportedGenerationMethods: ['generateContent'] })),
+    }))));
+    const expected = ids.map((id) => ({ id, label: id }));
+
+    expect(await testProviderConnection(provider)).toMatchObject({ ok: true, models: { speech: expected, ai: expected } });
+  });
+
   it('checks Deepgram credentials before reading the public catalog and offers batch speech models', async () => {
     const provider = { ...createDefaultProviders().deepgram, apiKey: 'test-key' };
     const fetchMock = vi.fn()

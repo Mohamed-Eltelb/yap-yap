@@ -61,7 +61,7 @@ export function modelsFromPages(id: ProviderId, pages: (ModelPage | CatalogModel
             speech.set(model, name);
           } else if (!nonChat.test(model)) {
             ai.set(model, name);
-            if (/^gemini-.*(?:flash|pro|argon|carbon)/i.test(model)) speech.set(model, name);
+            if (/^gemini-.*(?:flash|pro|argon|carbon|hydrogen|neon)/i.test(model)) speech.set(model, name);
           }
           break;
         default: {

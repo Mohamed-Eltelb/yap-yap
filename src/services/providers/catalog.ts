@@ -77,7 +77,10 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
     llmModels: [
       { id: 'gemini-3.8-flash', label: 'gemini-3.8-flash (Recommended)' },
       { id: 'gemini-3.5-flash-lite', label: 'gemini-3.5-flash-lite (Fastest)' },
-      { id: 'gemini-4-argon', label: 'gemini-4-argon (Gemini 4 Flagship · Paid tier)' },
+      { id: 'gemini-4-hydrogen', label: 'gemini-4-hydrogen (Gemini 4 Everyday)' },
+      { id: 'gemini-4-neon', label: 'gemini-4-neon (Gemini 4 Fast frontier · Paid tier)' },
+      { id: 'gemini-4-argon', label: 'gemini-4-argon (Gemini 4 Efficient reasoning · Paid tier)' },
+      { id: 'gemini-4-carbon', label: 'gemini-4-carbon (Gemini 4 Flagship · Paid tier)' },
     ],
   },
   anthropic: {
