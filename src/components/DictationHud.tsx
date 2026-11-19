@@ -396,14 +396,14 @@ export function DictationHud({
         <section className="yy-hud-message" aria-label={hud.status === 'error' ? 'Recording error' : 'Recording result'}>
           <header>
             <span>{hud.mode === 'translate' ? 'Translate' : hud.mode === 'ask' ? 'Ask anything' : 'Dictate'}</span>
+            {hud.status === 'result' && resultText && (
+              <CopyButton label="Copy result" onCopy={() => onCopyResult(resultText)} />
+            )}
             <button type="button" className="yy-hud-icon" aria-label="Dismiss" onClick={onDismissResult}><X size={16} /></button>
           </header>
           <p dir="auto" role={hud.status === 'error' ? 'alert' : undefined}>{hud.status === 'error' ? hud.errorText : resultText}</p>
           {hud.status === 'error' && (
             <button type="button" className="yy-hud-retry" onClick={onRetry}>Try again</button>
-          )}
-          {hud.status === 'result' && resultText && (
-            <CopyButton label="Copy result" onCopy={() => onCopyResult(resultText)} />
           )}
         </section>
       )}
