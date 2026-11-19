@@ -137,9 +137,9 @@ export function SetupCard({
         onToggle={() => setOpen(open === 'ai' ? null : 'ai')}
         onClose={() => setOpen(null)}
       >
-        <div className="px-2 pt-1.5 pb-2">
+        <div className="px-1.5 pt-1 pb-1.5">
           <div className="text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">Cleanup level</div>
-          <div role="radiogroup" aria-label="Cleanup level" className="grid grid-cols-3 gap-0.5 p-0.5 rounded-[9px] bg-[var(--bg-active-nav)]">
+          <div role="radiogroup" aria-label="Cleanup level" className="grid grid-cols-3 gap-0.5 p-0.5 rounded-[9px] bg-[var(--bg-subtle)] dark:bg-black/25">
             {LEVELS.map((choice) => (
               <button
                 key={choice.id}
@@ -149,7 +149,7 @@ export function SetupCard({
                 onClick={() => setLevel(choice.id)}
                 className={`py-1 rounded-[7px] text-[12px] font-semibold transition-colors ${
                   level === choice.id
-                    ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-xs'
+                    ? 'bg-[var(--bg-card-solid)] dark:bg-[var(--bg-modal-active-nav)] text-[var(--text-primary)] shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -158,7 +158,7 @@ export function SetupCard({
             ))}
           </div>
         </div>
-        <div className="h-px bg-[var(--border-strong)] mx-2 opacity-60" />
+        <div className="h-px bg-[var(--border-subtle)] my-1" />
         <ModelList
           kind="ai"
           providers={providers}
@@ -256,8 +256,8 @@ function SetupRow({ role, logo, title, subtitle, warn, muted, open, onToggle, on
             warn
               ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
               : muted
-                ? 'bg-[var(--bg-active-nav)] text-[var(--text-muted)]'
-                : 'bg-[var(--bg-active-nav)] text-[var(--text-primary)]'
+                ? 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'
+                : 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
           }`}
         >
           {logo}
@@ -283,7 +283,7 @@ function SetupRow({ role, logo, title, subtitle, warn, muted, open, onToggle, on
           role="dialog"
           aria-label={`Change ${role.toLowerCase()} model`}
           onKeyDown={onKeyDown}
-          className="fixed z-50 w-[248px] overflow-y-auto py-1 rounded-[12px] bg-[var(--bg-card-solid)] border border-[var(--border-strong)] shadow-lg select-none"
+          className="yy-option-menu z-50 w-[248px] select-none dark:shadow-[var(--shadow-modal)]"
         >
           {children}
         </div>
@@ -301,12 +301,12 @@ function ModelList({ kind, providers, ids, active, onPick, onOpenKeys }: {
   onOpenKeys: () => void;
 }) {
   return (
-    <div className="pt-1">
+    <div>
       {ids.map((id) => {
         const provider = providers[id];
         return (
           <div key={id} className="pb-1">
-            <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-1 text-[11px] font-semibold text-[var(--text-muted)]">
+            <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 text-[11px] font-semibold text-[var(--text-muted)]">
               <ProviderLogo id={id} size={12} />
               {provider.name}
             </div>
@@ -320,7 +320,7 @@ function ModelList({ kind, providers, ids, active, onPick, onOpenKeys }: {
                   aria-checked={checked}
                   onClick={() => onPick(id, m.id)}
                   title={m.label}
-                  className="w-[calc(100%-8px)] mx-1 flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] focus-visible:bg-[var(--bg-hover)] outline-none"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] focus-visible:bg-[var(--bg-hover)] outline-none"
                 >
                   <span className="min-w-0 flex-1 truncate">{modelName(provider, m.id, kind)}</span>
                   {checked && <Check className="w-3.5 h-3.5 shrink-0 text-[var(--accent-blue-fill)]" strokeWidth={2.4} />}
@@ -330,11 +330,11 @@ function ModelList({ kind, providers, ids, active, onPick, onOpenKeys }: {
           </div>
         );
       })}
-      <div className="h-px bg-[var(--border-strong)] mx-2 my-1 opacity-60" />
+      <div className="h-px bg-[var(--border-subtle)] my-1" />
       <button
         type="button"
         onClick={onOpenKeys}
-        className="w-[calc(100%-8px)] mx-1 flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:bg-[var(--bg-hover)] outline-none"
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:bg-[var(--bg-hover)] outline-none"
       >
         {ids.length ? <KeyRound className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
         {ids.length ? 'Manage API keys' : 'Add a provider'}
