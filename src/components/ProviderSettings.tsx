@@ -11,12 +11,7 @@ import {
   Settings2,
   X,
 } from 'lucide-react';
-import claudeLogo from '../assets/providers/claude.svg';
-import deepgramLogo from '../assets/providers/deepgram.svg';
-import elevenlabsLogo from '../assets/providers/elevenlabs.svg';
-import geminiLogo from '../assets/providers/gemini.svg';
-import groqLogo from '../assets/providers/groq.svg';
-import openaiLogo from '../assets/providers/openai.svg';
+import { providerLogos } from './ProviderIcon';
 import { isProviderConfigured, PROVIDER_CATALOG, PROVIDER_ORDER } from '../services/providers/catalog';
 import { listProviderModels, testProviderConnection } from '../services/providers/engine';
 import type { ProviderConfig, ProviderId, ProviderModel, SettingsState } from '../types/app';
@@ -32,15 +27,6 @@ interface Props {
 }
 
 type View = { type: 'list' } | { type: 'add' | 'manage'; id: ProviderId };
-
-const providerLogos: Record<Exclude<ProviderId, 'custom'>, string> = {
-  anthropic: claudeLogo,
-  deepgram: deepgramLogo,
-  elevenlabs: elevenlabsLogo,
-  gemini: geminiLogo,
-  groq: groqLogo,
-  openai: openaiLogo,
-};
 
 function ProviderIcon({ id }: { id: ProviderId }) {
   return (

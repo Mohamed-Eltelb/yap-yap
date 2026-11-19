@@ -1638,6 +1638,8 @@ export function App() {
         activeLlmProvider={appState.settings.activeLlmProvider}
         smartCleanup={appState.settings.smartCleanup}
         cleanupLevel={appState.settings.cleanupLevel}
+        onUpdateSettings={updateSettings}
+        onUpdateProvider={updateProvider}
         dismissedQuickCard={appState.settings.dismissedQuickCard}
         onDismissQuickCard={() => updateSettings({ dismissedQuickCard: true })}
         isRecording={hud.status === 'recording'}
