@@ -151,6 +151,31 @@ function barHeight(levels: number[], index: number, loud: number): number {
   return 2 + Math.min(1, level) * bars[index] * 20;
 }
 
+/** How long a copy button shows its check mark after copying. */
+export const COPIED_MS = 1500;
+
+/** A copy button that briefly turns into a check mark to confirm the copy. */
+function CopyButton({ label, onCopy }: { label: string; onCopy: () => void }) {
+  // Counts copies, so clicking again while the check mark shows restarts its timer.
+  const [copies, setCopies] = useState(0);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copies) return;
+    setCopied(true);
+    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
+    return () => window.clearTimeout(timer);
+  }, [copies]);
+  return (
+    <button type="button" className="yy-hud-icon" aria-label={copied ? 'Copied' : label} data-copied={copied || undefined}
+      onClick={() => {
+        onCopy();
+        setCopies((count) => count + 1);
+      }}>
+      {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+    </button>
+  );
+}
+
 export function DictationHud({
   hud,
   onStop,
@@ -355,13 +380,13 @@ export function DictationHud({
             <div className="yy-hud-question">
               <Mic size={15} aria-hidden="true" />
               <p dir="auto">{questionText}</p>
-              <button type="button" className="yy-hud-icon" aria-label="Copy question" onClick={() => onCopyResult(questionText)}><Copy size={15} /></button>
+              <CopyButton label="Copy question" onCopy={() => onCopyResult(questionText)} />
             </div>
           )}
           <div className="yy-hud-answer-card">
             <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
               {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}
-              {resultText && <button type="button" className="yy-hud-icon" aria-label="Copy answer" onClick={() => onCopyResult(answerAsPlainText(resultText))}><Copy size={15} /></button>}
+              {resultText && <CopyButton label="Copy answer" onCopy={() => onCopyResult(answerAsPlainText(resultText))} />}
             </header>
             <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
           </div>
@@ -378,7 +403,7 @@ export function DictationHud({
             <button type="button" className="yy-hud-retry" onClick={onRetry}>Try again</button>
           )}
           {hud.status === 'result' && resultText && (
-            <button type="button" className="yy-hud-icon" aria-label="Copy result" onClick={() => onCopyResult(resultText)}><Copy size={15} /></button>
+            <CopyButton label="Copy result" onCopy={() => onCopyResult(resultText)} />
           )}
         </section>
       )}
