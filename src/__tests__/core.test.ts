@@ -1430,6 +1430,21 @@ describe('apps and sites the user sets', () => {
   });
 });
 
+describe('Mac app names', () => {
+  it('maps Mac apps to their kind of place and never learns macOS itself', () => {
+    const kinds = Object.fromEntries(['Mail', 'Messages', 'Notes', 'Code', 'Ghostty', 'iTerm2', 'Superhuman', 'Pages', 'Keynote', 'Numbers', 'Microsoft Outlook', 'Slack']
+      .map((application) => [application, categoryForDestination({ application })]));
+    expect(kinds).toEqual({
+      Mail: 'Email', Messages: 'Messaging', Notes: 'Document editors', Code: 'Development tools', Ghostty: 'Development tools',
+      iTerm2: 'Development tools', Superhuman: 'Email', Pages: 'Document editors', Keynote: 'Presentations', Numbers: 'Spreadsheets',
+      'Microsoft Outlook': 'Email', Slack: 'Work messaging',
+    });
+    for (const system of ['Finder', 'Spotlight', 'System Settings', 'loginwindow']) expect(learnableSource(system)).toBeUndefined();
+    for (const browser of ['Safari', 'Google Chrome', 'Arc', 'Brave Browser', 'Firefox']) expect(destinationKey({ application: browser })).toBeUndefined();
+    expect(sourceLabel('iterm2')).toBe('iTerm2');
+  });
+});
+
 describe('apps and sites list cleanup', () => {
   it('never learns Windows itself or keeps trademark marks in names', () => {
     expect(destinationKey({ application: 'Microsoft® Windows® Operating System' })).toBeUndefined();

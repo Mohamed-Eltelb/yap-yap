@@ -26,14 +26,14 @@ const destinationRules: [WritingCategory, domain: RegExp, application: RegExp][]
   ['Spreadsheets', /^sheets\.google\.com$|(^|\.)(airtable\.com|excel\.cloud\.microsoft)$/, /excel|numbers|libreoffice calc/],
   ['Presentations', /^slides\.google\.com$|(^|\.)(canva\.com|gamma\.app|pitch\.com|powerpoint\.cloud\.microsoft)$/, /powerpoint|keynote/],
   ['AI assistants', /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|perplexity\.ai|grok\.com|deepseek\.com|poe\.com|mistral\.ai)$|^(gemini|aistudio)\.google\.com$|^copilot\.microsoft\.com$/, /chatgpt|claude|copilot|perplexity/],
-  ['Email', /^mail\.|(^|\.)(outlook\.(live|office|office365)\.com|proton\.me|fastmail\.com|superhuman\.com)$/, /outlook|thunderbird|^mail$|spark/],
+  ['Email', /^mail\.|(^|\.)(outlook\.(live|office|office365)\.com|proton\.me|fastmail\.com|superhuman\.com)$/, /outlook|thunderbird|^mail$|spark|superhuman/],
   // Work chat apps get their own place, so work messages and messages to friends can differ.
   ['Work messaging', /(^|\.)(slack\.com|mattermost\.com|zulipchat\.com)$|^teams\.(microsoft|live)\.com$|^chat\.google\.com$/, /slack|teams|mattermost|zulip|google chat/],
   ['Messaging', /(^|\.)(whatsapp\.com|telegram\.org|discord\.com|messenger\.com)$|^messages\.google\.com$/, /discord|whatsapp|telegram|signal|messages|messenger|phone link/],
   ['Social platforms', /(^|\.)(x\.com|twitter\.com|linkedin\.com|facebook\.com|instagram\.com|reddit\.com|threads\.(net|com)|bsky\.app|tiktok\.com|youtube\.com|mastodon\.social)$/, /^$/],
   ['Project management', /(^|\.)(linear\.app|atlassian\.net|trello\.com|asana\.com|clickup\.com|monday\.com|basecamp\.com)$/, /linear|jira|trello|asana|clickup/],
-  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|^warp$|antigravity|codex/],
-  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer|wordpad|sticky ?notes/],
+  ['Development tools', /(^|\.)(github\.com|gitlab\.com|bitbucket\.org|stackoverflow\.com|vercel\.com|codesandbox\.io|replit\.com)$/, /visual studio|cursor|terminal|powershell|intellij|pycharm|webstorm|rider|android studio|xcode|sublime|neovim|zed|windsurf|iterm|^warp$|antigravity|codex|^code$|ghostty|kitty|alacritty|wezterm/],
+  ['Document editors', /^docs\.google\.com$|(^|\.)(notion\.so|notion\.site|coda\.io|word\.cloud\.microsoft|dropbox\.com)$/, /word|notion|obsidian|notepad|pages|onenote|textedit|writer|wordpad|sticky ?notes|^notes$|^bear$/],
 ];
 
 export interface WritingDestination {
@@ -121,7 +121,7 @@ const BROWSER_APPS = /^(?:google chrome|chromium|chrome|microsoft edge|msedge|ed
  * The operating system's own surfaces (Start menu, search, file manager) are not a kind of place
  * the user writes in, so nothing is learned or remembered for them.
  */
-const SYSTEM_APPS = /^(?:microsoft windows operating system|windows explorer|file explorer|explorer|windows shell experience host|shellexperiencehost|startmenuexperiencehost|searchhost|searchapp|search|windows search|finder|spotlight|dock|systemuiserver|loginwindow)$/;
+const SYSTEM_APPS = /^(?:microsoft windows operating system|windows explorer|file explorer|explorer|windows shell experience host|shellexperiencehost|startmenuexperiencehost|searchhost|searchapp|search|windows search|finder|spotlight|dock|systemuiserver|loginwindow|system settings|system preferences|control center|notification center|activity monitor)$/;
 
 /** A stored app or site key, cleaned, or nothing when it is a browser or system surface. */
 export function learnableSource(value: string | undefined): string | undefined {
@@ -139,7 +139,7 @@ export function destinationKey(destination?: Partial<WritingDestination>): strin
 const SOURCE_NAMES: Record<string, string> = {
   chatgpt: 'ChatGPT', onenote: 'OneNote', powerpoint: 'PowerPoint', whatsapp: 'WhatsApp', linkedin: 'LinkedIn',
   github: 'GitHub', 'github desktop': 'GitHub Desktop', 'visual studio code': 'Visual Studio Code', vscode: 'VS Code',
-  intellij: 'IntelliJ', 'intellij idea': 'IntelliJ IDEA', pycharm: 'PyCharm', webstorm: 'WebStorm', iterm: 'iTerm',
+  intellij: 'IntelliJ', 'intellij idea': 'IntelliJ IDEA', pycharm: 'PyCharm', webstorm: 'WebStorm', iterm: 'iTerm', iterm2: 'iTerm2',
   'microsoft stickynotes': 'Microsoft Sticky Notes', stickynotes: 'Sticky Notes', textedit: 'TextEdit', clickup: 'ClickUp',
 };
 
