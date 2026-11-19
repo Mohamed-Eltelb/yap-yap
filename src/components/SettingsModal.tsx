@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { version } from '../../package.json';
 import { addCapturedKey, findShortcutConflict, pauseHoldCombo, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
+  ArrowUpRight,
   Globe,
   HelpCircle,
   Info,
@@ -28,6 +29,7 @@ import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
 import { ProviderSettings } from './ProviderSettings';
+import { siteLinks } from '../data/links';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SourceCategoriesDialog } from './SourceCategoriesDialog';
@@ -1078,7 +1080,10 @@ export function SettingsModal({
                         Supported Providers
                       </div>
                       <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
-                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.
+                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.{' '}
+                        <a href={siteLinks.setupGuide} target="_blank" rel="noreferrer" className="underline">
+                          Setup guide
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -1104,16 +1109,16 @@ export function SettingsModal({
                 <div className="space-y-3 text-[13px] text-[var(--text-secondary)] leading-relaxed">
                   <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
                     <div className="font-semibold text-[var(--text-primary)] mb-1">
-                      1. Add an API Key
+                      1. Connect a provider
                     </div>
-                    Open <strong className="text-[var(--text-primary)]">API Keys</strong> and paste a key from Groq (fast &amp; free tier), OpenAI, Google Gemini, Deepgram, ElevenLabs, or point Custom to a local Ollama/Whisper server. Click <strong className="text-[var(--text-primary)]">Test</strong> to verify.
+                    Open <strong className="text-[var(--text-primary)]">API Keys</strong>, choose a provider, paste its key, and click <strong className="text-[var(--text-primary)]">Verify &amp; add</strong>. Several providers have a free plan. The setup guide below shows where to get each key and what it costs.
                   </div>
 
                   <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
                     <div className="font-semibold text-[var(--text-primary)] mb-1">
                       2. Dictate, Translate, or Ask Anything
                     </div>
-                    Use the floating dictation bar, click <strong className="text-[var(--text-primary)]">Quick dictate</strong>, or trigger your configured shortcut. Speak naturally — your custom Dictionary words are automatically passed as hints!
+                    Press your shortcut anywhere you can type, or click <strong className="text-[var(--text-primary)]">Quick dictate</strong> in the sidebar. Tap the shortcut again to finish, or hold it to pause. Press Esc to cancel.
                   </div>
 
                   <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
@@ -1121,6 +1126,31 @@ export function SettingsModal({
                       3. Retry or Download Anytime
                     </div>
                     In <strong className="text-[var(--text-primary)]">History</strong>, hover any transcript and open the <strong className="text-[var(--text-primary)]">•••</strong> menu to re-process saved audio with a different provider or download the audio clip.
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-[14px] font-medium text-[var(--text-primary)] mb-2">Guides</h3>
+                  <div className="rounded-xl border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] overflow-hidden">
+                    {[
+                      { href: siteLinks.setupGuide, title: 'Setup guide', detail: 'Get each API key, plus prices and free plans' },
+                      { href: siteLinks.bestSetups, title: 'Best setups', detail: 'Which providers to combine, from free to best quality' },
+                      { href: siteLinks.home, title: 'Yap Yap website', detail: 'Features, FAQs, and downloads' },
+                    ].map((link) => (
+                      <a
+                        key={link.href}
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-medium text-[var(--text-primary)]">{link.title}</span>
+                          <span className="block text-[12px] text-[var(--text-secondary)] mt-0.5">{link.detail}</span>
+                        </span>
+                        <ArrowUpRight size={15} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+                      </a>
+                    ))}
                   </div>
                 </div>
               </div>

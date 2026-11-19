@@ -310,6 +310,12 @@ html.dark .provider-icon:is([data-provider='groq'], [data-provider='openai'], [d
   gap: 6px 12px;
 }
 
+.provider-field-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
 .provider-field-label label span {
   font-weight: 400;
   color: var(--text-secondary);

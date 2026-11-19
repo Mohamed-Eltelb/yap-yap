@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { providerLogos } from './ProviderIcon';
+import { providerGuideUrl } from '../data/links';
 import { isProviderConfigured, PROVIDER_CATALOG, PROVIDER_ORDER } from '../services/providers/catalog';
 import { listProviderModels, testProviderConnection } from '../services/providers/engine';
 import type { ProviderConfig, ProviderId, ProviderModel, SettingsState } from '../types/app';
@@ -320,7 +321,10 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
           <div className="provider-field">
             <div className="provider-field-label">
               <label htmlFor="provider-api-key">API key {custom && <span>(optional)</span>}</label>
-              <a href={meta.docsUrl} target="_blank" rel="noreferrer">Get an API key <ArrowUpRight size={13} aria-hidden="true" /></a>
+              <span className="provider-field-links">
+                <a href={providerGuideUrl(meta.id)} target="_blank" rel="noreferrer">Setup guide <ArrowUpRight size={13} aria-hidden="true" /></a>
+                <a href={meta.docsUrl} target="_blank" rel="noreferrer">Get an API key <ArrowUpRight size={13} aria-hidden="true" /></a>
+              </span>
             </div>
             <div className="provider-key-input">
               <input
