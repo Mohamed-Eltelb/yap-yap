@@ -1,6 +1,8 @@
 import React from 'react';
 import {
+  AudioLines,
   BookText,
+  ChevronRight,
   HelpCircle,
   History,
   Home,
@@ -9,11 +11,12 @@ import {
   Monitor,
   Moon,
   Settings,
+  Sparkles,
   TextQuote,
   Sun,
   X,
 } from 'lucide-react';
-import { ActiveNav, AppearanceMode, DictationMode, ProviderConfig, ProviderId, SettingsModalTab } from '../types/app';
+import { ActiveNav, AppearanceMode, CleanupLevel, DictationMode, ProviderConfig, ProviderId, SettingsModalTab } from '../types/app';
 import { PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import { YapLogo } from './YapLogo';
 
@@ -34,6 +37,7 @@ interface Props {
   activeSttProvider: ProviderId;
   activeLlmProvider: ProviderId | 'none';
   smartCleanup: boolean;
+  cleanupLevel: CleanupLevel;
   dismissedQuickCard: boolean;
   onDismissQuickCard: () => void;
   isRecording: boolean;
@@ -50,6 +54,7 @@ export function Sidebar({
   activeSttProvider,
   activeLlmProvider,
   smartCleanup,
+  cleanupLevel,
   dismissedQuickCard,
   onDismissQuickCard,
   isRecording,
@@ -69,10 +74,11 @@ export function Sidebar({
   const llmReady = !llm || isProviderConfigured(llm);
   const failing = [stt, llm].find((p) => p && p.status === 'error');
   const status = !sttReady || !llmReady
-    ? { tone: 'bg-amber-500', text: 'Add a key to finish setup' }
+    ? { label: 'Needs key', dot: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-400', detail: 'Add an API key to start dictating' }
     : failing
-      ? { tone: 'bg-red-500', text: `${failing.name} key failed`, detail: failing.statusMessage }
-      : { tone: 'bg-emerald-500', text: 'Keys ready' };
+      ? { label: 'Key failed', dot: 'bg-red-500', text: 'text-red-600 dark:text-red-400', detail: failing.statusMessage || `${failing.name} rejected its key` }
+      : { label: 'Ready', dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', detail: 'Every key works' };
+  const openKeys = () => onOpenModal('providers');
 
   return (
     <aside className="yy-side-surface w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
@@ -139,33 +145,43 @@ export function Sidebar({
         )}
 
         {/* Active setup: which models run each dictation, and whether their keys work */}
-        <div className="p-3 rounded-[14px] bg-[var(--bg-card-solid)] shadow-xs">
-          <SetupRow
-            label="Transcribe"
-            provider={stt}
-            model={modelName(stt, stt.sttModel, 'speech')}
-            missing={!sttReady}
-          />
-          <SetupRow
-            label="Clean up"
-            provider={llm}
-            model={llm ? modelName(llm, llm.llmModel, 'ai') : 'Off'}
-            missing={!llmReady}
-          />
-          <div
-            className="flex items-center gap-1.5 mt-2.5 mb-3 text-[11.5px] font-medium text-[var(--text-secondary)]"
-            data-tooltip={status.detail}
-          >
-            <span className={`w-[7px] h-[7px] rounded-full shrink-0 ${status.tone}`} aria-hidden="true" />
-            <span className="truncate">{status.text}</span>
+        <div className="p-1.5 rounded-[14px] bg-[var(--bg-card-solid)] shadow-xs">
+          <div className="flex items-center justify-between px-1.5 pt-1 pb-1.5">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)]">Your setup</span>
+            <span
+              className={`flex items-center gap-1 text-[11px] font-semibold ${status.text}`}
+              data-tooltip={status.detail}
+            >
+              <span className={`w-[6px] h-[6px] rounded-full ${status.dot}`} aria-hidden="true" />
+              {status.label}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenModal('providers')}
-            className="w-full py-2 rounded-full bg-[var(--accent-blue-fill)] hover:bg-[var(--accent-blue-hover)] text-white text-[13px] font-semibold transition-colors shadow-xs"
-          >
-            API Keys
-          </button>
+          <SetupRow
+            icon={<AudioLines className="w-[14px] h-[14px]" strokeWidth={2} />}
+            title={sttReady ? modelName(stt, stt.sttModel, 'speech') : 'Add API key'}
+            subtitle={shortName(stt.name)}
+            role="Transcription"
+            warn={!sttReady}
+            onClick={openKeys}
+          />
+          <SetupRow
+            icon={<Sparkles className="w-[14px] h-[14px]" strokeWidth={2} />}
+            title={!llm ? 'Cleanup off' : llmReady ? modelName(llm, llm.llmModel, 'ai') : 'Add API key'}
+            subtitle={llm ? `${shortName(llm.name)} · ${cleanupLevel === 'medium' ? 'Medium' : 'Light'}` : 'Raw transcript'}
+            role="Cleanup"
+            warn={!llmReady}
+            muted={!llm}
+            onClick={llm ? openKeys : () => onOpenModal('settings')}
+          />
+          {status.label !== 'Ready' && (
+            <button
+              type="button"
+              onClick={openKeys}
+              className="w-full mt-1.5 py-2 rounded-full bg-[var(--accent-blue-fill)] hover:bg-[var(--accent-blue-hover)] text-white text-[12.5px] font-semibold transition-colors shadow-xs"
+            >
+              {status.label === 'Key failed' ? 'Fix API key' : 'Add API key'}
+            </button>
+          )}
         </div>
 
         {/* Appearance and utilities */}
@@ -222,24 +238,52 @@ function modelName(provider: ProviderConfig, modelId: string, kind: 'speech' | '
   return label.slice(label.lastIndexOf('/') + 1) || modelId;
 }
 
-function SetupRow({ label, provider, model, missing }: {
-  label: string;
-  provider?: ProviderConfig;
-  model: string;
-  missing: boolean;
+/** "Google Gemini" → "Gemini", "Custom / OpenAI-Compatible" → "Custom", so the row fits the sidebar. */
+function shortName(name: string): string {
+  return name.replace(/^(Google|Anthropic)\s+/, '').split(' / ')[0];
+}
+
+function SetupRow({ icon, title, subtitle, role, warn, muted, onClick }: {
+  icon: React.ReactNode;
+  role: string;
+  title: string;
+  subtitle: string;
+  warn?: boolean;
+  muted?: boolean;
+  onClick: () => void;
 }) {
-  const value = provider ? `${provider.name} · ${model}` : model;
   return (
-    <div className="mt-0.5 first:mt-0 mb-1.5 min-w-0">
-      <div className="text-[11px] font-medium text-[var(--text-muted)]">{label}</div>
-      <div
-        className={`text-[12.5px] font-semibold truncate ${
-          missing ? 'text-amber-600 dark:text-amber-400' : provider ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${role}: ${title} (${subtitle})`}
+      className="group w-full flex items-center gap-2.5 px-1.5 py-1.5 rounded-[10px] text-left hover:bg-[var(--bg-hover)] transition-colors"
+    >
+      <span
+        className={`w-[28px] h-[28px] shrink-0 rounded-[8px] flex items-center justify-center ${
+          warn
+            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+            : muted
+              ? 'bg-[var(--bg-active-nav)] text-[var(--text-muted)]'
+              : 'bg-[var(--bg-active-nav)] text-[var(--text-primary)]'
         }`}
-        title={value}
       >
-        {missing && provider ? `${provider.name} · Add key` : value}
-      </div>
-    </div>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block text-[12.5px] font-semibold leading-tight truncate ${
+            warn ? 'text-amber-700 dark:text-amber-400' : muted ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'
+          }`}
+        >
+          {title}
+        </span>
+        <span className="block mt-[2px] text-[11px] leading-tight text-[var(--text-muted)] truncate">{subtitle}</span>
+      </span>
+      <ChevronRight
+        className="w-3.5 h-3.5 shrink-0 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity"
+        aria-hidden="true"
+      />
+    </button>
   );
 }

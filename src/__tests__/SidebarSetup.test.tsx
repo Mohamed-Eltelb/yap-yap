@@ -13,7 +13,7 @@ const card = (
   render(
     <Sidebar activeNav="home" onSelectNav={noop} onOpenModal={noop} onStartDictation={noop} appearance="light"
       onChangeAppearance={noop} providers={providers} activeSttProvider={over.stt ?? 'elevenlabs'}
-      activeLlmProvider={over.llm ?? 'groq'} smartCleanup={over.cleanup ?? true} dismissedQuickCard
+      activeLlmProvider={over.llm ?? 'groq'} smartCleanup={over.cleanup ?? true} cleanupLevel="light" dismissedQuickCard
       onDismissQuickCard={noop} isRecording={false} />,
   );
 };
@@ -30,22 +30,26 @@ afterEach(cleanup);
 
 it('shows the models each dictation runs with short names, and that the keys are ready', () => {
   card(withKeys());
-  expect(screen.getByText('ElevenLabs · Scribe v3')).toBeTruthy();
-  expect(screen.getByText('Groq · gpt-oss-20b')).toBeTruthy();
-  expect(screen.getByText('Keys ready')).toBeTruthy();
+  expect(screen.getByText('Scribe v3')).toBeTruthy();
+  expect(screen.getByText('ElevenLabs')).toBeTruthy();
+  expect(screen.getByText('gpt-oss-20b')).toBeTruthy();
+  expect(screen.getByText('Groq · Light')).toBeTruthy();
+  expect(screen.getByText('Ready')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /API key/ })).toBeNull();
 });
 
 it('says cleanup is off without asking for a cleanup key', () => {
   card(withKeys({ groq: { apiKey: '' } }), { cleanup: false });
-  expect(screen.getByText('Off')).toBeTruthy();
-  expect(screen.getByText('Keys ready')).toBeTruthy();
+  expect(screen.getByText('Cleanup off')).toBeTruthy();
+  expect(screen.getByText('Ready')).toBeTruthy();
 });
 
-it('asks for a missing key and names a key that failed its test', () => {
+it('asks for a missing key and flags a key that failed its test', () => {
   card(withKeys({ elevenlabs: { apiKey: '' } }));
-  expect(screen.getByText('ElevenLabs · Add key')).toBeTruthy();
-  expect(screen.getByText('Add a key to finish setup')).toBeTruthy();
+  expect(screen.getByText('Needs key')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Add API key' })).toBeTruthy();
   cleanup();
   card(withKeys({ groq: { status: 'error', statusMessage: 'Invalid API key' } }));
-  expect(screen.getByText('Groq key failed')).toBeTruthy();
+  expect(screen.getByText('Key failed')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Fix API key' })).toBeTruthy();
 });
