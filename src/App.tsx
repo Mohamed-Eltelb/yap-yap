@@ -1635,10 +1635,11 @@ export function App() {
         onChangeAppearance={(appearance) => updateSettings({ appearance })}
         providers={appState.providers}
         activeSttProvider={appState.settings.activeSttProvider}
+        activeLlmProvider={appState.settings.activeLlmProvider}
+        smartCleanup={appState.settings.smartCleanup}
         dismissedQuickCard={appState.settings.dismissedQuickCard}
         onDismissQuickCard={() => updateSettings({ dismissedQuickCard: true })}
         isRecording={hud.status === 'recording'}
-        totalWords={stats.totalWords}
       />
 
       <main className="flex-1 min-w-0 h-full flex flex-col relative">

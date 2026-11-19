@@ -4,7 +4,6 @@ import {
   HelpCircle,
   History,
   Home,
-  Info,
   KeyRound,
   Mic,
   Monitor,
@@ -15,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { ActiveNav, AppearanceMode, DictationMode, ProviderConfig, ProviderId, SettingsModalTab } from '../types/app';
-import { PROVIDER_CATALOG } from '../services/providers/catalog';
+import { PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import { YapLogo } from './YapLogo';
 
 const appearanceModes = {
@@ -33,7 +32,8 @@ interface Props {
   onChangeAppearance: (appearance: AppearanceMode) => void;
   providers: Record<ProviderId, ProviderConfig>;
   activeSttProvider: ProviderId;
-  totalWords: number;
+  activeLlmProvider: ProviderId | 'none';
+  smartCleanup: boolean;
   dismissedQuickCard: boolean;
   onDismissQuickCard: () => void;
   isRecording: boolean;
@@ -48,7 +48,8 @@ export function Sidebar({
   onChangeAppearance,
   providers,
   activeSttProvider,
-  totalWords,
+  activeLlmProvider,
+  smartCleanup,
   dismissedQuickCard,
   onDismissQuickCard,
   isRecording,
@@ -62,14 +63,16 @@ export function Sidebar({
     { id: 'snippets', label: 'Snippets', icon: <TextQuote className="w-[16px] h-[16px]" strokeWidth={1.8} /> },
   ];
 
-  const activeProvider = providers[activeSttProvider];
-  const hasActiveKey =
-    activeProvider.apiKey.trim().length > 0 ||
-    !PROVIDER_CATALOG[activeSttProvider].requiresKey;
-
-  const progressPct = hasActiveKey
-    ? Math.min(100, Math.max(12, Math.round((totalWords / 2000) * 100)))
-    : 12;
+  const stt = providers[activeSttProvider];
+  const llm = smartCleanup && activeLlmProvider !== 'none' ? providers[activeLlmProvider] : undefined;
+  const sttReady = isProviderConfigured(stt);
+  const llmReady = !llm || isProviderConfigured(llm);
+  const failing = [stt, llm].find((p) => p && p.status === 'error');
+  const status = !sttReady || !llmReady
+    ? { tone: 'bg-amber-500', text: 'Add a key to finish setup' }
+    : failing
+      ? { tone: 'bg-red-500', text: `${failing.name} key failed`, detail: failing.statusMessage }
+      : { tone: 'bg-emerald-500', text: 'Keys ready' };
 
   return (
     <aside className="yy-side-surface w-[210px] shrink-0 h-full bg-[var(--bg-sidebar)] flex flex-col justify-between select-none">
@@ -135,32 +138,26 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Word Count & API Key Status Card */}
+        {/* Active setup: which models run each dictation, and whether their keys work */}
         <div className="p-3 rounded-[14px] bg-[var(--bg-card-solid)] shadow-xs">
-          <div className="text-[12.5px] font-medium text-[var(--text-secondary)]">
-            {hasActiveKey ? `Unlimited · ${activeProvider.name}` : 'Get unlimited words'}
-          </div>
-          <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[11.5px] font-semibold text-[var(--text-primary)] truncate tabular-nums">
-              {totalWords.toLocaleString()} {totalWords === 1 ? 'word' : 'words'} dictated
-            </span>
-            <button
-              type="button"
-              onClick={() => onOpenModal('providers')}
-              data-tooltip="Configure API keys for multiple providers"
-              aria-label="Configure API keys for multiple providers"
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="w-full h-[4px] rounded-full bg-[var(--border-strong)] mt-2 mb-3 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-300 ${
-                hasActiveKey ? 'bg-[var(--text-primary)]' : 'bg-amber-500'
-              }`}
-              style={{ width: `${progressPct}%` }}
-            />
+          <SetupRow
+            label="Transcribe"
+            provider={stt}
+            model={modelName(stt, stt.sttModel, 'speech')}
+            missing={!sttReady}
+          />
+          <SetupRow
+            label="Clean up"
+            provider={llm}
+            model={llm ? modelName(llm, llm.llmModel, 'ai') : 'Off'}
+            missing={!llmReady}
+          />
+          <div
+            className="flex items-center gap-1.5 mt-2.5 mb-3 text-[11.5px] font-medium text-[var(--text-secondary)]"
+            data-tooltip={status.detail}
+          >
+            <span className={`w-[7px] h-[7px] rounded-full shrink-0 ${status.tone}`} aria-hidden="true" />
+            <span className="truncate">{status.text}</span>
           </div>
           <button
             type="button"
@@ -212,5 +209,37 @@ export function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+/** Shows a model by its short name: "Scribe v3", not "Scribe v3 (Latest · Recommended)" or "openai/gpt-oss-20b". */
+function modelName(provider: ProviderConfig, modelId: string, kind: 'speech' | 'ai'): string {
+  const catalog = PROVIDER_CATALOG[provider.id];
+  const known =
+    provider.discoveredModels?.[kind].find((m) => m.id === modelId) ??
+    (kind === 'speech' ? catalog.sttModels : catalog.llmModels).find((m) => m.id === modelId);
+  const label = (known?.label ?? modelId).replace(/\s*\(.*\)\s*$/, '').trim();
+  return label.slice(label.lastIndexOf('/') + 1) || modelId;
+}
+
+function SetupRow({ label, provider, model, missing }: {
+  label: string;
+  provider?: ProviderConfig;
+  model: string;
+  missing: boolean;
+}) {
+  const value = provider ? `${provider.name} · ${model}` : model;
+  return (
+    <div className="mt-0.5 first:mt-0 mb-1.5 min-w-0">
+      <div className="text-[11px] font-medium text-[var(--text-muted)]">{label}</div>
+      <div
+        className={`text-[12.5px] font-semibold truncate ${
+          missing ? 'text-amber-600 dark:text-amber-400' : provider ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+        }`}
+        title={value}
+      >
+        {missing && provider ? `${provider.name} · Add key` : value}
+      </div>
+    </div>
   );
 }
