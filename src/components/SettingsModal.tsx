@@ -570,7 +570,7 @@ export function SettingsModal({
                           aria-label={`Edit translation targets: ${settings.translationTargets.join(', ') || 'None selected'}`}
                           aria-haspopup="dialog"
                           onClick={() => setLanguageDialog('targets')}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
+                          className="inline-flex items-center gap-2 h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
                         >
                           <span className="truncate">
                             {settings.translationTargets.join(', ') || 'Select languages'}
@@ -595,7 +595,7 @@ export function SettingsModal({
                           aria-label={`Edit languages I speak: ${settings.spokenLanguages.join(', ') || 'Auto-detect'}`}
                           aria-haspopup="dialog"
                           onClick={() => setLanguageDialog('spoken')}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
+                          className="inline-flex items-center gap-2 h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
                         >
                           <span className="truncate">{settings.spokenLanguages.join(', ') || 'Auto-detect'}</span>
                           <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
@@ -617,7 +617,7 @@ export function SettingsModal({
                           type="button"
                           aria-haspopup="dialog"
                           onClick={() => setLanguageDialog('variants')}
-                          className="px-3.5 py-1.5 rounded-full bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                          className="inline-flex items-center h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                         >
                           Select language variants
                         </button>
@@ -648,7 +648,7 @@ export function SettingsModal({
                         aria-label={`Change microphone: ${microphoneLabel}`}
                         aria-haspopup="dialog"
                         onClick={() => setMicrophoneDialogOpen(true)}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[230px]"
+                        className="inline-flex items-center gap-2 h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[230px]"
                       >
                         {microphoneMissing && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#dc2626]" aria-hidden="true" />}
                         <span className="truncate">{microphoneLabel}</span>
