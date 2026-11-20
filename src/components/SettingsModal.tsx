@@ -1038,7 +1038,7 @@ export function SettingsModal({
                         Version
                       </div>
                       <div className="text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        v{version} · Yap Yap Desktop (BYOK)
+                        v{version} · Yap Yap Desktop
                       </div>
                     </div>
                     {window.yapyap && (
@@ -1087,14 +1087,6 @@ export function SettingsModal({
                       </div>
                     </div>
                   </div>
-                  <p className="border-t border-[var(--border-subtle)] py-2 text-[12.5px] text-[var(--text-secondary)]">
-                    <a href="https://icon-sets.iconify.design/solar/" target="_blank" rel="noreferrer" className="underline">
-                      Solar icons
-                    </a>{' by 480 Design · '}
-                    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="underline">
-                      CC BY 4.0
-                    </a>
-                  </p>
                 </div>
               </div>
             )}
