@@ -1,6 +1,6 @@
 {
   "name": "yap-yap",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Dictate, translate, and ask questions from any text field with your own AI providers.",
   "private": true,
   "homepage": "https://yapyap-app.vercel.app",

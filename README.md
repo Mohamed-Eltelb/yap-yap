@@ -28,7 +28,7 @@ Change shortcuts in Settings. Add names to your dictionary to help transcription
 
 ## Updates
 
-Starting with v1.0.1, the desktop app checks GitHub for a newer public release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings. On v1.0.0, use **Check for updates → View releases** to get the new version once published.
+The desktop app checks GitHub for a newer public release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings.
 
 ## Choose your providers
 
