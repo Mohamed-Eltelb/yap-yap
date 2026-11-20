@@ -13,7 +13,7 @@ release/
 *.key
 yapyap-store.json*
 .superpowers/
-.claude/worktrees/
+.claude/
 
 # Local planning notes
 docs/superpowers/
