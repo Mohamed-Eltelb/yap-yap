@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ClipboardItem,
   globalShortcut,
   ipcMain,
@@ -17,7 +18,7 @@ import * as path from 'path';
 import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
-import { checkForUpdate } from './updates';
+import { checkForUpdate, downloadInstaller } from './updates';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
@@ -436,12 +437,47 @@ function pasteIntoFocusedField(): Promise<boolean> {
   });
 }
 
+async function offerUpdate() {
+  const update = await checkForUpdate(app.getVersion());
+  const window = mainWindow;
+  if (!window || window.isDestroyed() || (!update.installer && !update.url)) return { message: update.message };
+  const choice = await dialog.showMessageBox(window, {
+    type: 'info', title: 'Yap Yap update', message: update.message,
+    detail: update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
+    buttons: [update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
+  });
+  if (choice.response !== 0) return { message: update.message };
+  if (!update.installer) {
+    if (update.url) await shell.openExternal(update.url);
+    return { message: update.message };
+  }
+  try {
+    const file = await downloadInstaller(update.installer, app.getPath('downloads'), fraction => {
+      if (!window.isDestroyed()) window.setProgressBar(fraction);
+    });
+    shell.showItemInFolder(file);
+    return { message: 'Download complete. Open the installer to update Yap Yap.' };
+  } catch {
+    const message = 'The installer could not be downloaded and verified. Check your connection and try again in Settings.';
+    if (!window.isDestroyed()) await dialog.showMessageBox(window, { type: 'warning', message });
+    return { message };
+  } finally {
+    if (!window.isDestroyed()) window.setProgressBar(-1);
+  }
+}
+
+let pendingUpdate: ReturnType<typeof offerUpdate> | undefined;
+function checkAndOfferUpdate() {
+  return pendingUpdate ??= offerUpdate().finally(() => { pendingUpdate = undefined; });
+}
+
 app.whenReady().then(() => {
   if (isDev) app.dock?.setIcon(appIconPath);
   warmDictationContext();
   createMainWindow();
   createHudWindow();
   createTray();
+  if (app.isPackaged) void checkAndOfferUpdate().catch(() => { /* Offline startup is normal. */ });
 
   ipcMain.on('window:minimize', () => mainWindow?.minimize());
   ipcMain.on('window:maximize', () => {
@@ -469,7 +505,7 @@ app.whenReady().then(() => {
   ipcMain.handle('audio:set-mute', (event, muted: boolean) =>
     event.sender === mainWindow?.webContents ? setRecordingMute(muted) : undefined);
   ipcMain.handle('app:check-for-update', (event) =>
-    event.sender === mainWindow?.webContents ? checkForUpdate(app.getVersion()) : undefined);
+    fromMainFrame(event) ? checkAndOfferUpdate() : undefined);
 
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
     return registerAppShortcuts(shortcuts);

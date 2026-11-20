@@ -2,7 +2,7 @@
 
 Tap a shortcut in your notes app, say “um, can we move the launch to Friday?”, and Yap Yap types the cleaned-up sentence at your cursor. Use the same floating recorder to translate a message or ask a question. You choose who transcribes your audio and who edits the text.
 
-**Yap Yap is currently for Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
+**Yap Yap has been tested on Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
 
 **[Try the interactive demo](https://yapyap-app.vercel.app/) · [Run from source](#run-from-source) · [Desktop releases](https://github.com/Mohamed-Eltelb/yap-yap/releases)**
 
@@ -25,6 +25,10 @@ Tap a shortcut in your notes app, say “um, can we move the launch to Friday?�
 Change shortcuts in Settings. Add names to your dictionary to help transcription, or create a snippet that expands a spoken phrase into text you use often.
 
 ![Yap Yap Home with example word counts, time saved, a dictation activity heatmap, and the three shortcut keys](docs/media/desktop.webp)
+
+## Updates
+
+Starting with v1.0.1, the desktop app checks GitHub for a newer public release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings. On v1.0.0, use **Check for updates → View releases** to get the new version once published.
 
 ## Choose your providers
 
