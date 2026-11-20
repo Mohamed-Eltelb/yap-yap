@@ -15,6 +15,12 @@ export const siteLinks = {
   privacy: `${SITE_URL}/privacy.html`,
 };
 
+/** The app's GitHub repository. */
+export const REPO_URL = 'https://github.com/Mohamed-Eltelb/yap-yap';
+
+/** Lets people pick a bug report or feature request form. */
+export const feedbackUrl = `${REPO_URL}/issues/new/choose`;
+
 /** The setup guide's section for one provider. */
 export function providerGuideUrl(id: ProviderId): string {
   return `${siteLinks.setupGuide}#${id === 'anthropic' ? 'claude' : id}`;

@@ -30,7 +30,7 @@ import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog
 import { SelectMenu } from './SelectMenu';
 import { isMicrophoneMissing, MicrophoneDialog } from './MicrophoneDialog';
 import { ProviderSettings } from './ProviderSettings';
-import { siteLinks } from '../data/links';
+import { feedbackUrl, siteLinks } from '../data/links';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SourceCategoriesDialog } from './SourceCategoriesDialog';
@@ -1105,6 +1105,7 @@ export function SettingsModal({
                     { href: siteLinks.setupGuide, title: 'Setup guide', detail: 'Get each API key, plus prices and free plans.' },
                     { href: siteLinks.bestSetups, title: 'Best setups', detail: 'Which providers to combine, from free to best quality.' },
                     { href: siteLinks.home, title: 'Yap Yap website', detail: 'Features, FAQs, and downloads.' },
+                    { href: feedbackUrl, title: 'Report a bug or suggest a feature', detail: 'Opens a short form on GitHub. You’ll need a GitHub account.' },
                   ].map((link) => (
                     <a
                       key={link.href}
