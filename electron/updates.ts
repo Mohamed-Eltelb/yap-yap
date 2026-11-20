@@ -7,6 +7,14 @@ const repository = 'https://github.com/Mohamed-Eltelb/yap-yap';
 type Installer = { name: string; url: string; digest: string; size: number };
 type Update = { message: string; version?: string; installer?: Installer; url?: string };
 
+/**
+ * Windows and AppImage builds update in place with electron-updater. macOS (unsigned, so it
+ * can't install its own updates) and other Linux runs download a verified installer instead.
+ */
+export function installsUpdatesInPlace(platform: string = process.platform, appImage = process.env.APPIMAGE): boolean {
+  return platform === 'win32' || (platform === 'linux' && Boolean(appImage));
+}
+
 export async function checkForUpdate(current: string, platform = process.platform, arch = process.arch): Promise<Update> {
   const response = await fetch('https://api.github.com/repos/Mohamed-Eltelb/yap-yap/releases/latest', {
     headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000),

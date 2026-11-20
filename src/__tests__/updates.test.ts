@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { checkForUpdate, downloadInstaller } from '../../electron/updates';
+import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from '../../electron/updates';
 
 const payload = 'example installer bytes';
 const asset = {
@@ -42,4 +42,11 @@ it('saves a verified download and removes an incomplete or corrupt download', as
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+it('updates Windows and AppImage builds in place and macOS or other Linux runs by download', () => {
+  expect(installsUpdatesInPlace('win32', undefined)).toBe(true);
+  expect(installsUpdatesInPlace('linux', '/home/me/Yap-Yap-1.0.1-linux-x64.AppImage')).toBe(true);
+  expect(installsUpdatesInPlace('linux', undefined)).toBe(false);
+  expect(installsUpdatesInPlace('darwin', undefined)).toBe(false);
 });

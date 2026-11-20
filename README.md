@@ -38,7 +38,10 @@ Change shortcuts in Settings. Add names to your dictionary to help transcription
 
 ## Updates
 
-The desktop app checks GitHub for a newer release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings.
+The desktop app checks GitHub for a newer release at launch, and you can also check from **Settings → About**. Nothing downloads until you choose **Download**.
+
+- **Windows and Linux (AppImage):** Yap Yap downloads the update, checks it against the release’s SHA-512 checksum, and installs it when you choose **Restart now**, or the next time you quit.
+- **macOS:** Yap Yap saves the new DMG to Downloads after verifying its SHA-256 checksum, and shows it so you can install it.
 
 ## Choose your providers
 

@@ -18,7 +18,8 @@ import * as path from 'path';
 import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
-import { checkForUpdate, downloadInstaller } from './updates';
+import { autoUpdater, type ProgressInfo } from 'electron-updater';
+import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
@@ -439,10 +440,56 @@ function pasteIntoFocusedField(): Promise<boolean> {
 
 const skippedUpdatePath = () => path.join(app.getPath('userData'), 'skipped-update.txt');
 
+type UpdateOffer = Awaited<ReturnType<typeof checkForUpdate>> & { inPlace?: boolean };
+
+let updaterReady = false;
+async function checkInPlaceUpdate(): Promise<UpdateOffer> {
+  if (!updaterReady) {
+    updaterReady = true;
+    // The user approves each download; an approved update not installed yet goes in on quit.
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.disableWebInstaller = true;
+    // Failures reach the caller through the rejected promise. Without a listener, 'error' would crash the app.
+    autoUpdater.on('error', () => undefined);
+  }
+  const result = await autoUpdater.checkForUpdates();
+  if (!result?.isUpdateAvailable) return { message: `Yap Yap v${app.getVersion()} is up to date.` };
+  const version = result.updateInfo.version;
+  return { message: `Yap Yap v${version} is available.`, version, inPlace: true };
+}
+
+async function installInPlaceUpdate(window: BrowserWindow, version: string) {
+  const onProgress = (progress: ProgressInfo) => {
+    if (!window.isDestroyed()) window.setProgressBar(progress.percent / 100);
+  };
+  autoUpdater.on('download-progress', onProgress);
+  try {
+    await autoUpdater.downloadUpdate();
+  } finally {
+    autoUpdater.off('download-progress', onProgress);
+    if (!window.isDestroyed()) window.setProgressBar(-1);
+  }
+  const ready = `Yap Yap v${version} is ready to install.`;
+  if (window.isDestroyed()) return { message: ready };
+  const choice = await dialog.showMessageBox(window, {
+    type: 'info', title: 'Yap Yap update', message: ready,
+    detail: 'Restart now to finish updating. If you choose Later, the update installs the next time you quit Yap Yap.',
+    buttons: ['Restart now', 'Later'], cancelId: 1,
+  });
+  if (choice.response !== 0) return { message: `${ready} It installs when you quit Yap Yap.` };
+  // Let the windows close instead of hiding to the tray, so the installer can replace the app.
+  isQuitting = true;
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  return { message: 'Restarting to install the update…' };
+}
+
 async function offerUpdate(atStartup = false) {
-  const update = await checkForUpdate(app.getVersion());
+  const update: UpdateOffer = app.isPackaged && installsUpdatesInPlace()
+    ? await checkInPlaceUpdate()
+    : await checkForUpdate(app.getVersion());
   const window = mainWindow;
-  if (!window || window.isDestroyed() || (!update.installer && !update.url)) return { message: update.message };
+  if (!window || window.isDestroyed() || (!update.inPlace && !update.installer && !update.url)) return { message: update.message };
   if (atStartup && await fs.promises.readFile(skippedUpdatePath(), 'utf8').catch(() => '') === update.version) {
     return { message: update.message };
   }
@@ -452,13 +499,23 @@ async function offerUpdate(atStartup = false) {
   }
   const choice = await dialog.showMessageBox(window, {
     type: 'info', title: 'Yap Yap update', message: update.message,
-    detail: update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
-    buttons: [update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
+    detail: update.inPlace ? 'Download it now. Yap Yap restarts to finish installing.'
+      : update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
+    buttons: [update.inPlace || update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
   });
   if (choice.response !== 0) {
     // Startup stays quiet about this version until a newer one is published. Settings still offers it.
     if (update.version) await fs.promises.writeFile(skippedUpdatePath(), update.version).catch(() => undefined);
     return { message: update.message };
+  }
+  if (update.inPlace && update.version) {
+    try {
+      return await installInPlaceUpdate(window, update.version);
+    } catch {
+      const message = 'The update could not be downloaded. Check your connection and try again in Settings.';
+      if (!window.isDestroyed()) await dialog.showMessageBox(window, { type: 'warning', message });
+      return { message };
+    }
   }
   if (!update.installer) {
     if (update.url) await shell.openExternal(update.url);

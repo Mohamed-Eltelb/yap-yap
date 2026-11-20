@@ -44,5 +44,8 @@ jobs:
           if-no-files-found: error
           path: |
             release/*.exe
+            release/*.exe.blockmap
             release/*.dmg
             release/*.AppImage
+            release/latest.yml
+            release/latest-linux.yml

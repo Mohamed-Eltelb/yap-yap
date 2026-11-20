@@ -40,7 +40,7 @@ jobs:
           [[ "$TAG" == "v$version" ]]
           gh release view "$TAG" --json isDraft,targetCommitish |
             jq -e --arg sha "$sha" '.isDraft and .targetCommitish == $sha'
-      - name: Collect installers and calculate SHA-256 checksums
+      - name: Collect installers, update metadata, and SHA-256 checksums
         shell: bash
         run: |
           version=${TAG#v}
@@ -48,11 +48,15 @@ jobs:
           gh run download "$RUN_ID" --name yap-yap-macOS-ARM64 --dir macos
           gh run download "$RUN_ID" --name yap-yap-Linux-X64 --dir linux
           mkdir assets
-          cp "windows/Yap Yap Setup $version.exe" "assets/Yap-Yap-$version-windows-x64.exe"
-          cp "macos/Yap Yap-$version-arm64.dmg" "assets/Yap-Yap-$version-macos-arm64.dmg"
-          cp "linux/Yap Yap-$version.AppImage" "assets/Yap-Yap-$version-linux-x64.AppImage"
+          # electron-builder names the files (artifactName in package.json). latest*.yml refer to these
+          # exact names, so they must not be renamed.
+          cp "windows/Yap-Yap-$version-windows-x64.exe" "windows/Yap-Yap-$version-windows-x64.exe.blockmap" windows/latest.yml assets/
+          cp "macos/Yap-Yap-$version-macos-arm64.dmg" assets/
+          cp "linux/Yap-Yap-$version-linux-x64.AppImage" linux/latest-linux.yml assets/
+          grep -q "path: Yap-Yap-$version-windows-x64.exe" assets/latest.yml
+          grep -q "path: Yap-Yap-$version-linux-x64.AppImage" assets/latest-linux.yml
           cd assets
-          sha256sum Yap-Yap-* > SHA256SUMS.txt
+          sha256sum Yap-Yap-$version-windows-x64.exe Yap-Yap-$version-macos-arm64.dmg Yap-Yap-$version-linux-x64.AppImage > SHA256SUMS.txt
       - name: Attach files to the draft and verify GitHub's digests
         shell: bash
         working-directory: assets
