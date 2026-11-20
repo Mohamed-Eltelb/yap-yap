@@ -1,5 +1,5 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronsUpDown, GripVertical, Trash2, X } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Check, GripVertical, Trash2, X } from 'lucide-react';
 import {
   getLanguageVariant,
   LANGUAGE_VARIANTS,
@@ -7,38 +7,42 @@ import {
   TRANSLATION_LANGUAGES,
 } from '../data/languages';
 import { SPOKEN_LANGUAGES } from '../data/spokenLanguages';
+import { DictationHud } from './DictationHud';
 import { SelectMenu } from './SelectMenu';
 import { SettingsSubdialog } from './SettingsSubdialog';
 
-const previewWaveHeights = [3.2, 4.1, 4.7, 5.8, 6.4, 7.6, 6.2, 5.1, 4.2, 3.8, 3.1];
+// A still voice for the preview: the bars stand as they do mid-sentence.
+const previewLevels = [0.62, 0.7, 0.55, 0.66, 0.5, 0.58, 0.45, 0.52, 0.4, 0.46, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.1, 0.1, 0.1];
+const ignore = () => {};
 
+/** The real translation HUD with its target menu open, so the preview always matches it. */
 function TranslationHudPreview({ targets }: { targets: string[] }) {
   const languages = targets.length ? targets : ['English (US)'];
-  const selected = languages[0];
+  const menu = useRef<HTMLDivElement>(null);
+  const [menuHeight, setMenuHeight] = useState(0);
+
+  // The menu floats above the HUD, so the preview leaves room for it. Measured after
+  // layout effects, once the dialog holding it has opened and given it a size.
+  useEffect(() => {
+    setMenuHeight(menu.current?.querySelector('.yy-hud-targets')?.getBoundingClientRect().height ?? 0);
+  }, [targets]);
 
   return (
-    <div className="yy-translation-preview" aria-hidden="true" inert>
-      <div className="yy-hud" data-mode="translate">
-        <div className="yy-hud-targets">
-          {targets.length < 3 && <button type="button" className="yy-hud-edit-targets">Add another language</button>}
-          {languages.map((language) => (
-            <button key={language} type="button" aria-pressed={language === selected}>{language}</button>
-          ))}
-        </div>
-        <div className="yy-hud-mode yy-hud-translate">
-          <span>Translating to</span>
-          <button type="button" className="yy-hud-target" aria-expanded="true">
-            <span>{selected}</span><ChevronsUpDown size={11} />
-          </button>
-        </div>
-        <div className="yy-hud-pill">
-          <button type="button" className="yy-hud-cancel"><X size={15} /></button>
-          <div className="yy-hud-wave">
-            {previewWaveHeights.map((height) => <span key={height} style={{ height }} />)}
-          </div>
-          <button type="button" className="yy-hud-confirm"><Check size={16} /></button>
-        </div>
-      </div>
+    <div ref={menu} className="yy-translation-preview" style={{ paddingTop: menuHeight + 14 }} aria-hidden="true" inert>
+      <DictationHud
+        hud={{ status: 'recording', mode: 'translate', levels: previewLevels, targets: languages, targetLanguage: languages[0] }}
+        targetsOpen
+        onStop={ignore}
+        onCancel={ignore}
+        onPause={ignore}
+        onResume={ignore}
+        onUndo={ignore}
+        onRetry={ignore}
+        onSelectTarget={ignore}
+        onEditTargets={ignore}
+        onCopyResult={ignore}
+        onDismissResult={ignore}
+      />
     </div>
   );
 }

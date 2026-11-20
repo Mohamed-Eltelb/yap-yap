@@ -45,6 +45,8 @@ interface Props {
   onEditTargets: () => void;
   onCopyResult: (text: string) => void;
   onDismissResult: () => void;
+  /** Keeps the translation target menu open, for a still preview of the HUD. */
+  targetsOpen?: boolean;
 }
 
 // Tallest in the middle, lower toward the edges.
@@ -188,8 +190,10 @@ export function DictationHud({
   onEditTargets,
   onCopyResult,
   onDismissResult,
+  targetsOpen = false,
 }: Props) {
-  const [showTargets, setShowTargets] = useState(false);
+  const [hoveredTargets, setShowTargets] = useState(false);
+  const showTargets = hoveredTargets || targetsOpen;
   useEffect(() => {
     if (hud.status !== 'recording' || hud.mode !== 'translate') setShowTargets(false);
   }, [hud.status, hud.mode]);

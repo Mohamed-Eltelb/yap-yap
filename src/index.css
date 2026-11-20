@@ -1437,7 +1437,7 @@ html.dark .yy-personalization-options > div {
   display: grid;
   place-items: center;
   isolation: isolate;
-  padding: 10px 0;
+  padding: 14px 0;
   margin: 0 22px 14px;
   border-radius: 11px;
   background:
@@ -1456,15 +1456,12 @@ html.dark .yy-personalization-options > div {
 }
 
 .yy-translation-preview .yy-hud-targets {
-  position: relative;
-  inset: 7px auto auto;
-  align-self: flex-end;
-  margin-right: 0px;
-  color: #f5f5f5;
-  font-size: 12px;
-  font-weight: 600;
-  max-width: min(235px, calc(100vw - 88px));
   max-height: none;
+}
+
+/* A still picture: no rise-in each time the dialog opens. */
+.yy-translation-preview .yy-hud-mode {
+  animation: none;
 }
 
 .yy-language-body {
