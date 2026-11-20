@@ -3,6 +3,7 @@ import { version } from '../../package.json';
 import { addCapturedKey, findShortcutConflict, pauseHoldCombo, reservedShortcut, ShortcutSlot, shortcutModes } from '../../electron/shortcutBindings';
 import {
   ArrowUpRight,
+  ChevronRight,
   Globe,
   HelpCircle,
   Info,
@@ -11,7 +12,6 @@ import {
   Mic,
   Monitor,
   MoreHorizontal,
-  Pencil,
   Settings,
   X,
 } from 'lucide-react';
@@ -575,7 +575,7 @@ export function SettingsModal({
                           <span className="truncate">
                             {settings.translationTargets.join(', ') || 'Select languages'}
                           </span>
-                          <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                          <ChevronRight className="w-4 h-4 shrink-0 -mr-0.5 text-[var(--text-secondary)]" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -598,7 +598,7 @@ export function SettingsModal({
                           className="inline-flex items-center gap-2 h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[210px]"
                         >
                           <span className="truncate">{settings.spokenLanguages.join(', ') || 'Auto-detect'}</span>
-                          <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                          <ChevronRight className="w-4 h-4 shrink-0 -mr-0.5 text-[var(--text-secondary)]" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -617,9 +617,10 @@ export function SettingsModal({
                           type="button"
                           aria-haspopup="dialog"
                           onClick={() => setLanguageDialog('variants')}
-                          className="inline-flex items-center h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                          className="inline-flex items-center gap-2 h-9 px-[11px] rounded-[11px] whitespace-nowrap bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                         >
                           Select language variants
+                          <ChevronRight className="w-4 h-4 shrink-0 -mr-0.5 text-[var(--text-secondary)]" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -652,7 +653,7 @@ export function SettingsModal({
                       >
                         {microphoneMissing && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#dc2626]" aria-hidden="true" />}
                         <span className="truncate">{microphoneLabel}</span>
-                        <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                        <ChevronRight className="w-4 h-4 shrink-0 -mr-0.5 text-[var(--text-secondary)]" aria-hidden="true" />
                       </button>
                     </div>
 
