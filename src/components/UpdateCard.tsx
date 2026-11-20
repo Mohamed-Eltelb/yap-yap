@@ -9,9 +9,14 @@ export function useAppUpdate(): UpdateState {
     const updates = window.yapyap?.updates;
     if (!updates) return;
     let active = true;
-    const unsubscribe = updates.onState((next) => setState(next));
+    // A change the main process sends is newer than the snapshot `get` returns.
+    let heardChange = false;
+    const unsubscribe = updates.onState((next) => {
+      heardChange = true;
+      setState(next);
+    });
     void updates.get().then((current) => {
-      if (active && current) setState(current);
+      if (active && current && !heardChange) setState(current);
     });
     return () => {
       active = false;

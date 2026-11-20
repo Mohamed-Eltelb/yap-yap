@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { UpdateController, type UpdateDeps, type UpdateState } from '../../electron/updateController';
 import { UpdateCard } from '../components/UpdateCard';
+import { UpdateDialog } from '../components/UpdateDialog';
 
 function controller(overrides: Partial<UpdateDeps> = {}) {
   const states: UpdateState[] = [];
@@ -121,5 +122,81 @@ describe('UpdateCard', () => {
     expect(updates.dismiss).toHaveBeenCalledOnce();
     emit({ status: 'up-to-date', version: '1.0.2' });
     expect(screen.queryByRole('region', { name: 'App update' })).toBeNull();
+  });
+});
+
+describe('UpdateDialog', () => {
+  beforeAll(() => {
+    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) { this.open = false; };
+  });
+  afterEach(() => {
+    cleanup();
+    delete (window as { yapyap?: unknown }).yapyap;
+  });
+
+  function open(result: UpdateState, initial: UpdateState = { status: 'idle' }) {
+    let emit: (state: UpdateState) => void = () => undefined;
+    let answer: (state: UpdateState) => void = () => undefined;
+    const updates = {
+      get: vi.fn(async () => initial),
+      check: vi.fn(() => new Promise<UpdateState>((resolve) => { answer = resolve; })),
+      download: vi.fn(async () => undefined),
+      install: vi.fn(async () => undefined),
+      dismiss: vi.fn(async () => undefined),
+      onState: (cb: (state: UpdateState) => void) => { emit = cb; return () => undefined; },
+    };
+    (window as unknown as { yapyap: unknown }).yapyap = { updates };
+    const onClose = vi.fn();
+    render(<UpdateDialog onClose={onClose} />);
+    const finish = () => act(async () => { emit(result); answer(result); });
+    return { updates, onClose, emit: (next: UpdateState) => act(() => emit(next)), finish };
+  }
+
+  it('checks as it opens and says when Yap Yap is up to date', async () => {
+    const { updates, onClose, finish } = open({ status: 'up-to-date', version: '1.0.2' }, { status: 'up-to-date', version: '1.0.1' });
+    expect(updates.check).toHaveBeenCalledOnce();
+    expect(await screen.findByRole('heading', { name: 'Checking for updates…' })).toBeTruthy();
+    await finish();
+    expect(screen.getByRole('heading', { name: 'You’re up to date!' })).toBeTruthy();
+    expect(screen.getByText('Yap Yap 1.0.2 is the newest version available.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('offers an update, shows download progress, then restarts into it', async () => {
+    const { updates, emit, finish } = open({ status: 'available', version: '1.0.3', method: 'install' });
+    await finish();
+    expect(screen.getByRole('heading', { name: 'Yap Yap 1.0.3 is available' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    expect(updates.download).toHaveBeenCalledOnce();
+
+    emit({ status: 'downloading', version: '1.0.3', percent: 64 });
+    expect(screen.getByRole('progressbar', { name: 'Download progress' }).getAttribute('aria-valuenow')).toBe('64');
+    expect(screen.getByText('64%')).toBeTruthy();
+
+    emit({ status: 'ready', version: '1.0.3', method: 'install' });
+    await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+    expect(updates.install).toHaveBeenCalledOnce();
+  });
+
+  it('opens straight to a download already in progress', async () => {
+    open({ status: 'downloading', version: '1.0.3', percent: 30 }, { status: 'downloading', version: '1.0.3', percent: 30 });
+    expect(await screen.findByRole('heading', { name: 'Downloading Yap Yap 1.0.3' })).toBeTruthy();
+  });
+
+  it('puts an offer off with Later and lets a failed check be retried', async () => {
+    const first = open({ status: 'available', version: '1.0.3', method: 'install' });
+    await first.finish();
+    await userEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(first.updates.dismiss).toHaveBeenCalledOnce();
+    expect(first.onClose).toHaveBeenCalledOnce();
+    cleanup();
+
+    const second = open({ status: 'error', message: 'Couldn’t check for updates. Try again later.' });
+    await second.finish();
+    expect(screen.getByRole('heading', { name: 'Couldn’t check for updates' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(second.updates.check).toHaveBeenCalledTimes(2);
   });
 });
