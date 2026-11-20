@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { FocusedField } from './pasteCorrections';
 import { macProbe, parseMacContext, parseMacField } from './macContext';
+import { linuxContextProbe } from './linuxContext';
 
 export interface DictationContext {
   application: string;
@@ -165,7 +166,28 @@ function askWindowsHelper(command = ''): Promise<string> {
   });
 }
 
+async function linuxForegroundPid(): Promise<string | undefined> {
+  const pid = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']);
+  return /^\d+$/.test(pid) ? pid : undefined;
+}
+
+async function linuxProbe(pid: string, mode: 'context' | 'field'): Promise<Record<string, unknown>> {
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode], 65536);
+  try {
+    return JSON.parse(output);
+  } catch {
+    return {};
+  }
+}
+
 export async function readFocusedField(): Promise<FocusedField | undefined> {
+  if (process.platform === 'linux') {
+    const pid = await linuxForegroundPid();
+    if (!pid) return;
+    const { field, text } = await linuxProbe(pid, 'field');
+    if (typeof field === 'string' && typeof text === 'string') return { field, text };
+    return;
+  }
   if (process.platform === 'darwin') return parseMacField(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('field')], 1 << 20));
   if (process.platform !== 'win32') return;
   try {
@@ -239,7 +261,16 @@ export async function captureDictationContext(): Promise<DictationContext | unde
     return domain ? { application: mac.application, domain } : { application: mac.application };
   }
 
-  const application = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']).then((pid) =>
-    /^\d+$/.test(pid) ? runContextProbe('ps', ['-p', pid, '-o', 'comm=']) : '');
-  if (application) return { application: application.slice(0, 100) };
+  if (process.platform !== 'linux') return;
+  const pid = await linuxForegroundPid();
+  if (!pid) return;
+  const [application, field] = await Promise.all([
+    runContextProbe('ps', ['-p', pid, '-o', 'comm=']),
+    linuxProbe(pid, 'context'),
+  ]);
+  if (application) return {
+    application: application.slice(0, 100),
+    textBefore: typeof field.textBefore === 'string' ? field.textBefore : undefined,
+    textAfter: typeof field.textAfter === 'string' ? field.textAfter : undefined,
+  };
 }
