@@ -175,13 +175,13 @@ function isVoicePeak(peak: number): boolean {
  */
 export async function startMicrophoneTest(
   deviceId: string | undefined,
-  onFrame: (frame: { levels: number[]; peak: number }) => void,
+  onLevels: (levels: number[]) => void,
   { strongNoiseReduction = false }: { strongNoiseReduction?: boolean } = {},
 ): Promise<() => void> {
   const mic = await openMicrophone(deviceId, { strongNoiseReduction, fallback: false });
   const read = createLevelReader(mic.analyser);
   // A timer, not requestAnimationFrame, so the meter keeps pace in a covered window.
-  const timerId = setInterval(() => onFrame(read()), 1000 / 60);
+  const timerId = setInterval(() => onLevels(read().levels), 1000 / 60);
   return () => {
     clearInterval(timerId);
     mic.close();

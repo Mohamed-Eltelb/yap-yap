@@ -3,16 +3,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { isMicrophoneMissing, MicrophoneDialog } from '../components/MicrophoneDialog';
 
-type Frame = { levels: number[]; peak: number };
 const test = vi.hoisted(() => ({
-  onFrame: undefined as ((frame: Frame) => void) | undefined,
+  onLevels: undefined as ((levels: number[]) => void) | undefined,
   close: vi.fn(),
   start: vi.fn(),
 }));
 
 vi.mock('../utils/audioRecorder', () => ({
   startMicrophoneTest: (...args: unknown[]) => {
-    test.onFrame = args[1] as (frame: Frame) => void;
+    test.onLevels = args[1] as (levels: number[]) => void;
     return test.start(...args);
   },
 }));
@@ -22,7 +21,7 @@ beforeAll(() => {
   HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) { this.open = false; };
 });
 beforeEach(() => {
-  test.onFrame = undefined;
+  test.onLevels = undefined;
   test.close.mockReset();
   test.start.mockReset().mockResolvedValue(test.close);
 });
@@ -51,8 +50,8 @@ function renderDialog(props: Partial<Parameters<typeof MicrophoneDialog>[0]> = {
   return { onChange, ...view };
 }
 
-const frames = (count: number, level: number, peak: number) => act(() => {
-  for (let i = 0; i < count; i++) test.onFrame?.({ levels: Array(20).fill(level), peak });
+const frames = (count: number, level: number) => act(() => {
+  for (let i = 0; i < count; i++) test.onLevels?.(Array(20).fill(level));
 });
 
 it('lists the microphones, names the system default, and hides the Windows duplicate', () => {
@@ -97,14 +96,16 @@ it('says loud and clear when it hears a voice, and warns when the voice stays qu
   renderDialog();
   await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Start yapping…'));
 
-  frames(72, 0.15, 4);
+  frames(72, 0.2);
   expect(screen.getByRole('status').textContent).toMatch(/A bit quiet/);
 
-  frames(5, 0.8, 60);
+  frames(1, 0.8);
+  expect(screen.getByRole('status').textContent).toMatch(/A bit quiet/);
+  frames(5, 0.8);
   expect(screen.getByRole('status').textContent).toBe('Loud and clear!');
 
   // Silence afterwards keeps the verdict instead of asking again.
-  frames(150, 0, 0);
+  frames(150, 0);
   expect(screen.getByRole('status').textContent).toBe('Loud and clear!');
 });
 

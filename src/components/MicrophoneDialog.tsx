@@ -12,15 +12,17 @@ export interface MicrophoneOption {
 type TestState = 'starting' | 'listening' | 'heard' | 'quiet' | 'missing' | 'error';
 
 /** Loudness the voice must reach to count as clear. */
-const CLEAR_LOUDNESS = 0.45;
+const CLEAR_LOUDNESS = 0.5;
+/** Frames above that loudness a window needs, so one loud blip doesn't count as clear speech. */
+const CLEAR_FRAMES = 5;
 /** Speaking without ever passing this, for a whole window, counts as too quiet. */
-const QUIET_LOUDNESS = 0.3;
+const QUIET_LOUDNESS = 0.35;
 /** Frames (at 60 a second) in each window the quiet check judges. */
 const WINDOW_FRAMES = 72;
 /** Frames of sound a window needs before it can call the voice too quiet. */
 const QUIET_VOICE_FRAMES = 12;
-/** A waveform swing (0–128) above a quiet room: a far or soft voice, too weak to count as speech. */
-const SOUND_PEAK = 3;
+/** Loudness that moves the bars visibly: a voice, even a far or soft one. Room noise stays below. */
+const SOUND_LOUDNESS = 0.12;
 
 const silence = () => Array<number>(20).fill(0);
 
@@ -71,13 +73,14 @@ export function MicrophoneDialog({ microphones, devicesKnown, value, strongNoise
 
     let frames = 0;
     let voiceFrames = 0;
+    let clearFrames = 0;
     let loudest = 0;
-    startMicrophoneTest(value, ({ levels: next, peak }) => {
+    startMicrophoneTest(value, (next) => {
       setLevels(next);
       const loud = loudness(next);
-      if (loud > CLEAR_LOUDNESS) setState('heard');
+      if (loud > CLEAR_LOUDNESS && ++clearFrames === CLEAR_FRAMES) setState('heard');
       frames += 1;
-      if (peak >= SOUND_PEAK) voiceFrames += 1;
+      if (loud > SOUND_LOUDNESS) voiceFrames += 1;
       loudest = Math.max(loudest, loud);
       if (frames < WINDOW_FRAMES) return;
       // Judge each stretch on its own, so moving closer clears the warning. A silent
@@ -85,6 +88,7 @@ export function MicrophoneDialog({ microphones, devicesKnown, value, strongNoise
       if (voiceFrames >= QUIET_VOICE_FRAMES && loudest < QUIET_LOUDNESS) setState('quiet');
       frames = 0;
       voiceFrames = 0;
+      clearFrames = 0;
       loudest = 0;
     }, { strongNoiseReduction })
       .then((close) => {
