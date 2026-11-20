@@ -20,14 +20,22 @@ def read_field(pid, mode):
             window = app.get_child_at_index(i)
             if window and window.get_state_set().contains(Atspi.StateType.ACTIVE):
                 queue.append(window)
+        focused_page = False
         for _ in range(600):
             if not queue:
-                break
+                return dict(editable=False) if focused_page else None
             node = queue.popleft()
-            if node.get_role() == Atspi.Role.PASSWORD_TEXT:
+            if mode == 'paste':
+                states = node.get_state_set()
+                if states.contains(Atspi.StateType.FOCUSED):
+                    if states.contains(Atspi.StateType.EDITABLE) or node.get_role() == Atspi.Role.PASSWORD_TEXT:
+                        return dict(editable=True)
+                    if node.get_role() in (Atspi.Role.DOCUMENT_WEB, Atspi.Role.DOCUMENT_FRAME):
+                        focused_page = True
+            elif node.get_role() == Atspi.Role.PASSWORD_TEXT:
                 continue
             states = node.get_state_set()
-            if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE) and node.is_text():
+            if mode != 'paste' and states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE) and node.is_text():
                 attrs = node.get_attributes()
                 if attrs.get('text-input-type', '').lower() == 'password':
                     return

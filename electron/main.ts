@@ -23,7 +23,7 @@ import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
+import { captureDictationContext, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { isAudioId, markSavedAudio } from './audioStore';
 
@@ -560,10 +560,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
+    const target = process.platform === 'linux' ? await linuxPasteTarget() : undefined;
+    if (target === 'page') return false;
     const previous = keepOnClipboard === true ? undefined : await snapshotClipboard();
     await clipboard.writeText(text);
     try {
-      return await pasteIntoFocusedField();
+      const sent = await pasteIntoFocusedField();
+      return sent && target !== 'unconfirmed-browser';
     } finally {
       // The paste goes through the clipboard; put back what the user had there once the target has read it.
       if (previous) setTimeout(() => {

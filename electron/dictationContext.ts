@@ -171,13 +171,27 @@ async function linuxForegroundPid(): Promise<string | undefined> {
   return /^\d+$/.test(pid) ? pid : undefined;
 }
 
-async function linuxProbe(pid: string, mode: 'context' | 'field'): Promise<Record<string, unknown>> {
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste'): Promise<Record<string, unknown>> {
   const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode], 65536);
   try {
     return JSON.parse(output);
   } catch {
     return {};
   }
+}
+
+// Some browsers expose no accessibility tree. Still send paste there, but leave
+// the result card available because a keypress alone cannot confirm insertion.
+export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed-browser' | undefined> {
+  const pid = await linuxForegroundPid();
+  if (!pid) return;
+  const [probe, processName] = await Promise.all([
+    linuxProbe(pid, 'paste'),
+    runContextProbe('ps', ['-p', pid, '-o', 'comm=']),
+  ]);
+  if (probe.editable === true) return 'field';
+  if (probe.editable === false) return 'page';
+  if (/^(chromium|chrome|firefox|firefox-esr|brave|msedge|vivaldi|opera)$/i.test(processName)) return 'unconfirmed-browser';
 }
 
 export async function readFocusedField(): Promise<FocusedField | undefined> {
