@@ -13,7 +13,7 @@ export async function checkForUpdate(current: string, platform = process.platfor
   const response = await fetch('https://api.github.com/repos/Mohamed-Eltelb/yap-yap/releases/latest', {
     headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 404) return { message: 'No public release is available to check.' };
+  if (response.status === 404) return { message: 'No release is available to check yet.' };
   if (!response.ok) throw new Error('Release check failed');
   const release = await response.json() as {
     tag_name: string; draft: boolean; prerelease: boolean;
