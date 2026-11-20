@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Provider setup guide
+    url: https://yapyap-app.vercel.app/providers.html
+    about: Get API keys, free plans, and the recommended setup for each provider.
+  - name: Report a security issue
+    url: https://github.com/Mohamed-Eltelb/yap-yap/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately instead of opening a public issue.

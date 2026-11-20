@@ -4,11 +4,21 @@ Tap a shortcut in your notes app, say “um, can we move the launch to Friday?�
 
 **Yap Yap has been tested on Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
 
-**[Try the interactive demo](https://yapyap-app.vercel.app/) · [Run from source](#run-from-source) · [Desktop releases](https://github.com/Mohamed-Eltelb/yap-yap/releases)**
+**[Download](https://yapyap-app.vercel.app/download.html) · [Try the interactive demo](https://yapyap-app.vercel.app/) · [Setup guide](https://yapyap-app.vercel.app/providers.html) · [Run from source](#run-from-source)**
 
 <p align="center">
   <img src="docs/media/dictation.gif" width="480" alt="Illustrated dictation demo showing a spoken request being cleaned up as the recording pill moves from listening to finished.">
 </p>
+
+## Install
+
+Download the installer for your platform from the [download page](https://yapyap-app.vercel.app/download.html) or the [latest release](https://github.com/Mohamed-Eltelb/yap-yap/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
+
+The installers aren’t code-signed, so your system may warn you the first time:
+
+- **Windows:** if SmartScreen says “Windows protected your PC”, choose **More info → Run anyway**.
+- **macOS:** if the app is reported as damaged or can’t be opened, move it to Applications and run `xattr -dr com.apple.quarantine "/Applications/Yap Yap.app"` in Terminal.
+- **Linux:** make the AppImage executable (`chmod +x Yap-Yap-*.AppImage`) and run it.
 
 ## Your first dictation
 
@@ -28,7 +38,7 @@ Change shortcuts in Settings. Add names to your dictionary to help transcription
 
 ## Updates
 
-The desktop app checks GitHub for a newer public release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings.
+The desktop app checks GitHub for a newer release at launch. Choose **Download** to save the installer and verify its SHA-256 checksum. Yap Yap reveals the file in Downloads so you can run it when ready. You can also check from Settings.
 
 ## Choose your providers
 
