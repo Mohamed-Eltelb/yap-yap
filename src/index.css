@@ -402,9 +402,13 @@ html.dark .yy-site-card-photo::before {
   border: 1px solid var(--border-strong);
 }
 
-.dark .yy-personalization-tooltip {
+/* The dark tooltip is nearly the page color, so a hairline ring and a deep
+   shadow keep its edge visible. */
+.dark .yy-personalization-tooltip,
+.dark .yy-variant-help [role="tooltip"] {
   background: #211e1e;
   color: var(--text-primary);
+  /*box-shadow: 0 0 0 1px var(--border-strong), 0 6px 16px rgb(0 0 0 / 45%);*/
 }
 
 .yy-keycap {
@@ -909,7 +913,8 @@ textarea,
 /* In dark mode the menu is the same color as the modal it opens over, so it
    needs a firmer edge and a deeper shadow to stand apart. */
 html.dark .yy-option-menu,
-html.dark .yy-target-results {
+html.dark .yy-target-results,
+html.dark .yy-personalization-options > div {
   border-color: var(--border-strong);
   box-shadow: 0 4px 10px rgb(0 0 0 / 30%), 0 12px 28px rgb(0 0 0 / 38%);
 }
