@@ -541,6 +541,20 @@ function checkAndOfferUpdate(atStartup = false) {
   return pendingUpdate ??= offerUpdate(atStartup).finally(() => { pendingUpdate = undefined; });
 }
 
+// One installed Yap Yap at a time. A second launch brings the running window forward instead of
+// registering the shortcuts and checking for updates a second time. (Dev runs skip the lock so
+// `npm run dev` still starts while the installed app is open.)
+if (app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (app.isReady()) createMainWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
 app.whenReady().then(() => {
   if (isDev) app.dock?.setIcon(appIconPath);
   warmDictationContext();
