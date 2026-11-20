@@ -1079,8 +1079,13 @@ export function SettingsModal({
                     </div>
                   )}
 
-                  <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
-                    <div>
+                  <a
+                    href={siteLinks.privacy}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="-mx-3 px-3 py-2 flex items-center justify-between gap-4 rounded-lg border-t border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <div className="min-w-0">
                       <div className="text-[14px] font-medium text-[var(--text-primary)]">
                         Local-first privacy
                       </div>
@@ -1088,7 +1093,8 @@ export function SettingsModal({
                         Yap Yap stores your history locally. Cloud providers receive the audio or text needed for each request.
                       </div>
                     </div>
-                  </div>
+                    <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+                  </a>
 
                   <a
                     href={siteLinks.setupGuide}

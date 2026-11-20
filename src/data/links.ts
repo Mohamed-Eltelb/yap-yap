@@ -11,6 +11,8 @@ export const siteLinks = {
   bestSetups: `${SITE_URL}/use-cases.html`,
   /** What's new in each release. */
   releaseNotes: `${SITE_URL}/release-notes.html`,
+  /** What Yap Yap collects (nothing) and where data goes. */
+  privacy: `${SITE_URL}/privacy.html`,
 };
 
 /** The setup guide's section for one provider. */
