@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
-import { access, rename, rm } from 'node:fs/promises';
+import { access, open, rename, rm } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { pipeline } from 'node:stream/promises';
 
 const repository = 'https://github.com/Mohamed-Eltelb/yap-yap';
 
@@ -50,18 +48,22 @@ export async function downloadInstaller(asset: Installer, downloads: string, pro
   const response = await fetch(asset.url, { signal: AbortSignal.timeout(30 * 60_000) });
   if (!response.ok || !response.body) throw new Error('Download failed');
   const partial = join(downloads, `${asset.name}.${randomUUID()}.part`);
+  const file = await open(partial, 'wx', 0o700);
   try {
     const hash = createHash('sha256');
     let bytes = 0;
-    await pipeline(response.body, async function* (source) {
-      for await (const chunk of source) {
+    try {
+      for await (const chunk of response.body) {
         bytes += chunk.length;
         if (bytes > asset.size) throw new Error('Unexpected installer size');
         hash.update(chunk);
+        await file.write(chunk);
         progress(bytes / asset.size);
-        yield chunk;
       }
-    }, createWriteStream(partial, { flags: 'wx', mode: 0o700 }));
+    } finally {
+      // Close before verifying or removing: on Windows an open file lingers after it is deleted.
+      await file.close();
+    }
     if (bytes !== asset.size || 'sha256:' + hash.digest('hex') !== asset.digest) throw new Error('Installer verification failed');
     const destination = await availablePath(downloads, asset.name);
     await rename(partial, destination);
