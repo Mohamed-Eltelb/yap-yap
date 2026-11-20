@@ -903,6 +903,14 @@ export function App() {
     }, 60_000);
   }, []);
 
+  // Timers that update the HUD must not fire after the app unmounts (as in tests, where the
+  // DOM is torn down and a late setState throws "window is not defined").
+  useEffect(() => () => {
+    window.clearTimeout(pauseTipTimer.current);
+    window.clearTimeout(busyNoticeTimer.current);
+    window.clearTimeout(cancelTimerRef.current);
+  }, []);
+
   const cancelRecording = useCallback(() => {
     // Cancelling a dictation still being processed stops it before it pastes; Undo picks it up again.
     if (hudRef.current.status === 'processing') {
