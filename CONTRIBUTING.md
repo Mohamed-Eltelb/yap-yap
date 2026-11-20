@@ -31,4 +31,6 @@ Run `npm run build:electron` on the target platform. The installer goes into `re
 
 The **Desktop CI** workflow runs tests and builds on all three platforms. A maintainer can use **Actions → Desktop CI → Run workflow** to produce installer artifacts for testing. Download the artifact for each platform, extract it, and check installation, microphone access, shortcuts, and pasting on that OS. The workflow packages without publishing. For a public release, use a tag matching the package version (for example `v1.0.0`), identify each installer’s architecture and signing status, and attach the tested installers to its GitHub release.
 
+To stage all three installers on GitHub, create a draft with the package version as its tag and the build’s full commit SHA as its target. Run **Actions → Stage draft installers** with that tag and the successful Desktop CI run ID. It attaches the installers and `SHA256SUMS.txt`, verifies GitHub’s copies, and leaves the release in draft.
+
 The [social preview image](docs/media/social-preview.png) is sized for the repository’s **Settings → General → Social preview** field.
