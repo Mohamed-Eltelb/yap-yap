@@ -18,11 +18,12 @@ it('selects a newer Windows installer numerically and ignores same or older rele
   const fetcher = vi.fn(async () => Response.json(release));
   vi.stubGlobal('fetch', fetcher);
   const update = await checkForUpdate('1.0.9', 'win32', 'x64');
-  expect(update.installer?.name).toBe(asset.name);
-  expect(update.version).toBe('1.0.10');
-  expect((await checkForUpdate('1.0.10')).installer).toBeUndefined();
-  expect((await checkForUpdate('2.0.0')).installer).toBeUndefined();
-  expect((await checkForUpdate('1.0.9', 'win32', 'arm64')).url).toContain('/releases/latest');
+  expect(update).toMatchObject({ status: 'available', version: '1.0.10', installer: { name: asset.name } });
+  expect(await checkForUpdate('1.0.10')).toEqual({ status: 'up-to-date', version: '1.0.10' });
+  expect(await checkForUpdate('2.0.0')).toEqual({ status: 'up-to-date', version: '2.0.0' });
+  expect(await checkForUpdate('1.0.9', 'win32', 'arm64')).toMatchObject({
+    status: 'available', url: expect.stringContaining('/releases/latest'),
+  });
   expect(fetcher).toHaveBeenCalledTimes(4);
 });
 

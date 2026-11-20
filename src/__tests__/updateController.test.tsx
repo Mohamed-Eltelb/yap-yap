@@ -3,6 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { UpdateController, type UpdateDeps, type UpdateState } from '../../electron/updateController';
+import { checkForUpdate } from '../../electron/updates';
 import { UpdateCard } from '../components/UpdateCard';
 import { UpdateDialog } from '../components/UpdateDialog';
 
@@ -14,7 +15,7 @@ function controller(overrides: Partial<UpdateDeps> = {}) {
     checkInPlace: vi.fn(async () => '1.0.2'),
     downloadInPlace: vi.fn(async (onPercent) => { onPercent(42.4); onPercent(100); }),
     installInPlace: vi.fn(),
-    checkRelease: vi.fn(async () => ({ message: '' })),
+    checkRelease: vi.fn(async () => ({ status: 'no-release' as const })),
     downloadInstaller: vi.fn(async () => '/Downloads/Yap-Yap-1.0.2-macos-arm64.dmg'),
     revealFile: vi.fn(),
     openUrl: vi.fn(),
@@ -86,7 +87,7 @@ describe('UpdateController', () => {
       .mockResolvedValueOnce('/Downloads/Yap-Yap-1.0.2-macos-arm64.dmg');
     const { updates, deps } = controller({
       inPlace: false,
-      checkRelease: vi.fn(async () => ({ message: '', version: '1.0.2', installer })),
+      checkRelease: vi.fn(async () => ({ status: 'available' as const, version: '1.0.2', installer })),
       downloadInstaller,
     });
     expect(await updates.check()).toEqual({ status: 'available', version: '1.0.2', method: 'download' });
@@ -100,11 +101,25 @@ describe('UpdateController', () => {
   it('opens the release page when the release has no installer for this computer', async () => {
     const { updates, deps } = controller({
       inPlace: false,
-      checkRelease: vi.fn(async () => ({ message: '', version: '1.0.2', url: 'https://github.com/releases/latest' })),
+      checkRelease: vi.fn(async () => ({ status: 'available' as const, version: '1.0.2', url: 'https://github.com/releases/latest' })),
     });
     expect((await updates.check()).status).toBe('available');
     await updates.download();
     expect(deps.openUrl).toHaveBeenCalledWith('https://github.com/releases/latest');
+  });
+
+  it('keeps a missing macOS release quiet at startup and reports it in Settings', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    try {
+      const { updates } = controller({
+        inPlace: false,
+        checkRelease: () => checkForUpdate('1.0.1', 'darwin', 'arm64'),
+      });
+      expect(await updates.check(true)).toEqual({ status: 'idle' });
+      expect(await updates.check()).toEqual({ status: 'no-release' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -187,6 +202,14 @@ describe('UpdateDialog', () => {
     await finish();
     expect(screen.getByRole('heading', { name: 'You’re up to date!' })).toBeTruthy();
     expect(screen.getByText('Yap Yap 1.0.2 is the newest version available.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('explains when there is no published release and lets the user close the dialog', async () => {
+    const { finish, onClose } = open({ status: 'no-release' });
+    await finish();
+    expect(screen.getByRole('heading', { name: 'No published release yet' })).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Got it' }));
     expect(onClose).toHaveBeenCalledOnce();
   });

@@ -34,6 +34,11 @@ export function UpdateDialog({ onClose }: { onClose: () => void }) {
   let actions: React.ReactNode = null;
 
   switch (state.status) {
+    case 'no-release':
+      title = 'No published release yet';
+      description = 'Check again after the first release is published.';
+      actions = <button type="button" className={primary} onClick={onClose}>Got it</button>;
+      break;
     case 'up-to-date':
       title = 'You’re up to date!';
       description = `Yap Yap ${state.version} is the newest version available.`;

@@ -4,8 +4,11 @@ import { extname, join } from 'node:path';
 
 const repository = 'https://github.com/Mohamed-Eltelb/yap-yap';
 
-type Installer = { name: string; url: string; digest: string; size: number };
-type Update = { message: string; version?: string; installer?: Installer; url?: string };
+export type Installer = { name: string; url: string; digest: string; size: number };
+export type ReleaseCheck =
+  | { status: 'no-release' }
+  | { status: 'up-to-date'; version: string }
+  | { status: 'available'; version: string; installer?: Installer; url?: string };
 
 /**
  * Windows and AppImage builds update in place with electron-updater. macOS (unsigned, so it
@@ -15,11 +18,11 @@ export function installsUpdatesInPlace(platform: string = process.platform, appI
   return platform === 'win32' || (platform === 'linux' && Boolean(appImage));
 }
 
-export async function checkForUpdate(current: string, platform = process.platform, arch = process.arch): Promise<Update> {
+export async function checkForUpdate(current: string, platform = process.platform, arch = process.arch): Promise<ReleaseCheck> {
   const response = await fetch('https://api.github.com/repos/Mohamed-Eltelb/yap-yap/releases/latest', {
     headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 404) return { message: 'No release is available to check yet.' };
+  if (response.status === 404) return { status: 'no-release' };
   if (!response.ok) throw new Error('Release check failed');
   const release = await response.json() as {
     tag_name: string; draft: boolean; prerelease: boolean;
@@ -30,16 +33,15 @@ export async function checkForUpdate(current: string, platform = process.platfor
   const version = match[1];
   const installed = current.split('.').map(Number);
   const difference = version.split('.').map((v, i) => Number(v) - installed[i]).find(n => n !== 0);
-  if (!difference || difference < 0) return { message: `Yap Yap v${current} is up to date.` };
+  if (!difference || difference < 0) return { status: 'up-to-date', version: current };
   const suffixes: Record<string, string> = { 'win32-x64': 'windows-x64.exe', 'darwin-arm64': 'macos-arm64.dmg', 'linux-x64': 'linux-x64.AppImage' };
   const suffix = suffixes[`${platform}-${arch}`];
   const name = `Yap-Yap-${version}-${suffix}`;
   const asset = release.assets.find(a => a.name === name && a.state === 'uploaded');
-  const message = `Yap Yap v${version} is available.`;
   if (!suffix || !asset?.digest || !/^sha256:[a-f0-9]{64}$/.test(asset.digest) || !(asset.size > 0)) {
-    return { message, version, url: repository + '/releases/latest' };
+    return { status: 'available', version, url: repository + '/releases/latest' };
   }
-  return { message, version, installer: { name, digest: asset.digest, size: asset.size,
+  return { status: 'available', version, installer: { name, digest: asset.digest, size: asset.size,
     url: `${repository}/releases/download/${release.tag_name}/${name}` } };
 }
 

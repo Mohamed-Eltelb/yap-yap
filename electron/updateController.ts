@@ -1,7 +1,10 @@
+import type { Installer, ReleaseCheck } from './updates';
+
 /** What the app shows about updates: the sidebar card and Settings → About read this. */
 export type UpdateState =
   | { status: 'idle' }
   | { status: 'checking' }
+  | { status: 'no-release' }
   | { status: 'up-to-date'; version: string }
   /** `install`: updates in place. `download`: saves the installer (macOS). `page`: only the releases page has it. */
   | { status: 'available'; version: string; method: 'install' | 'download' | 'page' }
@@ -9,9 +12,6 @@ export type UpdateState =
   | { status: 'ready'; version: string; method: 'install' | 'download' }
   /** `version` is set when a download failed, so the card can offer to try again. */
   | { status: 'error'; message: string; version?: string };
-
-type Installer = { name: string; url: string; digest: string; size: number };
-type ReleaseCheck = { message: string; version?: string; installer?: Installer; url?: string };
 
 export interface UpdateDeps {
   currentVersion: string;
@@ -67,11 +67,13 @@ export class UpdateController {
           : { status: 'up-to-date', version: this.deps.currentVersion };
       } else {
         const release = await this.deps.checkRelease();
-        this.installer = release.installer;
-        this.releaseUrl = release.url;
-        next = !release.version
-          ? { status: 'up-to-date', version: this.deps.currentVersion }
-          : { status: 'available', version: release.version, method: release.installer ? 'download' : 'page' };
+        if (release.status === 'available') {
+          this.installer = release.installer;
+          this.releaseUrl = release.url;
+          next = { status: 'available', version: release.version, method: release.installer ? 'download' : 'page' };
+        } else {
+          next = release;
+        }
       }
       if (atStartup && next.status === 'available') {
         showAtStartup = await this.deps.readSkipped() !== next.version;
