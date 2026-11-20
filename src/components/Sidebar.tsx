@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ActiveNav, AppearanceMode, CleanupLevel, DictationMode, ProviderConfig, ProviderId, SettingsModalTab, SettingsState } from '../types/app';
 import { SetupCard } from './SetupCard';
+import { UpdateCard } from './UpdateCard';
 import { YapLogo } from './YapLogo';
 
 const appearanceModes = {
@@ -109,6 +110,8 @@ export function Sidebar({
 
       {/* Bottom Cards + Utility Icons */}
       <div className="px-3 pb-3 space-y-2.5">
+        <UpdateCard />
+
         {!dismissedQuickCard && (
           <div className="relative group">
             <button

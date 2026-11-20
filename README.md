@@ -38,10 +38,10 @@ Change shortcuts in Settings. Add names to your dictionary to help transcription
 
 ## Updates
 
-The desktop app checks GitHub for a newer release at launch, and you can also check from **Settings → About**. Nothing downloads until you choose **Download**.
+Yap Yap checks GitHub for a newer release at launch, and you can also check from **Settings → About**. A new version appears as a card in the sidebar. Nothing downloads until you choose **Download**, and the card shows the download’s progress.
 
-- **Windows and Linux (AppImage):** Yap Yap downloads the update, checks it against the release’s SHA-512 checksum, and installs it when you choose **Restart now**, or when you choose **Quit Yap Yap** from the tray icon.
-- **macOS:** Yap Yap saves the new DMG to Downloads after verifying its SHA-256 checksum, and shows it so you can install it.
+- **Windows and Linux (AppImage):** the update is checked against the release’s SHA-512 checksum, then installs when you choose **Restart now**, or when you quit Yap Yap from the tray.
+- **macOS:** the new DMG is checked against its SHA-256 checksum and saved to Downloads for you to install.
 
 ## Choose your providers
 

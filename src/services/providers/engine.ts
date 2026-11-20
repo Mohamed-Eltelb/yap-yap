@@ -1,3 +1,4 @@
+import type { UpdateState } from '../../../electron/updateController';
 import { speechLanguages } from '../../data/spokenLanguages';
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
@@ -17,7 +18,15 @@ declare global {
     yapyap?: {
       isElectron: boolean;
       platform: string;
-      checkForUpdate: () => Promise<{ message: string }>;
+      /** Desktop updates. The sidebar card and Settings → About follow `onState`. */
+      updates?: {
+        get: () => Promise<UpdateState>;
+        check: () => Promise<UpdateState>;
+        download: () => Promise<void>;
+        install: () => Promise<void>;
+        dismiss: () => Promise<void>;
+        onState: (cb: (state: UpdateState) => void) => () => void;
+      };
       minimizeWindow: () => void;
       maximizeWindow: () => void;
       closeWindow: () => void;

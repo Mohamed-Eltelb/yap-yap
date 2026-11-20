@@ -2,7 +2,6 @@ import {
   app,
   BrowserWindow,
   clipboard,
-  dialog,
   ClipboardItem,
   globalShortcut,
   ipcMain,
@@ -20,6 +19,7 @@ import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccel
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
+import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
@@ -440,12 +440,10 @@ function pasteIntoFocusedField(): Promise<boolean> {
 
 const skippedUpdatePath = () => path.join(app.getPath('userData'), 'skipped-update.txt');
 
-type UpdateOffer = Awaited<ReturnType<typeof checkForUpdate>> & { inPlace?: boolean };
-
-let updaterReady = false;
-async function checkInPlaceUpdate(): Promise<UpdateOffer> {
-  if (!updaterReady) {
-    updaterReady = true;
+let updaterConfigured = false;
+function inPlaceUpdater() {
+  if (!updaterConfigured) {
+    updaterConfigured = true;
     // The user approves each download; an approved update not installed yet goes in on quit.
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -453,93 +451,48 @@ async function checkInPlaceUpdate(): Promise<UpdateOffer> {
     // Failures reach the caller through the rejected promise. Without a listener, 'error' would crash the app.
     autoUpdater.on('error', () => undefined);
   }
-  const result = await autoUpdater.checkForUpdates();
-  if (!result?.isUpdateAvailable) return { message: `Yap Yap v${app.getVersion()} is up to date.` };
-  const version = result.updateInfo.version;
-  return { message: `Yap Yap v${version} is available.`, version, inPlace: true };
+  return autoUpdater;
 }
 
-async function installInPlaceUpdate(window: BrowserWindow, version: string) {
-  const onProgress = (progress: ProgressInfo) => {
-    if (!window.isDestroyed()) window.setProgressBar(progress.percent / 100);
-  };
-  autoUpdater.on('download-progress', onProgress);
-  try {
-    await autoUpdater.downloadUpdate();
-  } finally {
-    autoUpdater.off('download-progress', onProgress);
-    if (!window.isDestroyed()) window.setProgressBar(-1);
-  }
-  const ready = `Yap Yap v${version} is ready to install.`;
-  if (window.isDestroyed()) return { message: ready };
-  const choice = await dialog.showMessageBox(window, {
-    type: 'info', title: 'Yap Yap update', message: ready,
-    detail: 'Restart now to finish updating. If you choose Later, it installs when you choose Quit Yap Yap from the tray icon.',
-    buttons: ['Restart now', 'Later'], cancelId: 1,
-  });
-  if (choice.response !== 0) return { message: `${ready} It installs when you choose Quit Yap Yap from the tray icon.` };
-  // Let the windows close instead of hiding to the tray, so the installer can replace the app.
-  isQuitting = true;
-  setImmediate(() => autoUpdater.quitAndInstall(true, true));
-  return { message: 'Restarting to install the update…' };
-}
-
-async function offerUpdate(atStartup = false) {
-  const update: UpdateOffer = app.isPackaged && installsUpdatesInPlace()
-    ? await checkInPlaceUpdate()
-    : await checkForUpdate(app.getVersion());
+function setTaskbarProgress(state: UpdateState) {
   const window = mainWindow;
-  if (!window || window.isDestroyed() || (!update.inPlace && !update.installer && !update.url)) return { message: update.message };
-  if (atStartup && await fs.promises.readFile(skippedUpdatePath(), 'utf8').catch(() => '') === update.version) {
-    return { message: update.message };
-  }
-  if (!window.isVisible()) {
-    await new Promise<void>(resolve => { window.once('show', resolve); window.once('closed', resolve); });
-    if (window.isDestroyed()) return { message: update.message };
-  }
-  const choice = await dialog.showMessageBox(window, {
-    type: 'info', title: 'Yap Yap update', message: update.message,
-    detail: update.inPlace ? 'Download it now. You choose when Yap Yap restarts to install it.'
-      : update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
-    buttons: [update.inPlace || update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
-  });
-  if (choice.response !== 0) {
-    // Startup stays quiet about this version until a newer one is published. Settings still offers it.
-    if (update.version) await fs.promises.writeFile(skippedUpdatePath(), update.version).catch(() => undefined);
-    return { message: update.message };
-  }
-  if (update.inPlace && update.version) {
-    try {
-      return await installInPlaceUpdate(window, update.version);
-    } catch {
-      const message = 'The update could not be downloaded. Check your connection and try again in Settings.';
-      if (!window.isDestroyed()) await dialog.showMessageBox(window, { type: 'warning', message });
-      return { message };
-    }
-  }
-  if (!update.installer) {
-    if (update.url) await shell.openExternal(update.url);
-    return { message: update.message };
-  }
-  try {
-    const file = await downloadInstaller(update.installer, app.getPath('downloads'), fraction => {
-      if (!window.isDestroyed()) window.setProgressBar(fraction);
-    });
-    shell.showItemInFolder(file);
-    return { message: 'Download complete. Open the installer to update Yap Yap.' };
-  } catch {
-    const message = 'The installer could not be downloaded and verified. Check your connection and try again in Settings.';
-    if (!window.isDestroyed()) await dialog.showMessageBox(window, { type: 'warning', message });
-    return { message };
-  } finally {
-    if (!window.isDestroyed()) window.setProgressBar(-1);
-  }
+  if (!window || window.isDestroyed()) return;
+  window.setProgressBar(state.status === 'downloading' ? state.percent / 100 : -1);
 }
 
-let pendingUpdate: ReturnType<typeof offerUpdate> | undefined;
-function checkAndOfferUpdate(atStartup = false) {
-  return pendingUpdate ??= offerUpdate(atStartup).finally(() => { pendingUpdate = undefined; });
-}
+const updates = new UpdateController({
+  currentVersion: app.getVersion(),
+  inPlace: app.isPackaged && installsUpdatesInPlace(),
+  async checkInPlace() {
+    const result = await inPlaceUpdater().checkForUpdates();
+    return result?.isUpdateAvailable ? result.updateInfo.version : undefined;
+  },
+  async downloadInPlace(onPercent) {
+    const updater = inPlaceUpdater();
+    const onProgress = (progress: ProgressInfo) => onPercent(progress.percent);
+    updater.on('download-progress', onProgress);
+    try {
+      await updater.downloadUpdate();
+    } finally {
+      updater.off('download-progress', onProgress);
+    }
+  },
+  installInPlace() {
+    // Let the windows close instead of hiding to the tray, so the installer can replace the app.
+    isQuitting = true;
+    setImmediate(() => inPlaceUpdater().quitAndInstall(true, true));
+  },
+  checkRelease: () => checkForUpdate(app.getVersion()),
+  downloadInstaller: (installer, onFraction) => downloadInstaller(installer, app.getPath('downloads'), onFraction),
+  revealFile: file => shell.showItemInFolder(file),
+  openUrl: url => void shell.openExternal(url),
+  readSkipped: () => fs.promises.readFile(skippedUpdatePath(), 'utf8').catch(() => ''),
+  writeSkipped: version => fs.promises.writeFile(skippedUpdatePath(), version),
+  onChange(state) {
+    setTaskbarProgress(state);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:state', state);
+  },
+});
 
 // One installed Yap Yap at a time. A second launch brings the running window forward instead of
 // registering the shortcuts and checking for updates a second time. (Dev runs skip the lock so
@@ -561,7 +514,7 @@ app.whenReady().then(() => {
   createMainWindow();
   createHudWindow();
   createTray();
-  if (app.isPackaged) void checkAndOfferUpdate(true).catch(() => { /* Offline startup is normal. */ });
+  if (app.isPackaged) void updates.check(true);
 
   ipcMain.on('window:minimize', () => mainWindow?.minimize());
   ipcMain.on('window:maximize', () => {
@@ -588,8 +541,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('audio:set-mute', (event, muted: boolean) =>
     event.sender === mainWindow?.webContents ? setRecordingMute(muted) : undefined);
-  ipcMain.handle('app:check-for-update', (event) =>
-    fromMainFrame(event) ? checkAndOfferUpdate() : undefined);
+  ipcMain.handle('update:get', (event) => fromMainFrame(event) ? updates.state : undefined);
+  ipcMain.handle('update:check', (event) => fromMainFrame(event) ? updates.check() : undefined);
+  ipcMain.handle('update:download', (event) => fromMainFrame(event) ? updates.download() : undefined);
+  ipcMain.handle('update:install', (event) => fromMainFrame(event) ? updates.install() : undefined);
+  ipcMain.handle('update:dismiss', (event) => fromMainFrame(event) ? updates.dismiss() : undefined);
 
   ipcMain.handle('shortcuts:update', (_e, shortcuts) => {
     return registerAppShortcuts(shortcuts);

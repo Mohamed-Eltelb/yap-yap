@@ -4,7 +4,18 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('yapyap', {
   isElectron: true,
   platform: process.platform,
-  checkForUpdate: () => ipcRenderer.invoke('app:check-for-update'),
+  updates: {
+    get: () => ipcRenderer.invoke('update:get'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    dismiss: () => ipcRenderer.invoke('update:dismiss'),
+    onState: (cb: (state: unknown) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state);
+      ipcRenderer.on('update:state', handler);
+      return () => ipcRenderer.removeListener('update:state', handler);
+    },
+  },
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),

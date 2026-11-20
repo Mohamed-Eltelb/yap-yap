@@ -31,6 +31,7 @@ import { SelectMenu } from './SelectMenu';
 import { isMicrophoneMissing, MicrophoneDialog } from './MicrophoneDialog';
 import { ProviderSettings } from './ProviderSettings';
 import { feedbackUrl, siteLinks } from '../data/links';
+import { UpdateProgress, useAppUpdate } from './UpdateCard';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SourceCategoriesDialog } from './SourceCategoriesDialog';
@@ -158,8 +159,7 @@ export function SettingsModal({
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateResult, setUpdateResult] = useState<{ message: string }>();
+  const update = useAppUpdate();
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[]; reason: 'used' | 'reserved' } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | 'spoken' | null>(null);
@@ -253,18 +253,34 @@ export function SettingsModal({
     onTranslationTargetsOpened();
   }, [open, openTranslationTargets, onTranslationTargetsOpened]);
 
-  const checkForUpdates = async () => {
-    if (!window.yapyap) return;
-    setCheckingUpdate(true);
-    setUpdateResult(undefined);
-    try {
-      setUpdateResult(await window.yapyap.checkForUpdate());
-    } catch {
-      setUpdateResult({ message: 'Could not check for updates. Try again later.' });
-    } finally {
-      setCheckingUpdate(false);
+  const updates = window.yapyap?.updates;
+  const updateAction = (() => {
+    switch (update.status) {
+      case 'checking': return { label: 'Checking…', disabled: true };
+      case 'available':
+        return update.method === 'page'
+          ? { label: 'View release', run: () => updates?.download() }
+          : { label: `Download v${update.version}`, run: () => updates?.download() };
+      case 'downloading': return { label: `Downloading… ${update.percent}%`, disabled: true };
+      case 'ready':
+        return update.method === 'install'
+          ? { label: 'Restart to update', run: () => updates?.install() }
+          : { label: 'Show installer', run: () => updates?.install() };
+      default: return { label: 'Check for updates', run: () => updates?.check() };
     }
-  };
+  })();
+  const updateMessage = (() => {
+    switch (update.status) {
+      case 'up-to-date': return `Yap Yap v${update.version} is up to date.`;
+      case 'available': return `Yap Yap v${update.version} is available.`;
+      case 'ready':
+        return update.method === 'install'
+          ? `Yap Yap v${update.version} is ready. Restart to finish updating, or it installs when you quit Yap Yap from the tray.`
+          : `The v${update.version} installer is in your Downloads folder.`;
+      case 'error': return update.message;
+      default: return undefined;
+    }
+  })();
 
   const refreshMicrophones = React.useCallback(() => {
     navigator.mediaDevices
@@ -1062,20 +1078,21 @@ export function SettingsModal({
                         v{version} · Yap Yap Desktop
                       </div>
                     </div>
-                    {window.yapyap && (
+                    {updates && (
                       <button
                         type="button"
-                        onClick={() => void checkForUpdates()}
-                        disabled={checkingUpdate}
+                        onClick={() => void updateAction.run?.()}
+                        disabled={updateAction.disabled}
                         className="px-4 py-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-hover)] text-[13px] font-medium text-[var(--text-primary)] transition-colors disabled:opacity-60"
                       >
-                        {checkingUpdate ? 'Checking…' : 'Check for updates'}
+                        {updateAction.label}
                       </button>
                     )}
                   </div>
-                  {updateResult && (
+                  {update.status === 'downloading' && <UpdateProgress percent={update.percent} />}
+                  {updateMessage && (
                     <div role="status" className="text-[13px] text-[var(--text-secondary)]">
-                      {updateResult.message}
+                      {updateMessage}
                     </div>
                   )}
 
