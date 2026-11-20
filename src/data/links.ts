@@ -1,7 +1,7 @@
 import type { ProviderId } from '../types/app';
 
 /** The Yap Yap website. Change it here when the site moves to its own domain. */
-export const SITE_URL = 'https://yap-yap-voice.aboeltalabib21.chatgpt.site';
+export const SITE_URL = 'https://yapyap-app.vercel.app';
 
 export const siteLinks = {
   home: `${SITE_URL}/`,

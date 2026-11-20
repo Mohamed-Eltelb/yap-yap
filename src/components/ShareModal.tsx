@@ -221,7 +221,7 @@ function ShareCard({
               Yap Yap
             </span>
           </span>
-          <span className="text-[14px] text-[#6b6b73]">yapyap.app</span>
+          <span className="text-[14px] text-[#6b6b73]">yapyap-app.vercel.app</span>
         </div>
       </div>
     </div>
