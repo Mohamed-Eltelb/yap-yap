@@ -2713,8 +2713,8 @@ html.dark .yy-target-results {
 .yy-mic-stage {
   display: grid;
   justify-items: center;
-  gap: 12px;
-  padding: 24px 16px 16px;
+  gap: 8px;
+  padding: 16px 16px 12px;
   border-radius: 13px;
   background:
     radial-gradient(ellipse at 55% 120%, #9eb7cc 5%, transparent 57%),
@@ -2730,7 +2730,7 @@ html.dark .yy-target-results {
   position: static;
   transform: none;
   /* The real dictation pill, enlarged so the test is easy to read. */
-  zoom: 1.4;
+  zoom: 1.15;
 }
 
 .yy-mic-status {

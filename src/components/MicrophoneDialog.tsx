@@ -86,10 +86,10 @@ export function MicrophoneDialog({ microphones, value, onChange, onListening, on
 
   const loud = Math.min(1, Math.max(0, loudness(levels)));
   const status = {
-    starting: 'Opening the microphone…',
-    listening: 'Say something. The bars move when it hears you.',
-    heard: 'Yap Yap hears this microphone.',
-    error: 'This microphone didn’t open. Check that it’s plugged in and Yap Yap is allowed to use it.',
+    starting: 'Warming up the mic…',
+    listening: 'Start yapping…',
+    heard: 'Loud and clear!',
+    error: 'Can’t hear a thing. Check the mic is plugged in and Yap Yap is allowed to use it.',
   }[state];
 
   return (
