@@ -1103,55 +1103,28 @@ export function SettingsModal({
             {activeTab === 'help' && (
               <div className="space-y-5">
                 <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">
-                  Help &amp; Quick Start
+                  Help
                 </h2>
-
-                <div className="space-y-3 text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
-                    <div className="font-semibold text-[var(--text-primary)] mb-1">
-                      1. Connect a provider
-                    </div>
-                    Open <strong className="text-[var(--text-primary)]">API Keys</strong>, choose a provider, paste its key, and click <strong className="text-[var(--text-primary)]">Verify &amp; add</strong>. Several providers have a free plan. The setup guide below shows where to get each key and what it costs.
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
-                    <div className="font-semibold text-[var(--text-primary)] mb-1">
-                      2. Dictate, Translate, or Ask Anything
-                    </div>
-                    Press your shortcut anywhere you can type, or click <strong className="text-[var(--text-primary)]">Quick dictate</strong> in the sidebar. Tap the shortcut again to finish, or hold it to pause. Press Esc to cancel.
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)]">
-                    <div className="font-semibold text-[var(--text-primary)] mb-1">
-                      3. Retry or Download Anytime
-                    </div>
-                    In <strong className="text-[var(--text-primary)]">History</strong>, hover any transcript and open the <strong className="text-[var(--text-primary)]">•••</strong> menu to re-process saved audio with a different provider or download the audio clip.
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-[14px] font-medium text-[var(--text-primary)] mb-2">Guides</h3>
-                  <div className="rounded-xl border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] overflow-hidden">
-                    {[
-                      { href: siteLinks.setupGuide, title: 'Setup guide', detail: 'Get each API key, plus prices and free plans' },
-                      { href: siteLinks.bestSetups, title: 'Best setups', detail: 'Which providers to combine, from free to best quality' },
-                      { href: siteLinks.home, title: 'Yap Yap website', detail: 'Features, FAQs, and downloads' },
-                    ].map((link) => (
-                      <a
-                        key={link.href}
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--bg-hover)] transition-colors"
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-[13px] font-medium text-[var(--text-primary)]">{link.title}</span>
-                          <span className="block text-[12px] text-[var(--text-secondary)] mt-0.5">{link.detail}</span>
-                        </span>
-                        <ArrowUpRight size={15} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-                      </a>
-                    ))}
-                  </div>
+                <div className="-mx-3">
+                  {[
+                    { href: siteLinks.setupGuide, title: 'Setup guide', detail: 'Get each API key, plus prices and free plans.' },
+                    { href: siteLinks.bestSetups, title: 'Best setups', detail: 'Which providers to combine, from free to best quality.' },
+                    { href: siteLinks.home, title: 'Yap Yap website', detail: 'Features, FAQs, and downloads.' },
+                  ].map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-[var(--bg-hover)] transition-colors"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-[14px] font-medium text-[var(--text-primary)]">{link.title}</span>
+                        <span className="block text-[13px] text-[var(--text-secondary)] mt-0.5">{link.detail}</span>
+                      </span>
+                      <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+                    </a>
+                  ))}
                 </div>
               </div>
             )}
