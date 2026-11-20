@@ -30,6 +30,7 @@ describe('Dictionary', () => {
     const { onAddWord, user } = renderView();
     await user.click(screen.getByRole('button', { name: 'New word' }));
     await user.click(screen.getByRole('switch', { name: 'Correct a misspelling' }));
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Misspelling' }));
     await user.type(screen.getByRole('textbox', { name: 'Misspelling' }), '  hand  of ');
     await user.type(screen.getByRole('textbox', { name: 'Correct spelling' }), 'handoff');
     await user.click(screen.getByRole('button', { name: 'Add word' }));

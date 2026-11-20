@@ -98,7 +98,6 @@ export function DictionaryView({
   const [heardAs, setHeardAs] = useState('');
   /** Whether the word replaces a spelling Yap Yap keeps getting wrong. */
   const [correcting, setCorrecting] = useState(false);
-  const heardAsRef = useRef<HTMLInputElement>(null);
   const [wordError, setWordError] = useState('');
   const [heardAsError, setHeardAsError] = useState('');
   const editingEntry = wordForm === 'add' ? null : wordForm;
@@ -387,7 +386,6 @@ export function DictionaryView({
                 onChange={(on) => {
                   setCorrecting(on);
                   setHeardAsError('');
-                  if (on) requestAnimationFrame(() => heardAsRef.current?.focus());
                 }}
               />
             </div>
@@ -396,7 +394,7 @@ export function DictionaryView({
               {correcting && (
                 <>
                   <input
-                    ref={heardAsRef}
+                    autoFocus
                     type="text"
                     maxLength={60}
                     value={heardAs}
@@ -412,7 +410,7 @@ export function DictionaryView({
               )}
               <input
                 type="text"
-                autoFocus
+                autoFocus={!correcting}
                 value={newWord}
                 onChange={(e) => { setNewWord(e.target.value); setWordError(''); }}
                 placeholder={correcting ? 'Correct spelling' : editingEntry ? 'Edit word' : 'Add a new word'}

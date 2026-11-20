@@ -2,7 +2,7 @@
 
 Tap a shortcut in your notes app, say “um, can we move the launch to Friday?”, and Yap Yap types the cleaned-up sentence at your cursor. Use the same floating recorder to translate a message or ask a question. You choose who transcribes your audio and who edits the text.
 
-**[Try the interactive demo](https://yapyap-app.vercel.app/) · [Run from source](#run-from-source) · [Installer availability](https://yapyap-app.vercel.app/download.html)**
+**[Try the interactive demo](https://yapyap-app.vercel.app/) · [Run from source](#run-from-source) · [Desktop releases](https://github.com/Mohamed-Eltelb/yap-yap/releases)**
 
 <p align="center">
   <img src="docs/media/dictation.gif" width="480" alt="Illustrated dictation demo showing a spoken request being cleaned up as the recording pill moves from listening to finished.">
