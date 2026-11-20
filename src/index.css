@@ -906,6 +906,14 @@ textarea,
   box-shadow: 0 3px 5px rgb(0 0 0 / 8%), 0 9px 20px rgb(0 0 0 / 10%);
 }
 
+/* In dark mode the menu is the same color as the modal it opens over, so it
+   needs a firmer edge and a deeper shadow to stand apart. */
+html.dark .yy-option-menu,
+html.dark .yy-target-results {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 30%), 0 12px 28px rgb(0 0 0 / 38%);
+}
+
 .yy-option-menu {
   position: fixed;
   inset: auto;
@@ -2702,73 +2710,167 @@ textarea,
   gap: 14px;
 }
 
-.yy-mic-list {
+.yy-mic-stage {
   display: grid;
-  gap: 6px;
-  max-height: 260px;
+  justify-items: center;
+  gap: 12px;
+  padding: 22px 16px 16px;
+  border-radius: 13px;
+  background:
+    radial-gradient(ellipse at 55% 120%, #9eb7cc 5%, transparent 57%),
+    radial-gradient(ellipse at 16% 30%, #f4e9e6, transparent 55%),
+    linear-gradient(115deg, #c7dce5, #f6f8f8 46%, #e7eeee 70%, #c2d8e2);
+}
+
+.dark .yy-mic-stage {
+  background: radial-gradient(ellipse at 55% 120%, #546e86, transparent 65%), linear-gradient(115deg, #233340, #44424b, #263d49);
+}
+
+.yy-mic-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+  width: 210px;
+  height: 46px;
+  border: 1px solid #ffffff4a;
+  border-radius: 999px;
+  background: #060707;
+  color: #fff;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 22%);
+}
+
+.yy-mic-pill span {
+  flex-shrink: 0;
+  width: 2.5px;
+  border-radius: 2px;
+  background: #fff;
+  transition: height 70ms linear;
+}
+
+.yy-mic-stage[data-state="starting"] .yy-mic-pill span,
+.yy-mic-stage[data-state="listening"] .yy-mic-pill span {
+  opacity: 0.55;
+}
+
+.yy-mic-stage[data-state="error"] .yy-mic-pill {
+  width: 46px;
+  color: #fca5a5;
+}
+
+.yy-mic-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #1f2937;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.dark .yy-mic-status {
+  color: #f2f1f0;
+}
+
+.yy-mic-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.yy-mic-stage[data-state="listening"] .yy-mic-dot {
+  background: #f59e0b;
+  animation: yy-mic-blink 1.4s ease-in-out infinite;
+}
+
+.yy-mic-stage[data-state="heard"] .yy-mic-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgb(34 197 94 / 22%);
+}
+
+.yy-mic-stage[data-state="error"] .yy-mic-dot {
+  background: #ef4444;
+}
+
+@keyframes yy-mic-blink {
+  50% { opacity: 0.35; }
+}
+
+.yy-mic-list {
+  max-height: 252px;
   overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
 }
 
 .yy-mic-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 38px;
-  padding: 4px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 11px;
+  gap: 11px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 14px 7px 9px;
   color: var(--text-primary);
-  font-size: 13.5px;
+  text-align: left;
   cursor: pointer;
 }
 
-.yy-mic-row:has(input:checked) {
-  border-color: var(--border-strong);
+.yy-mic-row + .yy-mic-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.yy-mic-row:hover {
   background: var(--bg-hover);
 }
 
-.yy-mic-row input {
+.yy-mic-row:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
+.yy-mic-icon {
+  display: grid;
   flex-shrink: 0;
-  accent-color: var(--text-primary);
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.yy-mic-row[aria-checked="true"] .yy-mic-icon {
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+}
+
+.yy-mic-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
 }
 
 .yy-mic-label {
-  min-width: 0;
   overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.yy-mic-test {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 11px;
-}
-
-.yy-mic-meter {
-  display: flex;
-  gap: 3px;
-  height: 18px;
-}
-
-.yy-mic-meter span {
-  flex: 1;
-  border-radius: 3px;
-  background: var(--border-subtle);
-  transition: background-color 60ms linear;
-}
-
-.yy-mic-meter span[data-lit] {
-  background: #22c55e;
-}
-
-.yy-mic-status {
+.yy-mic-hint {
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
-.yy-mic-status[data-error] {
-  color: #dc2626;
+.yy-mic-check {
+  flex-shrink: 0;
+  color: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yy-mic-pill span { transition: none; }
+  .yy-mic-stage[data-state="listening"] .yy-mic-dot { animation: none; }
 }

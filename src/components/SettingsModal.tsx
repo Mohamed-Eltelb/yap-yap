@@ -209,8 +209,8 @@ export function SettingsModal({
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [microphoneDialogOpen, setMicrophoneDialogOpen] = useState(false);
   const microphoneLabel = settings.microphoneId === 'default'
-    ? 'Auto-detect (System Default)'
-    : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Auto-detect (System Default)';
+    ? 'Auto-detect'
+    : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Auto-detect';
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   // Shortcuts stay off only while a shortcut field records keys, so pressing the new
   // shortcut does not also start a dictation. The rest of Settings can be dictated into.

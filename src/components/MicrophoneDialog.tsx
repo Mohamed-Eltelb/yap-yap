@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Check, Mic, MicOff } from 'lucide-react';
 import { SettingsSubdialog } from './SettingsSubdialog';
 
 export interface MicrophoneOption {
@@ -6,9 +7,13 @@ export interface MicrophoneOption {
   label: string;
 }
 
-const METER_BARS = 24;
+const WAVE_BARS = 34;
+const SAMPLE_MS = 45;
+const silentWave = () => Array<number>(WAVE_BARS).fill(0);
 
-/** Lists the microphones and shows a live level for the chosen one, so the user can test it. */
+type TestState = 'starting' | 'listening' | 'heard' | 'error';
+
+/** Lists the microphones and draws the chosen one's voice live, so the user can test it. */
 export function MicrophoneDialog({ microphones, value, onChange, onListening, onClose }: {
   microphones: MicrophoneOption[];
   value: string;
@@ -17,12 +22,11 @@ export function MicrophoneDialog({ microphones, value, onChange, onListening, on
   onListening?: () => void;
   onClose: () => void;
 }) {
-  const [level, setLevel] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [heard, setHeard] = useState(false);
-  const options: MicrophoneOption[] = [
-    { id: 'default', label: 'Auto-detect (System Default)' },
-    ...microphones.filter((mic) => mic.id !== 'default'),
+  const [wave, setWave] = useState(silentWave);
+  const [state, setState] = useState<TestState>('starting');
+  const options: (MicrophoneOption & { hint?: string })[] = [
+    { id: 'default', label: 'Auto-detect', hint: 'Follows your system default' },
+    ...microphones.filter((mic) => mic.id !== 'default' && mic.id !== 'communications'),
   ];
 
   useEffect(() => {
@@ -30,46 +34,53 @@ export function MicrophoneDialog({ microphones, value, onChange, onListening, on
     let stream: MediaStream | undefined;
     let context: AudioContext | undefined;
     let frame = 0;
-    setLevel(0);
-    setError(null);
-    setHeard(false);
+    setWave(silentWave());
+    setState('starting');
 
     const constraints: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true };
-    const open = (deviceId?: string) => navigator.mediaDevices.getUserMedia({
-      audio: deviceId ? { ...constraints, deviceId: { exact: deviceId } } : constraints,
-    });
 
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('unavailable');
-        const opened = await open(value === 'default' ? undefined : value);
+        const opened = await navigator.mediaDevices.getUserMedia({
+          audio: value === 'default' ? constraints : { ...constraints, deviceId: { exact: value } },
+        });
         if (cancelled) {
           opened.getTracks().forEach((track) => track.stop());
           return;
         }
         stream = opened;
         onListening?.();
+        setState('listening');
         context = new AudioContext();
         const analyser = context.createAnalyser();
         analyser.fftSize = 1024;
         context.createMediaStreamSource(stream).connect(analyser);
         const samples = new Float32Array(analyser.fftSize);
-        let smoothed = 0;
-        const tick = () => {
+        let peak = 0;
+        let last = performance.now();
+        let heard = false;
+        const tick = (now: number) => {
           analyser.getFloatTimeDomainData(samples);
           let sum = 0;
           for (const sample of samples) sum += sample * sample;
-          const rms = Math.sqrt(sum / samples.length);
-          // Speech sits around 0.02–0.2 RMS; a square root spreads it across the meter.
-          const target = Math.min(1, Math.sqrt(rms / 0.25));
-          smoothed = target > smoothed ? target : smoothed * 0.85 + target * 0.15;
-          setLevel(smoothed);
-          if (smoothed > 0.25) setHeard(true);
+          // Speech sits around 0.02–0.2 RMS; a square root spreads it across the bar height.
+          peak = Math.max(peak, Math.min(1, Math.sqrt(Math.sqrt(sum / samples.length) / 0.22)));
+          if (now - last >= SAMPLE_MS) {
+            const level = peak < 0.12 ? 0 : peak;
+            setWave((bars) => [...bars.slice(1), level]);
+            if (!heard && level > 0.3) {
+              heard = true;
+              setState('heard');
+            }
+            peak = 0;
+            last = now;
+          }
           frame = requestAnimationFrame(tick);
         };
-        tick();
+        frame = requestAnimationFrame(tick);
       } catch {
-        if (!cancelled) setError('Could not open this microphone. Check that it is plugged in and that Yap Yap may use it.');
+        if (!cancelled) setState('error');
       }
     })();
 
@@ -79,46 +90,58 @@ export function MicrophoneDialog({ microphones, value, onChange, onListening, on
       stream?.getTracks().forEach((track) => track.stop());
       void context?.close();
     };
+    // Reopen only when the chosen microphone changes.
   }, [value]);
 
-  const lit = Math.round(level * METER_BARS);
+  const status = {
+    starting: 'Opening microphone…',
+    listening: 'Say something to test it',
+    heard: 'Sounds good — Yap Yap can hear you',
+    error: 'Can’t open this microphone. Check that it’s plugged in and allowed.',
+  }[state];
 
   return (
     <SettingsSubdialog
       title="Microphone"
-      description="Choose the microphone Yap Yap listens to. Speak to test it: the bars move when it hears you."
+      description="Choose the microphone Yap Yap listens to, then speak to check it picks up your voice."
       onClose={onClose}
     >
       <div className="yy-language-body yy-mic-body">
-        <div className="yy-mic-list" role="radiogroup" aria-label="Microphones">
-          {options.map((mic) => (
-            <label className="yy-mic-row" key={mic.id}>
-              <input
-                type="radio"
-                name="microphone"
-                checked={mic.id === value}
-                onChange={() => onChange(mic.id)}
-              />
-              <span className="yy-mic-label">{mic.label}</span>
-            </label>
-          ))}
-        </div>
-        <div className="yy-mic-test">
-          <div
-            className="yy-mic-meter"
-            role="meter"
-            aria-label="Microphone level"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(level * 100)}
-          >
-            {Array.from({ length: METER_BARS }, (_, i) => (
-              <span key={i} data-lit={i < lit || undefined} />
-            ))}
+        <div className="yy-mic-stage" data-state={state}>
+          <div className="yy-mic-pill" aria-hidden="true">
+            {state === 'error'
+              ? <MicOff size={16} />
+              : wave.map((level, i) => (
+                <span key={i} style={{ height: `${Math.max(3, Math.round(level * 26))}px` }} />
+              ))}
           </div>
-          <p className="yy-mic-status" aria-live="polite" data-error={error ? true : undefined}>
-            {error ?? (heard ? 'Working — Yap Yap can hear you.' : 'Say something to test this microphone…')}
+          <p className="yy-mic-status" role="status">
+            <span className="yy-mic-dot" />
+            {status}
           </p>
+        </div>
+
+        <div className="yy-mic-list" role="radiogroup" aria-label="Microphones">
+          {options.map((mic) => {
+            const selected = mic.id === value;
+            return (
+              <button
+                key={mic.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className="yy-mic-row"
+                onClick={() => onChange(mic.id)}
+              >
+                <span className="yy-mic-icon"><Mic size={15} /></span>
+                <span className="yy-mic-text">
+                  <span className="yy-mic-label">{mic.label}</span>
+                  {mic.hint && <span className="yy-mic-hint">{mic.hint}</span>}
+                </span>
+                {selected && <Check size={16} className="yy-mic-check" />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </SettingsSubdialog>
