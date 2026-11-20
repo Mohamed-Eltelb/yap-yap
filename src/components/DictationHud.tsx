@@ -48,7 +48,7 @@ interface Props {
 }
 
 // Tallest in the middle, lower toward the edges.
-const bars = [0.4, 0.55, 0.7, 0.85, 0.95, 1, 0.95, 0.85, 0.7, 0.55, 0.4];
+export const bars = [0.4, 0.55, 0.7, 0.85, 0.95, 1, 0.95, 0.85, 0.7, 0.55, 0.4];
 // The voice band each bar follows: the strongest bands in the middle, and
 // neighbours on different bands so each bar moves on its own.
 const barBands = [9, 5, 7, 3, 1, 0, 2, 4, 6, 8, 10];
@@ -139,13 +139,13 @@ export function pillStateFor(hud: HudState): PillState | undefined {
 }
 
 /** How loud the voice is now, from its loudest bands. */
-function loudness(levels: number[]): number {
+export function loudness(levels: number[]): number {
   const top = [...levels].sort((a, b) => b - a).slice(0, 4);
   return top.length ? top.reduce((sum, value) => sum + value, 0) / top.length : 0;
 }
 
 /** A bar's height: mostly its own band, partly the overall voice, flat in silence. */
-function barHeight(levels: number[], index: number, loud: number): number {
+export function barHeight(levels: number[], index: number, loud: number): number {
   const own = levels[barBands[index]] ?? 0;
   const level = Math.max(0, 0.65 * own + 0.35 * loud - 0.06);
   return 2 + Math.min(1, level) * bars[index] * 20;

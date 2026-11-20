@@ -2714,7 +2714,7 @@ html.dark .yy-target-results {
   display: grid;
   justify-items: center;
   gap: 12px;
-  padding: 22px 16px 16px;
+  padding: 24px 16px 16px;
   border-radius: 13px;
   background:
     radial-gradient(ellipse at 55% 120%, #9eb7cc 5%, transparent 57%),
@@ -2726,76 +2726,29 @@ html.dark .yy-target-results {
   background: radial-gradient(ellipse at 55% 120%, #546e86, transparent 65%), linear-gradient(115deg, #233340, #44424b, #263d49);
 }
 
-.yy-mic-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2.5px;
-  width: 210px;
-  height: 46px;
-  border: 1px solid #ffffff4a;
-  border-radius: 999px;
-  background: #060707;
-  color: #fff;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 22%);
-}
-
-.yy-mic-pill span {
-  flex-shrink: 0;
-  width: 2.5px;
-  border-radius: 2px;
-  background: #fff;
-  transition: height 70ms linear;
-}
-
-.yy-mic-stage[data-state="starting"] .yy-mic-pill span,
-.yy-mic-stage[data-state="listening"] .yy-mic-pill span {
-  opacity: 0.55;
-}
-
-.yy-mic-stage[data-state="error"] .yy-mic-pill {
-  width: 46px;
-  color: #fca5a5;
+.yy-mic-stage .yy-hud {
+  position: static;
+  transform: none;
+  /* The real dictation pill, enlarged so the test is easy to read. */
+  zoom: 1.4;
 }
 
 .yy-mic-status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #1f2937;
+  color: #3f3f46;
   font-size: 12.5px;
-  font-weight: 500;
   text-align: center;
 }
 
 .dark .yy-mic-status {
-  color: #f2f1f0;
+  color: #d4d4d4;
 }
 
-.yy-mic-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #9ca3af;
+.yy-mic-stage[data-state="error"] .yy-mic-status {
+  color: #b91c1c;
 }
 
-.yy-mic-stage[data-state="listening"] .yy-mic-dot {
-  background: #f59e0b;
-  animation: yy-mic-blink 1.4s ease-in-out infinite;
-}
-
-.yy-mic-stage[data-state="heard"] .yy-mic-dot {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgb(34 197 94 / 22%);
-}
-
-.yy-mic-stage[data-state="error"] .yy-mic-dot {
-  background: #ef4444;
-}
-
-@keyframes yy-mic-blink {
-  50% { opacity: 0.35; }
+.dark .yy-mic-stage[data-state="error"] .yy-mic-status {
+  color: #fca5a5;
 }
 
 .yy-mic-list {
@@ -2871,6 +2824,5 @@ html.dark .yy-target-results {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .yy-mic-pill span { transition: none; }
-  .yy-mic-stage[data-state="listening"] .yy-mic-dot { animation: none; }
+  .yy-mic-stage .yy-hud-wave span { transition: none; }
 }
