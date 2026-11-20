@@ -1,4 +1,3 @@
-import { appendFile } from 'node:fs';
 import { UiohookKey, uIOhook } from 'uiohook-napi';
 import type { ShortcutPhase } from './hudActions';
 import { ShortcutFlow, type AppStatus } from './shortcutFlow';
@@ -108,7 +107,7 @@ export function registerModifierShortcuts(
     nativeHook = process.platform === 'win32' && startWindowsKeyHook((down, code, time) => {
       if (code === KEYS_RESET) forgetPressedKeys();
       else if (down) handleKeyDown(code, time);
-      else handleKeyUp(code, time);
+      else handleKeyUp(code);
     });
     if (!nativeHook) {
       // uiohook cannot mask in time, so it is only worth starting for hook shortcuts.
@@ -135,28 +134,13 @@ let maskCodes: number[] = [];
 
 let menuHeld = false;
 
-// The last key events, kept in memory so a menu that opened can be traced back
-// to the keys around it without writing anything while keys are pressed.
-const history: string[] = [];
-function remember(line: string) {
-  history.push(`${Date.now()} ${line}`);
-  if (history.length > 200) history.shift();
-}
-
-export function saveKeyHistory(file: string, reason: string) {
-  const text = `--- ${new Date().toISOString()} ${reason}\n${history.join('\n')}\n`;
-  appendFile(file, text, () => undefined);
-}
-
 function maskMenu() {
   uIOhook.keyTap(maskKey);
-  remember('mask');
   // A mask sent the instant Alt goes down can be read by the app before the Alt
   // itself, so a second one follows while Alt is still held.
   setTimeout(() => {
     if (menuHeld && maskMenus) {
       uIOhook.keyTap(maskKey);
-      remember('mask again');
     }
   }, 15);
 }
@@ -169,7 +153,6 @@ function unmaskedMenuKeys(): boolean {
 function handleKeyDown(keycode: number, time: number) {
   // Holding a key repeats its key-down, and a repeated Alt re-arms the app's menu.
   const repeat = pressed.has(keycode);
-  remember(`down ${keycode} t=${time}${repeat ? ' repeat' : ''} masking=${maskMenus}`);
   if (keycode === maskKey) return;
   if (!repeat) {
     const windows = process.platform === 'win32';
@@ -184,8 +167,7 @@ function handleKeyDown(keycode: number, time: number) {
   }
 }
 
-function handleKeyUp(keycode: number, time: number) {
-  remember(`up ${keycode} t=${time}`);
+function handleKeyUp(keycode: number) {
   if (keycode === maskKey || !pressed.delete(keycode)) return;
   menuHeld = unmaskedMenuKeys();
   // Wait until the chord is fully released so held modifiers do not affect auto-paste.
@@ -196,7 +178,7 @@ function handleKeyUp(keycode: number, time: number) {
 }
 
 uIOhook.on('keydown', ({ keycode, time }) => handleKeyDown(keycode, time));
-uIOhook.on('keyup', ({ keycode, time }) => handleKeyUp(keycode, time));
+uIOhook.on('keyup', ({ keycode }) => handleKeyUp(keycode));
 
 /** True while Yap Yap's own Windows hook keeps Right Alt and its chords from other apps. */
 export function swallowsKeys(): boolean {

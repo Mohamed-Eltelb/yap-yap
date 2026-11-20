@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an improvement to a dictation workflow
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What are you trying to do?
+      description: Describe where you use Yap Yap and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: What would make it work better?
+    validations:
+      required: true

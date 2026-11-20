@@ -1,18 +1,25 @@
 {
   "name": "yap-yap",
   "version": "1.0.0",
-  "description": "Yap Yap — Multi-provider BYOK voice dictation, translation, and AI assistant desktop app.",
+  "description": "Dictate, translate, and ask questions from any text field with your own AI providers.",
+  "private": true,
+  "homepage": "https://yapyap-app.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mohamed-Eltelb/yap-yap.git"
+  },
+  "bugs": "https://github.com/Mohamed-Eltelb/yap-yap/issues",
   "main": "dist-electron/main.js",
   "author": "Mohamed Eltelb",
   "license": "MIT",
   "engines": {
-    "node": "^22.12.0 || >=24.0.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
     "dev": "tsc -p tsconfig.electron.json && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:web": "vite",
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.electron.json",
-    "build:electron": "npm run build && electron-builder",
+    "build:electron": "npm run build && electron-builder --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "preview": "vite preview",
@@ -70,6 +77,9 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "src/assets/providers/NOTICE.txt",
       "package.json"
     ],
     "win": {

@@ -14,6 +14,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    license: { fileName: 'dependency-licenses.md' },
   },
   test: {
     // Other sessions' git worktrees live here; their tests are not this checkout's.

@@ -5,4 +5,12 @@ release/
 *.log
 .DS_Store
 .env
-.env.local
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+yapyap-store.json*
+.superpowers/
+.claude/worktrees/

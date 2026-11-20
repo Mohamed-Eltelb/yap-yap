@@ -14,7 +14,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, saveKeyHistory, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { setRecordingMute } from './systemAudio';
 import { checkForUpdate } from './updates';
@@ -44,6 +44,10 @@ const appIconPath = path.join(iconsPath, 'app.png');
 
 function getStorePath(): string {
   return path.join(app.getPath('userData'), 'yapyap-store.json');
+}
+
+function fromMainFrame(event: Electron.IpcMainInvokeEvent): boolean {
+  return event.sender === mainWindow?.webContents && event.senderFrame === event.sender.mainFrame;
 }
 
 type Appearance = 'light' | 'dark' | 'system';
@@ -121,6 +125,7 @@ function createMainWindow(): void {
   });
 
   // Open external links (API key portals, Share on X, etc.) in the user's default OS browser
+  mainWindow.webContents.on('will-frame-navigate', (event) => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       void shell.openExternal(url);
@@ -187,6 +192,8 @@ function createHudWindow(): void {
     },
   });
 
+  hudWindow.webContents.on('will-frame-navigate', (event) => event.preventDefault());
+  hudWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   // The window is larger than the HUD it draws; clicks on the transparent part
   // go to the app underneath. The HUD page turns this off while hovered.
   if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
@@ -309,10 +316,6 @@ function createTray(): void {
       },
       { type: 'separator' },
       {
-        label: 'Save key history',
-        click: () => saveKeyHistory(keyHistoryFile(), 'saved from tray'),
-      },
-      {
         label: 'Quit Yap Yap',
         click: () => {
           isQuitting = true;
@@ -413,15 +416,9 @@ async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
   else clipboard.clear();
 }
 
-const keyHistoryFile = () => path.join(app.getPath('userData'), 'key-history.log');
-
 function pasteIntoFocusedField(): Promise<boolean> {
   if (process.platform === 'win32') {
-    return pasteIntoWindowsField(pasteWithKeyboard).then((pasted) => {
-      // A menu that took focus on the shortcut's Alt release makes the paste fail.
-      if (!pasted) saveKeyHistory(keyHistoryFile(), 'paste failed');
-      return pasted;
-    });
+    return pasteIntoWindowsField(pasteWithKeyboard);
   }
 
   // These commands can send the shortcut but cannot confirm insertion, so a
@@ -546,7 +543,8 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send('hud:action', action);
   });
 
-  ipcMain.handle('store:load', () => {
+  ipcMain.handle('store:load', (event) => {
+    if (!fromMainFrame(event)) return null;
     try {
       const p = getStorePath();
       if (!fs.existsSync(p)) return null;
@@ -565,8 +563,8 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('store:load-audio', async (_e, id: unknown) => {
-    if (!isAudioId(id)) return null;
+  ipcMain.handle('store:load-audio', async (event, id: unknown) => {
+    if (!fromMainFrame(event) || !isAudioId(id)) return null;
     try {
       return await fs.promises.readFile(path.join(app.getPath('userData'), 'audio', `${id}.txt`), 'utf8');
     } catch {
@@ -574,7 +572,8 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('store:save', (_e, data: Record<string, unknown>) => {
+  ipcMain.handle('store:save', (event, data: Record<string, unknown>) => {
+    if (!fromMainFrame(event)) return false;
     try {
       const p = getStorePath();
       const userDataDir = path.dirname(p);
@@ -590,10 +589,11 @@ app.whenReady().then(() => {
       const activeAudioIds = new Set<string>();
       if (Array.isArray(clone.history)) {
         for (const item of clone.history) {
+          if (!isAudioId(item.id)) continue;
           // Audio already on disk arrives as a marker instead of the recording.
-          if (item.id && item.audioSaved) activeAudioIds.add(`${item.id}.txt`);
+          if (item.audioSaved) activeAudioIds.add(`${item.id}.txt`);
           delete item.audioSaved;
-          if (item.id && item.audioDataUrl) {
+          if (item.audioDataUrl) {
             activeAudioIds.add(`${item.id}.txt`);
             const audioFile = path.join(audioDir, `${item.id}.txt`);
             if (!fs.existsSync(audioFile)) {
