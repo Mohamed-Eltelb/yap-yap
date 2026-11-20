@@ -245,11 +245,12 @@ function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
   if (!hudPayload.show) {
     if (hudHideTimer) return;
-    // The window is never hidden once shown: on Windows a hidden and re-shown window stops
-    // taking clicks. It stays on screen empty, letting every click through.
+    // Linux has no forwarded mouse events. Unmap its idle overlay so the editor gets clicks.
+    // On Windows, hiding and re-showing the window breaks HUD button input.
     const hide = (window: BrowserWindow) => {
       window.webContents.send('hud:state', { status: 'idle', mode: 'dictate', levels: [] });
-      if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
+      if (process.platform === 'linux') window.hide();
+      else window.setIgnoreMouseEvents(true, { forward: true });
       hudEmpty = true;
       hudDisplayId = undefined;
       hudShownStatus = undefined;
