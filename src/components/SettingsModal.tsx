@@ -1083,33 +1083,11 @@ export function SettingsModal({
                     href={siteLinks.privacy}
                     target="_blank"
                     rel="noreferrer"
-                    className="-mx-3 px-3 py-2 flex items-center justify-between gap-4 rounded-lg border-t border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors"
+                    className="-mx-3 px-3 py-2 flex items-center justify-between gap-4 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
                   >
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-medium text-[var(--text-primary)]">
-                        Local-first privacy
-                      </div>
-                      <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
-                        Yap Yap stores your history locally. Cloud providers receive the audio or text needed for each request.
-                      </div>
-                    </div>
-                    <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-                  </a>
-
-                  <a
-                    href={siteLinks.setupGuide}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="-mx-3 px-3 py-2 flex items-center justify-between gap-4 rounded-lg border-t border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-medium text-[var(--text-primary)]">
-                        Supported Providers
-                      </div>
-                      <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
-                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.
-                      </div>
-                    </div>
+                    <span className="text-[14px] font-medium text-[var(--text-primary)]">
+                      Privacy policy
+                    </span>
                     <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
                   </a>
                 </div>
