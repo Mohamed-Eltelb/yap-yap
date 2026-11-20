@@ -285,7 +285,7 @@ function createTray(): void {
 
   try {
     tray = new Tray(path.join(iconsPath, trayIcon));
-    tray.setToolTip('Yap Yap — Speak, don’t type');
+    tray.setToolTip('Yap Yap — A little yap goes a long way');
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Open Yap Yap',

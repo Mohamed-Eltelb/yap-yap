@@ -60,7 +60,7 @@ export function HomeView({
 
       <div className="px-8 pb-8 pt-1 max-w-[1060px] w-full mx-auto">
         <h1 className="yy-page-title text-[34px] font-bold tracking-[-0.025em] text-[var(--text-primary)] mb-5">
-          Speak, don&apos;t type
+          A little yap goes a long way
         </h1>
 
         <div className="flex flex-col min-[1080px]:flex-row gap-5 items-start">
