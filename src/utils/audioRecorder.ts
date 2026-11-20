@@ -67,11 +67,27 @@ async function rnnoiseStream(audioCtx: AudioContext, source: MediaStreamAudioSou
   }
 }
 
-export async function startAudioRecording(
+/** How many bars of voice levels the meters draw. */
+const LEVEL_BANDS = 20;
+
+/** A microphone opened for recording or testing, with its level analyser attached. */
+interface OpenMicrophone {
+  stream: MediaStream;
+  audioCtx: AudioContext;
+  analyser: AnalyserNode;
+  /** What gets recorded: the cleaned stream with strong noise reduction, else the microphone. */
+  recorded: MediaStream;
+  close: () => void;
+}
+
+/**
+ * Opens a microphone exactly as dictation hears it. With fallback, a saved microphone that
+ * is gone falls back to the default one; without it, opening that microphone fails.
+ */
+async function openMicrophone(
   deviceId: string | undefined,
-  onLevels: (levels: number[]) => void,
-  { strongNoiseReduction = false }: { strongNoiseReduction?: boolean } = {},
-): Promise<RecorderSession> {
+  { strongNoiseReduction = false, fallback = true }: { strongNoiseReduction?: boolean; fallback?: boolean } = {},
+): Promise<OpenMicrophone> {
   const defaultAudioConstraints: MediaTrackConstraints = {
     echoCancellation: true,
     // RNNoise replaces the browser's filter; running both muffles the voice.
@@ -84,7 +100,8 @@ export async function startAudioRecording(
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { ...defaultAudioConstraints, deviceId: { exact: deviceId } },
       });
-    } catch {
+    } catch (error) {
+      if (!fallback) throw error;
       // Fallback to default device if stored device was unplugged
       stream = await navigator.mediaDevices.getUserMedia({
         audio: defaultAudioConstraints,
@@ -95,15 +112,6 @@ export async function startAudioRecording(
       audio: defaultAudioConstraints,
     });
   }
-
-  const preferredMimes = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus',
-  ];
-  const mimeType = preferredMimes.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
-
 
   // Analyser for live waveform bars
   const AudioCtx =
@@ -124,17 +132,86 @@ export async function startAudioRecording(
   analyser.maxDecibels = -25;
   (filtered?.node ?? source).connect(analyser);
 
-  const recorded = filtered?.stream ?? stream;
+  return {
+    stream,
+    audioCtx,
+    analyser,
+    recorded: filtered?.stream ?? stream,
+    close: () => {
+      stream.getTracks().forEach((t) => t.stop());
+      void audioCtx.close().catch(() => {});
+    },
+  };
+}
+
+/** Reads one frame: the voice level per band, and how far the waveform swings (0–128). */
+function createLevelReader(analyser: AnalyserNode) {
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  const waveform = new Uint8Array(analyser.fftSize);
+  return () => {
+    analyser.getByteFrequencyData(dataArray);
+    analyser.getByteTimeDomainData(waveform);
+    let peak = 0;
+    for (const sample of waveform) peak = Math.max(peak, Math.abs(sample - 128));
+    const levels: number[] = [];
+    // Bins 1–20 cover roughly 190 Hz to 3.9 kHz, where speech carries its energy.
+    for (let i = 0; i < LEVEL_BANDS; i++) {
+      const val = dataArray[i + 1] ?? 0;
+      levels.push(Math.min(1, (val / 255) * 1.3));
+    }
+    return { levels, peak };
+  };
+}
+
+/** Whether a waveform swing is loud enough to count as a voice. */
+function isVoicePeak(peak: number): boolean {
+  return peak >= VOICE_PEAK;
+}
+
+/**
+ * Opens a microphone the way dictation does and reports its levels, without recording.
+ * Fails when that microphone can't open, so a missing one is not hidden by the default.
+ * Returns a function that closes it.
+ */
+export async function startMicrophoneTest(
+  deviceId: string | undefined,
+  onFrame: (frame: { levels: number[]; peak: number }) => void,
+  { strongNoiseReduction = false }: { strongNoiseReduction?: boolean } = {},
+): Promise<() => void> {
+  const mic = await openMicrophone(deviceId, { strongNoiseReduction, fallback: false });
+  const read = createLevelReader(mic.analyser);
+  // A timer, not requestAnimationFrame, so the meter keeps pace in a covered window.
+  const timerId = setInterval(() => onFrame(read()), 1000 / 60);
+  return () => {
+    clearInterval(timerId);
+    mic.close();
+  };
+}
+
+export async function startAudioRecording(
+  deviceId: string | undefined,
+  onLevels: (levels: number[]) => void,
+  { strongNoiseReduction = false }: { strongNoiseReduction?: boolean } = {},
+): Promise<RecorderSession> {
+  const mic = await openMicrophone(deviceId, { strongNoiseReduction });
+
+  const preferredMimes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  const mimeType = preferredMimes.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+
   const recorder = mimeType
-    ? new MediaRecorder(recorded, { mimeType })
-    : new MediaRecorder(recorded);
+    ? new MediaRecorder(mic.recorded, { mimeType })
+    : new MediaRecorder(mic.recorded);
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-  const waveform = new Uint8Array(analyser.fftSize);
+  const read = createLevelReader(mic.analyser);
   let frames = 0;
   let loudFrames = 0;
   let timerId: ReturnType<typeof setInterval> | undefined;
@@ -144,22 +221,12 @@ export async function startAudioRecording(
     if (stopped) return;
     // Nothing is recorded while paused, so the meter lies flat and nothing counts as voice.
     if (clock.paused) {
-      onLevels(new Array(20).fill(0));
+      onLevels(new Array(LEVEL_BANDS).fill(0));
       return;
     }
-    analyser.getByteFrequencyData(dataArray);
-    analyser.getByteTimeDomainData(waveform);
-    let peak = 0;
-    for (const sample of waveform) peak = Math.max(peak, Math.abs(sample - 128));
+    const { levels, peak } = read();
     frames += 1;
-    if (peak >= VOICE_PEAK) loudFrames += 1;
-    const barCount = 20;
-    const levels: number[] = [];
-    // Bins 1–20 cover roughly 190 Hz to 3.9 kHz, where speech carries its energy.
-    for (let i = 0; i < barCount; i++) {
-      const val = dataArray[i + 1] ?? 0;
-      levels.push(Math.min(1, (val / 255) * 1.3));
-    }
+    if (isVoicePeak(peak)) loudFrames += 1;
     onLevels(levels);
   };
 
@@ -172,8 +239,7 @@ export async function startAudioRecording(
   const cleanup = () => {
     stopped = true;
     clearInterval(timerId);
-    stream.getTracks().forEach((t) => t.stop());
-    void audioCtx.close().catch(() => {});
+    mic.close();
   };
 
   return {

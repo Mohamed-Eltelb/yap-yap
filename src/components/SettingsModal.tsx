@@ -28,7 +28,7 @@ import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
-import { MicrophoneDialog } from './MicrophoneDialog';
+import { isMicrophoneMissing, MicrophoneDialog } from './MicrophoneDialog';
 import { ProviderSettings } from './ProviderSettings';
 import { siteLinks } from '../data/links';
 import { PersonalizationEditor } from './PersonalizationEditor';
@@ -208,9 +208,14 @@ export function SettingsModal({
       : Object.values(providers).find((provider) => PROVIDER_CATALOG[provider.id].supportsLlm && isProviderConfigured(provider));
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
   const [microphoneDialogOpen, setMicrophoneDialogOpen] = useState(false);
+  // Until the app may use the microphone, the system hides device names and ids.
+  const [microphonesKnown, setMicrophonesKnown] = useState(false);
+  const microphoneMissing = isMicrophoneMissing(settings.microphoneId, microphones, microphonesKnown);
   const microphoneLabel = settings.microphoneId === 'default'
     ? 'Auto-detect'
-    : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Auto-detect';
+    : microphoneMissing
+      ? 'Saved microphone (not connected)'
+      : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Saved microphone';
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   // Shortcuts stay off only while a shortcut field records keys, so pressing the new
   // shortcut does not also start a dictation. The rest of Settings can be dictated into.
@@ -272,6 +277,7 @@ export function SettingsModal({
             label: d.label || `Microphone ${i + 1}`,
           }));
         setMicrophones(mics);
+        setMicrophonesKnown(devices.some((d) => d.kind === 'audioinput' && d.label));
       })
       .catch(() => {});
   }, []);
@@ -644,6 +650,7 @@ export function SettingsModal({
                         onClick={() => setMicrophoneDialogOpen(true)}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[230px]"
                       >
+                        {microphoneMissing && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#dc2626]" aria-hidden="true" />}
                         <span className="truncate">{microphoneLabel}</span>
                         <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
                       </button>
@@ -1151,7 +1158,9 @@ export function SettingsModal({
       {microphoneDialogOpen && (
         <MicrophoneDialog
           microphones={microphones}
+          devicesKnown={microphonesKnown}
           value={settings.microphoneId}
+          strongNoiseReduction={settings.strongNoiseReduction}
           onChange={(microphoneId) => onUpdateSettings({ microphoneId })}
           onListening={refreshMicrophones}
           onClose={() => setMicrophoneDialogOpen(false)}

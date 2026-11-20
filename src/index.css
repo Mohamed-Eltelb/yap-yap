@@ -2748,11 +2748,24 @@ html.dark .yy-personalization-options > div {
   color: #d4d4d4;
 }
 
-.yy-mic-stage[data-state="error"] .yy-mic-status {
+.yy-mic-stage:is([data-state="error"], [data-state="missing"]) .yy-hud-pill {
+  width: 46px;
+  color: #fca5a5;
+}
+
+.yy-mic-stage[data-state="quiet"] .yy-mic-status {
+  color: #a16207;
+}
+
+.dark .yy-mic-stage[data-state="quiet"] .yy-mic-status {
+  color: #fcd34d;
+}
+
+.yy-mic-stage:is([data-state="error"], [data-state="missing"]) .yy-mic-status {
   color: #b91c1c;
 }
 
-.dark .yy-mic-stage[data-state="error"] .yy-mic-status {
+.dark .yy-mic-stage:is([data-state="error"], [data-state="missing"]) .yy-mic-status {
   color: #fca5a5;
 }
 
@@ -2821,6 +2834,14 @@ html.dark .yy-personalization-options > div {
 .yy-mic-hint {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.yy-mic-row[data-missing] .yy-mic-hint {
+  color: #b91c1c;
+}
+
+.dark .yy-mic-row[data-missing] .yy-mic-hint {
+  color: #fca5a5;
 }
 
 .yy-mic-check {
