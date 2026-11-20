@@ -1,13 +1,13 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdtemp, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, rename, rm } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
 const repository = 'https://github.com/Mohamed-Eltelb/yap-yap';
 
 type Installer = { name: string; url: string; digest: string; size: number };
-type Update = { message: string; installer?: Installer; url?: string };
+type Update = { message: string; version?: string; installer?: Installer; url?: string };
 
 export async function checkForUpdate(current: string, platform = process.platform, arch = process.arch): Promise<Update> {
   const response = await fetch('https://api.github.com/repos/Mohamed-Eltelb/yap-yap/releases/latest', {
@@ -31,17 +31,25 @@ export async function checkForUpdate(current: string, platform = process.platfor
   const asset = release.assets.find(a => a.name === name && a.state === 'uploaded');
   const message = `Yap Yap v${version} is available.`;
   if (!suffix || !asset?.digest || !/^sha256:[a-f0-9]{64}$/.test(asset.digest) || !(asset.size > 0)) {
-    return { message, url: repository + '/releases/latest' };
+    return { message, version, url: repository + '/releases/latest' };
   }
-  return { message, installer: { name, digest: asset.digest, size: asset.size,
+  return { message, version, installer: { name, digest: asset.digest, size: asset.size,
     url: `${repository}/releases/download/${release.tag_name}/${name}` } };
+}
+
+async function availablePath(folder: string, name: string) {
+  const extension = extname(name);
+  const base = name.slice(0, name.length - extension.length);
+  for (let i = 0; ; i++) {
+    const candidate = join(folder, i ? `${base} (${i})${extension}` : name);
+    try { await access(candidate); } catch { return candidate; }
+  }
 }
 
 export async function downloadInstaller(asset: Installer, downloads: string, progress: (fraction: number) => void) {
   const response = await fetch(asset.url, { signal: AbortSignal.timeout(30 * 60_000) });
   if (!response.ok || !response.body) throw new Error('Download failed');
-  const folder = await mkdtemp(join(downloads, 'Yap-Yap-'));
-  const partial = join(folder, 'installer.part');
+  const partial = join(downloads, `${asset.name}.${randomUUID()}.part`);
   try {
     const hash = createHash('sha256');
     let bytes = 0;
@@ -55,11 +63,11 @@ export async function downloadInstaller(asset: Installer, downloads: string, pro
       }
     }, createWriteStream(partial, { flags: 'wx', mode: 0o700 }));
     if (bytes !== asset.size || 'sha256:' + hash.digest('hex') !== asset.digest) throw new Error('Installer verification failed');
-    const destination = join(folder, asset.name);
+    const destination = await availablePath(downloads, asset.name);
     await rename(partial, destination);
     return destination;
   } catch (error) {
-    await rm(folder, { recursive: true, force: true });
+    await rm(partial, { force: true });
     throw error;
   }
 }

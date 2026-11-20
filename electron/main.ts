@@ -437,16 +437,29 @@ function pasteIntoFocusedField(): Promise<boolean> {
   });
 }
 
-async function offerUpdate() {
+const skippedUpdatePath = () => path.join(app.getPath('userData'), 'skipped-update.txt');
+
+async function offerUpdate(atStartup = false) {
   const update = await checkForUpdate(app.getVersion());
   const window = mainWindow;
   if (!window || window.isDestroyed() || (!update.installer && !update.url)) return { message: update.message };
+  if (atStartup && await fs.promises.readFile(skippedUpdatePath(), 'utf8').catch(() => '') === update.version) {
+    return { message: update.message };
+  }
+  if (!window.isVisible()) {
+    await new Promise<void>(resolve => { window.once('show', resolve); window.once('closed', resolve); });
+    if (window.isDestroyed()) return { message: update.message };
+  }
   const choice = await dialog.showMessageBox(window, {
     type: 'info', title: 'Yap Yap update', message: update.message,
     detail: update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
     buttons: [update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
   });
-  if (choice.response !== 0) return { message: update.message };
+  if (choice.response !== 0) {
+    // Startup stays quiet about this version until a newer one is published. Settings still offers it.
+    if (update.version) await fs.promises.writeFile(skippedUpdatePath(), update.version).catch(() => undefined);
+    return { message: update.message };
+  }
   if (!update.installer) {
     if (update.url) await shell.openExternal(update.url);
     return { message: update.message };
@@ -467,8 +480,8 @@ async function offerUpdate() {
 }
 
 let pendingUpdate: ReturnType<typeof offerUpdate> | undefined;
-function checkAndOfferUpdate() {
-  return pendingUpdate ??= offerUpdate().finally(() => { pendingUpdate = undefined; });
+function checkAndOfferUpdate(atStartup = false) {
+  return pendingUpdate ??= offerUpdate(atStartup).finally(() => { pendingUpdate = undefined; });
 }
 
 app.whenReady().then(() => {
@@ -477,7 +490,7 @@ app.whenReady().then(() => {
   createMainWindow();
   createHudWindow();
   createTray();
-  if (app.isPackaged) void checkAndOfferUpdate().catch(() => { /* Offline startup is normal. */ });
+  if (app.isPackaged) void checkAndOfferUpdate(true).catch(() => { /* Offline startup is normal. */ });
 
   ipcMain.on('window:minimize', () => mainWindow?.minimize());
   ipcMain.on('window:maximize', () => {

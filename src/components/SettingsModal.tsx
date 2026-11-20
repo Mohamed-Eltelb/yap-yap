@@ -159,7 +159,7 @@ export function SettingsModal({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateResult, setUpdateResult] = useState<{ message: string; url?: string }>();
+  const [updateResult, setUpdateResult] = useState<{ message: string }>();
   const [capturingTarget, setCapturingTarget] = useState<ShortcutSlot | null>(null);
   const [shortcutError, setShortcutError] = useState<{ target: ShortcutSlot; combo: string[]; reason: 'used' | 'reserved' } | null>(null);
   const [languageDialog, setLanguageDialog] = useState<'targets' | 'variants' | 'spoken' | null>(null);
@@ -1076,11 +1076,6 @@ export function SettingsModal({
                   {updateResult && (
                     <div role="status" className="text-[13px] text-[var(--text-secondary)]">
                       {updateResult.message}
-                      {updateResult.url && (
-                        <a href={updateResult.url} target="_blank" rel="noreferrer" className="ms-2 underline">
-                          View releases
-                        </a>
-                      )}
                     </div>
                   )}
 

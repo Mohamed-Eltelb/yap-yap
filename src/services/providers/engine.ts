@@ -17,7 +17,7 @@ declare global {
     yapyap?: {
       isElectron: boolean;
       platform: string;
-      checkForUpdate: () => Promise<{ message: string; url?: string }>;
+      checkForUpdate: () => Promise<{ message: string }>;
       minimizeWindow: () => void;
       maximizeWindow: () => void;
       closeWindow: () => void;
