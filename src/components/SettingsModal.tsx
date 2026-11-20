@@ -1095,19 +1095,22 @@ export function SettingsModal({
                     </div>
                   </div>
 
-                  <div className="py-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
-                    <div>
+                  <a
+                    href={siteLinks.setupGuide}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="-mx-3 px-3 py-2 flex items-center justify-between gap-4 rounded-lg border-t border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <div className="min-w-0">
                       <div className="text-[14px] font-medium text-[var(--text-primary)]">
                         Supported Providers
                       </div>
                       <div className="text-[12.5px] text-[var(--text-secondary)] mt-0.5">
-                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.{' '}
-                        <a href={siteLinks.setupGuide} target="_blank" rel="noreferrer" className="underline">
-                          Setup guide
-                        </a>
+                        OpenAI, Groq, Google Gemini, Anthropic Claude, Deepgram, ElevenLabs &amp; Custom OpenAI-compatible endpoints.
                       </div>
                     </div>
-                  </div>
+                    <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+                  </a>
                 </div>
               </div>
             )}
