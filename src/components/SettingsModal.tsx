@@ -28,6 +28,7 @@ import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
+import { MicrophoneDialog } from './MicrophoneDialog';
 import { ProviderSettings } from './ProviderSettings';
 import { siteLinks } from '../data/links';
 import { PersonalizationEditor } from './PersonalizationEditor';
@@ -206,6 +207,10 @@ export function SettingsModal({
       ? providers[activeLlm]
       : Object.values(providers).find((provider) => PROVIDER_CATALOG[provider.id].supportsLlm && isProviderConfigured(provider));
   const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
+  const [microphoneDialogOpen, setMicrophoneDialogOpen] = useState(false);
+  const microphoneLabel = settings.microphoneId === 'default'
+    ? 'Auto-detect (System Default)'
+    : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Auto-detect (System Default)';
   const [highlightedCat, setHighlightedCat] = useState<string | null>(null);
   // Shortcuts stay off only while a shortcut field records keys, so pressing the new
   // shortcut does not also start a dictation. The rest of Settings can be dictated into.
@@ -256,8 +261,7 @@ export function SettingsModal({
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
+  const refreshMicrophones = React.useCallback(() => {
     navigator.mediaDevices
       ?.enumerateDevices()
       .then((devices) => {
@@ -270,7 +274,17 @@ export function SettingsModal({
         setMicrophones(mics);
       })
       .catch(() => {});
-  }, [open]);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setMicrophoneDialogOpen(false);
+      return;
+    }
+    refreshMicrophones();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refreshMicrophones);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshMicrophones);
+  }, [open, refreshMicrophones]);
 
   useEffect(() => {
     if (!open || activeTab !== 'settings' || !capturingTarget) {
@@ -623,17 +637,16 @@ export function SettingsModal({
                           Choose your preferred microphone for Yap Yap to capture your voice.
                         </p>
                       </div>
-                      <SelectMenu
-                        label="Microphone"
-                        value={settings.microphoneId}
-                        className="max-w-[230px]"
-                        placeholder="Microphone unavailable"
-                        options={[
-                          { value: 'default', label: 'Auto-detect (System Default)' },
-                          ...microphones.filter((mic) => mic.id !== 'default').map((mic) => ({ value: mic.id, label: mic.label })),
-                        ]}
-                        onChange={(microphoneId) => onUpdateSettings({ microphoneId })}
-                      />
+                      <button
+                        type="button"
+                        aria-label={`Change microphone: ${microphoneLabel}`}
+                        aria-haspopup="dialog"
+                        onClick={() => setMicrophoneDialogOpen(true)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-strong)] text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] max-w-[230px]"
+                      >
+                        <span className="truncate">{microphoneLabel}</span>
+                        <Pencil className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]" />
+                      </button>
                     </div>
 
                     <div className="py-2.5 flex items-center justify-between gap-4">
@@ -1133,6 +1146,15 @@ export function SettingsModal({
           targets={settings.translationTargets}
           onChange={(translationTargets) => onUpdateSettings({ translationTargets })}
           onClose={() => setLanguageDialog(null)}
+        />
+      )}
+      {microphoneDialogOpen && (
+        <MicrophoneDialog
+          microphones={microphones}
+          value={settings.microphoneId}
+          onChange={(microphoneId) => onUpdateSettings({ microphoneId })}
+          onListening={refreshMicrophones}
+          onClose={() => setMicrophoneDialogOpen(false)}
         />
       )}
       {languageDialog === 'spoken' && (
