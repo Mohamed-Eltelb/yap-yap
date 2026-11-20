@@ -283,7 +283,7 @@ function SetupRow({ role, logo, title, subtitle, warn, muted, open, onToggle, on
           role="dialog"
           aria-label={`Change ${role.toLowerCase()} model`}
           onKeyDown={onKeyDown}
-          className="yy-option-menu z-50 w-[248px] select-none dark:shadow-[var(--shadow-modal)]"
+          className="yy-option-menu z-50 w-[248px] select-none"
         >
           {children}
         </div>
