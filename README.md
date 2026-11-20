@@ -2,6 +2,8 @@
 
 Tap a shortcut in your notes app, say “um, can we move the launch to Friday?”, and Yap Yap types the cleaned-up sentence at your cursor. Use the same floating recorder to translate a message or ask a question. You choose who transcribes your audio and who edits the text.
 
+**Yap Yap is currently for Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
+
 **[Try the interactive demo](https://yapyap-app.vercel.app/) · [Run from source](#run-from-source) · [Desktop releases](https://github.com/Mohamed-Eltelb/yap-yap/releases)**
 
 <p align="center">
@@ -47,8 +49,8 @@ npm run dev
 | Platform | Desktop setup |
 | --- | --- |
 | Windows x64 | The source checkout includes the native shortcut DLL. To rebuild it, install Visual Studio C++ Build Tools with the x64 toolchain and Windows SDK, then run `npm run build:keyhook`. |
-| macOS | Allow microphone access. Global shortcuts and pasting can require Accessibility, Input Monitoring, and Automation permissions for the app you launch. |
-| Linux | Use an X11 session with `xdotool` installed for auto-paste. Global shortcuts and pasting depend on the display session. |
+| macOS (experimental) | Allow microphone access. Global shortcuts and pasting can require Accessibility, Input Monitoring, and Automation permissions for the app you launch. |
+| Linux (experimental) | Use an X11 session with `xdotool` installed for auto-paste. Global shortcuts and pasting depend on the display session. |
 
 Use `npm run dev:web` to explore the interface in a browser at `http://localhost:5173`. Global shortcuts, the floating desktop recorder, and cross-app paste run in Electron.
 
