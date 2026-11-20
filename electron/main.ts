@@ -474,10 +474,10 @@ async function installInPlaceUpdate(window: BrowserWindow, version: string) {
   if (window.isDestroyed()) return { message: ready };
   const choice = await dialog.showMessageBox(window, {
     type: 'info', title: 'Yap Yap update', message: ready,
-    detail: 'Restart now to finish updating. If you choose Later, the update installs the next time you quit Yap Yap.',
+    detail: 'Restart now to finish updating. If you choose Later, it installs when you choose Quit Yap Yap from the tray icon.',
     buttons: ['Restart now', 'Later'], cancelId: 1,
   });
-  if (choice.response !== 0) return { message: `${ready} It installs when you quit Yap Yap.` };
+  if (choice.response !== 0) return { message: `${ready} It installs when you choose Quit Yap Yap from the tray icon.` };
   // Let the windows close instead of hiding to the tray, so the installer can replace the app.
   isQuitting = true;
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
@@ -499,7 +499,7 @@ async function offerUpdate(atStartup = false) {
   }
   const choice = await dialog.showMessageBox(window, {
     type: 'info', title: 'Yap Yap update', message: update.message,
-    detail: update.inPlace ? 'Download it now. Yap Yap restarts to finish installing.'
+    detail: update.inPlace ? 'Download it now. You choose when Yap Yap restarts to install it.'
       : update.installer ? 'Save the installer to your Downloads folder.' : 'See the available downloads on GitHub.',
     buttons: [update.inPlace || update.installer ? 'Download' : 'View releases', 'Later'], cancelId: 1,
   });
