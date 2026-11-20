@@ -52,13 +52,14 @@ export class UpdateController {
   check(atStartup = false): Promise<UpdateState> {
     const { status } = this.current;
     if (status === 'downloading' || status === 'ready') return Promise.resolve(this.current);
+    if (!atStartup && status !== 'checking') this.set({ status: 'checking' });
     return this.pendingCheck ??= this.runCheck(atStartup).finally(() => { this.pendingCheck = undefined; });
   }
 
   private async runCheck(atStartup: boolean): Promise<UpdateState> {
-    if (!atStartup) this.set({ status: 'checking' });
+    let next: UpdateState;
+    let showAtStartup = false;
     try {
-      let next: UpdateState;
       if (this.deps.inPlace) {
         const version = await this.deps.checkInPlace();
         next = version
@@ -72,14 +73,14 @@ export class UpdateController {
           ? { status: 'up-to-date', version: this.deps.currentVersion }
           : { status: 'available', version: release.version, method: release.installer ? 'download' : 'page' };
       }
-      if (atStartup && (next.status !== 'available' || await this.deps.readSkipped() === next.version)) {
-        this.set({ status: 'idle' });
-      } else {
-        this.set(next);
+      if (atStartup && next.status === 'available') {
+        showAtStartup = await this.deps.readSkipped() !== next.version;
       }
     } catch {
-      this.set(atStartup ? { status: 'idle' } : { status: 'error', message: 'Couldn’t check for updates. Try again later.' });
+      next = { status: 'error', message: 'Couldn’t check for updates. Try again later.' };
     }
+    // Settings can join the startup check during either the network or preference read.
+    this.set(this.current.status === 'checking' || showAtStartup ? next : { status: 'idle' });
     return this.current;
   }
 

@@ -52,6 +52,33 @@ describe('UpdateController', () => {
     expect((await updates.check()).status).toBe('error');
   });
 
+  it.each(['up-to-date', 'error'] as const)('shows %s when Settings joins the launch check', async (status) => {
+    const checkInPlace = vi.fn(async () => {
+      if (status === 'error') throw new Error('offline');
+      return undefined;
+    });
+    const { updates, states } = controller({ checkInPlace });
+    const startup = updates.check(true);
+    const manual = updates.check();
+    await startup;
+    expect((await manual).status).toBe(status);
+    expect(states.map(state => state.status)).toEqual(['checking', status]);
+    expect(checkInPlace).toHaveBeenCalledOnce();
+  });
+
+  it('shows a skipped version when Settings opens while startup reads the preference', async () => {
+    let finishRead!: (version: string) => void;
+    const readSkipped = vi.fn(() => new Promise<string>(resolve => { finishRead = resolve; }));
+    const { updates, deps } = controller({ readSkipped });
+    const startup = updates.check(true);
+    await vi.waitFor(() => expect(readSkipped).toHaveBeenCalledOnce());
+    const manual = updates.check();
+    finishRead('1.0.2');
+    await startup;
+    expect(await manual).toEqual({ status: 'available', version: '1.0.2', method: 'install' });
+    expect(deps.checkInPlace).toHaveBeenCalledOnce();
+  });
+
   it('saves and reveals the installer on macOS, and lets a failed download be retried', async () => {
     const installer = { name: 'Yap-Yap-1.0.2-macos-arm64.dmg', url: 'https://example.invalid', digest: 'sha256:x', size: 1 };
     const downloadInstaller = vi.fn()
