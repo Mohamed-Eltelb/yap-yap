@@ -392,7 +392,7 @@ function ProviderForm({ provider, adding, onCancel, onRefresh, onRemove, onSave 
               Remove provider
             </button>
           )}
-          <button type="button" className="provider-secondary" onClick={onCancel}>Cancel</button>
+          <button type="button" className="provider-secondary provider-cancel" onClick={onCancel}>Cancel</button>
           <button type="submit" className="provider-primary" disabled={busy}>
             {checking && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
             {checking ? 'Verifying…' : adding ? 'Verify & add' : 'Save changes'}

@@ -41,12 +41,13 @@ describe('First-run setup', () => {
   it('opens on the Groq key form and waits for a working provider', async () => {
     const { user, view, onFinish } = setup();
     await user.click(screen.getByRole('button', { name: 'Get started' }));
-    expect(screen.getByRole('heading', { name: 'Connect a provider' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Connect Groq' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connect your AI' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Groq/ }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Verify & add' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
 
     view.rerender(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={onFinish} />);
-    expect(screen.getByRole('status').textContent).toContain('Connected');
+    expect(screen.getByText('Groq is connected.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -57,8 +58,8 @@ describe('First-run setup', () => {
     const view = render(<Onboarding state={state} latestDictation="Old dictation." {...handlers} />);
     for (const name of ['Get started', 'Continue', 'Continue']) await user.click(screen.getByRole('button', { name }));
 
-    expect(screen.getByRole('heading', { name: 'Try it' })).toBeTruthy();
-    expect(screen.getAllByText('Right Alt')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'Try it for real' })).toBeTruthy();
+    expect(screen.getAllByText('Right Alt').length).toBeGreaterThan(0);
     expect(screen.queryByText('Old dictation.')).toBeNull();
 
     view.rerender(<Onboarding state={state} latestDictation="Hello from Yap Yap." {...handlers} />);
@@ -70,6 +71,8 @@ describe('First-run setup', () => {
     view.rerender(<Onboarding state={withGroqKey()} onUpdateSettings={onUpdateSettings} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={onFinish} />);
     for (const name of ['Get started', 'Continue', 'Continue', 'Continue']) await user.click(screen.getByRole('button', { name }));
 
+    await user.click(screen.getByRole('radio', { name: /Formal/ }));
+    expect(onUpdateSettings).toHaveBeenCalledWith({ defaultStyle: 'formal' });
     await user.click(screen.getByRole('radio', { name: /Medium/ }));
     expect(onUpdateSettings).toHaveBeenCalledWith({ smartCleanup: true, cleanupLevel: 'medium' });
     await user.click(screen.getByRole('radio', { name: /None/ }));
@@ -93,6 +96,6 @@ describe('First-run setup', () => {
     const { onFinish } = setup();
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onFinish).not.toHaveBeenCalled();
-    expect(screen.getByRole('heading', { name: 'Welcome to Yap Yap' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Talk. Yap Yap types.' })).toBeTruthy();
   });
 });

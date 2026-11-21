@@ -1,268 +1,773 @@
-/* First-run setup: one centered card over the whole window. */
-.yy-onboarding {
+/* First-run setup: the whole window. Words on the left, a live picture of Yap Yap on the right. */
+.yy-ob {
+  --ob-ok: #047857;
+  --ob-error: #b91c1c;
+  --ob-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--bg-main);
-  overflow-y: auto;
-}
-
-.yy-onboarding-card {
   display: flex;
   flex-direction: column;
-  width: min(560px, 100%);
-  min-height: min(620px, calc(100vh - 48px));
-  padding: 22px 26px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
-  background: var(--bg-card-solid);
-  box-shadow: 0 10px 40px rgb(0 0 0 / 0.08);
+  background: var(--bg-main);
   color: var(--text-primary);
 }
 
-.yy-onboarding-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 28px;
+html.dark .yy-ob {
+  --ob-ok: #34d399;
+  --ob-error: #f87171;
 }
 
-.yy-onboarding-dots {
+/* Header: brand, the steps, and the window buttons. */
+.yy-ob-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 52px;
+  padding: 0 10px 0 22px;
+}
+
+.yy-ob-brand {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.yy-ob-steps {
+  display: flex;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.yy-onboarding-dots li {
-  width: 7px;
-  height: 7px;
+.yy-ob-steps li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 6px;
   border-radius: 999px;
-  background: var(--border-strong);
-  transition: width 0.2s, background 0.2s;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background 0.25s var(--ob-ease), color 0.25s var(--ob-ease);
 }
 
-.yy-onboarding-dots li[data-state='done'] {
-  background: var(--text-muted);
+.yy-ob-steps li[data-state='current'] {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
-.yy-onboarding-dots li[data-state='current'] {
-  width: 20px;
+.yy-ob-steps li[data-state='done'] {
+  color: var(--text-secondary);
+}
+
+.yy-ob-step-mark {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.yy-ob-steps li[data-state='current'] .yy-ob-step-mark {
+  border-color: transparent;
+  background: var(--accent-blue-fill);
+  color: #fff;
+}
+
+.yy-ob-steps li[data-state='done'] .yy-ob-step-mark {
+  border-color: transparent;
   background: var(--text-primary);
+  color: var(--bg-main);
 }
 
-.yy-onboarding-skip {
-  padding: 4px 8px;
+.yy-ob-top-end {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+}
+
+.yy-ob-skip {
+  padding: 6px 10px;
   border-radius: 8px;
   color: var(--text-secondary);
   font-size: 12.5px;
+  font-weight: 500;
 }
 
-.yy-onboarding-skip:hover {
+.yy-ob-skip:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.yy-onboarding-body {
+.yy-ob-main {
+  display: grid;
   flex: 1;
-  padding: 26px 0 18px;
+  grid-template-columns: minmax(380px, 0.9fr) minmax(0, 1.1fr);
+  min-height: 0;
+  padding: 0 14px 14px;
 }
 
-.yy-onboarding-body h2 {
+/* Left: what this step is about, and its controls. */
+.yy-ob-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 7vh 48px 26px 34px;
+  overflow-y: auto;
+  animation: yy-ob-enter 0.35s var(--ob-ease);
+}
+
+.yy-ob-copy {
+  flex: 1;
+  max-width: 460px;
+}
+
+@keyframes yy-ob-enter {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+.yy-ob-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-family: 'Bricolage Grotesque', 'Inter', sans-serif;
+  font-size: clamp(34px, 4.2vw, 48px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
   outline: none;
 }
 
-.yy-onboarding-lead {
-  margin: 8px 0 20px;
+.yy-ob-lead {
+  margin: 14px 0 28px;
   color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
-.yy-onboarding-note {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
-  margin-top: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-}
-
-.yy-onboarding-note h3,
-.yy-onboarding-subhead {
-  margin: 0;
-  font-size: 13.5px;
+.yy-ob-label {
+  margin: 24px 0 10px;
+  font-size: 13px;
   font-weight: 600;
 }
 
-.yy-onboarding-subhead {
-  margin: 18px 0 8px;
-}
-
-.yy-onboarding-note p {
-  margin: 0;
+.yy-ob-hint {
+  margin: 14px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
 }
 
-/* The provider settings, minus their own page heading. */
-.yy-onboarding-providers .provider-overview {
-  display: none;
-}
-
-.yy-onboarding-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 12px 0 0;
+.yy-ob-status {
+  display: block;
+  min-height: 20px;
+  margin: 14px 0 0;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.yy-onboarding-status[data-ok] {
-  color: #047857;
-}
+.yy-ob-status[data-ok] { color: var(--ob-ok); font-weight: 500; }
+.yy-ob-status[data-error] { color: var(--ob-error); }
 
-html.dark .yy-onboarding-status[data-ok] {
-  color: #34d399;
-}
-
-.yy-onboarding-row {
-  display: flex;
+.yy-ob-inline {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  font-size: 13.5px;
-}
-
-.yy-onboarding-row > span {
-  flex: 1;
-  min-width: 0;
-}
-
-.yy-onboarding-try {
-  display: grid;
-  min-height: 110px;
-  place-items: center;
-  padding: 16px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 12px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  text-align: center;
-}
-
-.yy-onboarding-try[data-done] {
-  place-items: start;
-  border-style: solid;
+  gap: 4px;
   color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.yy-ob-inline:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Welcome facts: two short paragraphs, set apart by a rule, not boxes. */
+.yy-ob-facts {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.yy-ob-facts li {
+  display: grid;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.yy-ob-facts strong {
+  font-weight: 600;
+}
+
+.yy-ob-facts span {
+  color: var(--text-secondary);
+}
+
+/* Provider picker: Groq first and larger, the rest as a row of choices. */
+.yy-ob-providers {
+  display: grid;
+  gap: 10px;
+}
+
+.yy-ob-provider-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
   text-align: left;
 }
 
-.yy-onboarding-try p {
-  margin: 0;
-  line-height: 1.5;
+.yy-ob-provider-main span {
+  display: grid;
+  flex: 1;
+  gap: 1px;
 }
 
-.yy-onboarding-try-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+.yy-ob-provider-main strong {
+  font-size: 14.5px;
+  font-weight: 600;
 }
 
-.yy-onboarding-hint {
-  margin: 10px 0 0;
+.yy-ob-provider-main small {
   color: var(--text-secondary);
   font-size: 12.5px;
-  line-height: 1.5;
 }
 
-.yy-onboarding kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--border-strong);
-  border-bottom-width: 2px;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 0.9em;
+.yy-ob-provider-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.yy-ob-provider-chips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
   font-weight: 500;
-  white-space: nowrap;
 }
 
-.yy-onboarding-levels {
+.yy-ob-provider-main:hover,
+.yy-ob-provider-chips button:hover {
+  background: var(--bg-hover);
+}
+
+.yy-ob-providers [aria-checked='true'] {
+  border-color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--text-primary);
+  color: var(--text-primary);
+}
+
+.yy-ob-ok {
+  color: var(--ob-ok);
+}
+
+.yy-ob-connected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ob-ok) 9%, transparent);
+  color: var(--ob-ok);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.yy-ob-connected span {
+  flex: 1;
+}
+
+/* The provider key form, without its own page heading and back link. */
+.yy-ob-form {
+  margin-top: 16px;
+}
+
+.yy-ob-form .provider-cancel,
+.yy-ob-form .provider-back,
+.yy-ob-form .provider-form-heading,
+.yy-ob-form .provider-overview {
+  display: none;
+}
+
+.yy-ob-field {
+  max-width: 360px;
+}
+
+.yy-ob-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 9px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.yy-ob-secondary:hover {
+  background: var(--bg-hover);
+}
+
+/* Cleanup levels and styles: choices you can compare at a glance. */
+.yy-ob-levels {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
-.yy-onboarding-levels button {
+.yy-ob-levels button {
   display: grid;
-  gap: 3px;
   align-content: start;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
+  gap: 3px;
+  padding: 12px 13px;
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   text-align: left;
 }
 
-.yy-onboarding-levels button:hover {
-  background: var(--bg-hover);
-}
-
-.yy-onboarding-levels button[aria-checked='true'] {
-  border-color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--text-primary);
-}
-
-.yy-onboarding-levels strong {
+.yy-ob-levels strong {
   font-size: 13.5px;
   font-weight: 600;
 }
 
-.yy-onboarding-levels span {
+.yy-ob-levels span {
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
-.yy-onboarding-tips {
+.yy-ob-levels button:hover {
+  background: var(--bg-hover);
+}
+
+.yy-ob-levels button[aria-checked='true'] {
+  border-color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--text-primary);
+}
+
+.yy-ob-segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+}
+
+.yy-ob-segments button {
+  padding: 6px 13px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.yy-ob-segments button[aria-checked='true'] {
+  background: var(--bg-card-solid);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+  color: var(--text-primary);
+}
+
+.yy-ob-segments button:disabled {
+  opacity: 0.45;
+}
+
+.yy-ob-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 22px;
+}
+
+.yy-ob-next,
+.yy-ob-back {
+  padding: 11px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.yy-ob-next {
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+}
+
+.yy-ob-next:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--btn-dark-bg) 88%, var(--btn-dark-text));
+}
+
+.yy-ob-next:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.yy-ob-back {
+  color: var(--text-secondary);
+}
+
+.yy-ob-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.yy-ob :focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* Right: the stage, a dotted surface where each step shows Yap Yap at work. */
+.yy-ob-stage {
+  position: relative;
   display: grid;
-  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 1px 1px, var(--border-strong) 1px, transparent 1.4px) 0 0 / 20px 20px,
+    radial-gradient(ellipse 70% 55% at 50% 60%, color-mix(in srgb, var(--accent-blue) 12%, transparent), transparent 75%),
+    var(--bg-sidebar);
+  place-items: center;
+}
+
+.yy-ob-scene {
+  display: grid;
+  justify-items: center;
+  gap: 26px;
+  width: min(440px, 84%);
+  animation: yy-ob-enter 0.45s var(--ob-ease);
+}
+
+/* The real pill, drawn in place. */
+.yy-ob-pill .yy-hud {
+  position: static;
+  transform: none;
+}
+
+.yy-ob-pill .yy-hud-pill {
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+
+.yy-ob-pill {
+  min-height: 36px;
+  transform: scale(1.35);
+}
+
+.yy-ob-pill-large .yy-ob-pill {
+  transform: scale(2.4);
+}
+
+/* A small chat app, where dictated text lands. */
+.yy-ob-window {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--bg-card-solid);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.1), 0 2px 6px rgb(0 0 0 / 0.05);
+}
+
+.yy-ob-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.yy-ob-window-bar span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.yy-ob-window-bar strong {
+  margin-left: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.yy-ob-thread {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 18px 16px 10px;
+}
+
+.yy-ob-bubble {
   margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 13.5px;
+  padding: 8px 12px;
+  border-radius: 16px 16px 16px 5px;
+  background: var(--bg-subtle);
+  font-size: 13px;
+}
+
+.yy-ob-compose {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  margin: 8px 12px 12px;
+  padding: 10px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  transition: border-color 0.2s;
+}
+
+.yy-ob-compose[data-typing] {
+  border-color: var(--accent-blue);
+}
+
+.yy-ob-caret {
+  display: inline-block;
+  flex: none;
+  width: 1.5px;
+  height: 17px;
+  margin-left: 1px;
+  background: var(--accent-blue);
+  animation: yy-ob-blink 1s steps(2, start) infinite;
+}
+
+@keyframes yy-ob-blink {
+  to { visibility: hidden; }
+}
+
+.yy-ob-fade {
+  animation: yy-ob-enter 0.3s var(--ob-ease);
+}
+
+/* Connect: voice, this computer, provider. */
+.yy-ob-route {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.yy-ob-node {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 104px;
+  text-align: center;
+}
+
+.yy-ob-node strong {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.yy-ob-node small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.yy-ob-node-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--bg-card-solid);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.08);
+}
+
+.yy-ob-node-check {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--bg-sidebar);
+  border-radius: 999px;
+  background: var(--ob-ok);
+  color: #fff;
+}
+
+.yy-ob-line {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  margin-top: 31px;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, var(--border-strong) 0 6px, transparent 6px 11px);
+}
+
+.yy-ob-line i {
+  position: absolute;
+  top: -2px;
+  left: -10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  animation: yy-ob-travel 1.8s var(--ob-ease) infinite;
+}
+
+.yy-ob-route[data-connected] .yy-ob-line {
+  background: color-mix(in srgb, var(--ob-ok) 60%, transparent);
+}
+
+.yy-ob-route[data-connected] .yy-ob-line i {
+  background: var(--ob-ok);
+}
+
+@keyframes yy-ob-travel {
+  to { left: 100%; }
+}
+
+.yy-ob-caption {
+  max-width: 300px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Keycaps. */
+.yy-ob-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: middle;
+}
+
+.yy-ob-keys-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.yy-ob-plus {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.yy-ob-keys kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 3px;
+  border-radius: 7px;
+  background: var(--bg-keycap);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: transform 0.08s, border-bottom-width 0.08s, background 0.15s, color 0.15s;
+}
+
+.yy-ob-keyboard .yy-ob-keys kbd {
+  padding: 10px 22px;
+  border-radius: 12px;
+  font-size: 15px;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.08);
+}
+
+.yy-ob-keys[data-pressed] kbd {
+  border-bottom-width: 1px;
+  background: var(--accent-blue-fill);
+  color: #fff;
+  transform: translateY(2px);
+}
+
+/* How it writes: what you said, above how it lands. */
+.yy-ob-said {
+  display: grid;
+  gap: 6px;
+  justify-self: start;
+  max-width: 92%;
+}
+
+.yy-ob-said-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.yy-ob-said p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.5;
 }
 
-.yy-onboarding-tips li {
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+/* Done: the shortcuts to remember. */
+.yy-ob-cheats {
+  display: grid;
+  gap: 10px;
+  width: 100%;
 }
 
-.yy-onboarding-actions {
+.yy-ob-done-mark {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 14px;
+  border-radius: 22px;
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.18);
+}
+
+.yy-ob-cheat {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-card-solid);
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.yy-onboarding-actions .yy-pref-button {
-  padding: 8px 18px;
-  font-size: 13.5px;
+@media (max-width: 1000px) {
+  .yy-ob-steps li:not([data-state='current']) { font-size: 0; gap: 0; padding-right: 6px; }
+  .yy-ob-content { padding-left: 22px; padding-right: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yy-ob-content,
+  .yy-ob-scene,
+  .yy-ob-fade,
+  .yy-ob-line i,
+  .yy-ob-caret { animation: none; }
 }

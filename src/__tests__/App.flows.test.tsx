@@ -617,10 +617,10 @@ describe('First-run setup', () => {
     seed();
     (store.loaded as { providers: Record<string, { apiKey: string }> }).providers.groq.apiKey = '';
     render(<App />);
-    expect(await screen.findByRole('heading', { name: 'Welcome to Yap Yap' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Talk. Yap Yap types.' })).toBeTruthy();
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Skip setup' }));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Welcome to Yap Yap' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Talk. Yap Yap types.' })).toBeNull());
     await waitFor(() => expect((store.saves.at(-1) as { settings: SettingsState }).settings.onboardingDone).toBe(true));
   });
 
@@ -628,6 +628,6 @@ describe('First-run setup', () => {
     seed();
     render(<App />);
     await waitFor(() => expect(desktop.trigger).toBeDefined());
-    expect(screen.queryByRole('heading', { name: 'Welcome to Yap Yap' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Talk. Yap Yap types.' })).toBeNull();
   });
 });

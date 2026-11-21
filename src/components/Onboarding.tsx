@@ -1,28 +1,64 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Mic } from 'lucide-react';
-import { PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
+import { Check, Mic, Pencil } from 'lucide-react';
+import { PROVIDER_CATALOG, PROVIDER_ORDER, isProviderConfigured } from '../services/providers/catalog';
 import { STYLE_PRESETS } from '../services/personalization';
 import type { PersistedAppState } from '../services/storage';
+import { startMicrophoneTest } from '../utils/audioRecorder';
 import type { ProviderConfig, ProviderId, SettingsState } from '../types/app';
+import { loudness, type HudState } from './DictationHud';
 import { parseDictionaryImportText, type ImportedWord } from './DictionaryView';
-import { MicrophoneDialog, useMicrophones } from './MicrophoneDialog';
+import { useMicrophones } from './MicrophoneDialog';
+import { ConnectScene, DoneScene, Keys, MicrophoneScene, TryScene, WelcomeScene, WritingScene } from './OnboardingStage';
+import { ProviderLogo } from './ProviderIcon';
 import { ProviderSettings } from './ProviderSettings';
+import { SelectMenu } from './SelectMenu';
 import { StartingStylesDialog } from './StartingStylesDialog';
+import { WindowControls, YapLogo } from './YapLogo';
 import './Onboarding.css';
 
-const STEPS = ['welcome', 'provider', 'microphone', 'try', 'writing', 'done'] as const;
-type Step = (typeof STEPS)[number];
+const STEPS = [
+  { id: 'welcome', label: 'Welcome' },
+  { id: 'provider', label: 'Connect' },
+  { id: 'microphone', label: 'Microphone' },
+  { id: 'try', label: 'Try it' },
+  { id: 'writing', label: 'Style' },
+  { id: 'done', label: 'Done' },
+] as const;
+type Step = (typeof STEPS)[number]['id'];
 
 const LEVELS = [
-  { id: 'none', label: 'None', detail: 'Exactly what you said.' },
-  { id: 'light', label: 'Light', detail: 'Removes filler words and fixes punctuation. Keeps your wording.' },
-  { id: 'medium', label: 'Medium', detail: 'Also tightens wording for clarity.' },
+  { id: 'none', label: 'None', detail: 'Exactly what you said' },
+  { id: 'light', label: 'Light', detail: 'Drops filler words, fixes punctuation' },
+  { id: 'medium', label: 'Medium', detail: 'Also tightens the wording' },
 ] as const;
+type Level = (typeof LEVELS)[number]['id'];
+
+const STYLES = [{ id: '', label: 'Learn from me' }, ...STYLE_PRESETS.map(({ id, label }) => ({ id, label }))];
+
+const SPOKEN = 'um so hey sam I’m uh running a bit late see you soon';
+/** What each level and style turns the spoken sentence into, for the preview. */
+const WRITTEN: Record<Exclude<Level, 'none'>, Record<string, string>> = {
+  light: {
+    '': 'Hey Sam, I’m running a bit late. See you soon.',
+    formal: 'Hey Sam. I’m running a bit late. See you soon.',
+    casual: 'Hey Sam, I’m running a bit late. See you soon',
+    'very-casual': 'hey sam i’m running a bit late see you soon',
+  },
+  medium: {
+    '': 'Hi Sam, I’m running a little late. See you soon.',
+    formal: 'Hi Sam, I’m running a little late. I’ll see you soon.',
+    casual: 'Hey Sam, running a bit late. See you soon',
+    'very-casual': 'hey sam running a bit late, see you soon',
+  },
+};
 
 interface Props {
   state: Pick<PersistedAppState, 'settings' | 'providers'>;
   /** The text of the newest dictation, so the Try step can show the first one. */
   latestDictation?: string;
+  /** The live dictation, so the Try step can follow it. */
+  hudStatus?: HudState['status'];
+  hudLevels?: number[];
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
@@ -34,194 +70,306 @@ interface Props {
   onFinish: () => void;
 }
 
-/** "Right Alt + Space" for a saved shortcut. */
-export function shortcutLabel(combos: string[][] | undefined): string {
-  return combos?.[0]?.join(' + ') || 'your shortcut';
+/** "Right Alt" and "Space" for a saved shortcut. */
+export function shortcutKeys(combos: string[][] | undefined): string[] {
+  return combos?.[0]?.length ? combos[0] : ['Right Alt'];
 }
 
-/** First-run setup: from a fresh install to a working dictation. Every step can be skipped. */
-export function Onboarding({ state, latestDictation, onUpdateSettings, onUpdateProvider, onRemoveProvider, onImportDictionary, importApps = [], onOpenImport, onFinish }: Props) {
+/** First-run setup: from a fresh install to a working dictation, full window. Every step can be skipped. */
+export function Onboarding(props: Props) {
+  const { state, onFinish } = props;
   const { settings, providers } = state;
   const [step, setStep] = useState<Step>('welcome');
-  const index = STEPS.indexOf(step);
-  const go = (offset: number) => setStep(STEPS[Math.min(STEPS.length - 1, Math.max(0, index + offset))]);
+  const index = STEPS.findIndex((item) => item.id === step);
+  const go = (to: number) => setStep(STEPS[Math.min(STEPS.length - 1, Math.max(0, to))].id);
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => heading.current?.focus(), [step]);
+  useEffect(() => heading.current?.focus({ preventScroll: true }), [step]);
 
   const canDictate = Object.values(providers).some((p) => PROVIDER_CATALOG[p.id].supportsStt && isProviderConfigured(p));
-  const blocked = step === 'provider' && !canDictate;
+  const [provider, setProvider] = useState<ProviderId>(() => PROVIDER_ORDER.find((id) => isProviderConfigured(providers[id])) ?? 'groq');
+  const mic = useMicTest(settings, step === 'microphone');
+  const dictateKeys = shortcutKeys(settings.shortcuts.dictate);
+  const [before] = useState(props.latestDictation);
+  const tried = props.latestDictation !== before ? props.latestDictation : undefined;
+  const level: Level = settings.smartCleanup ? settings.cleanupLevel : 'none';
+  const written = level === 'none' ? SPOKEN : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
+
+  const scene: Record<Step, ReactNode> = {
+    welcome: <WelcomeScene />,
+    provider: <ConnectScene provider={provider} connected={isProviderConfigured(providers[provider])} />,
+    microphone: <MicrophoneScene levels={mic.levels} live={mic.state === 'live'} />,
+    try: <TryScene keys={dictateKeys} status={props.hudStatus ?? 'idle'} levels={props.hudLevels ?? []} result={tried} />,
+    writing: <WritingScene spoken={SPOKEN} written={written} />,
+    done: (
+      <DoneScene shortcuts={[
+        { label: 'Dictate', keys: dictateKeys },
+        { label: 'Translate', keys: shortcutKeys(settings.shortcuts.translate) },
+        { label: 'Ask anything', keys: shortcutKeys(settings.shortcuts.ask) },
+      ]} />
+    ),
+  };
 
   return (
-    <div className="yy-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-      <div className="yy-onboarding-card">
-        <div className="yy-onboarding-top">
-          <ol className="yy-onboarding-dots" aria-label={`Step ${index + 1} of ${STEPS.length}`}>
-            {STEPS.map((name, at) => <li key={name} data-state={at < index ? 'done' : at === index ? 'current' : undefined} />)}
-          </ol>
-          {step !== 'done' && <button type="button" className="yy-onboarding-skip" onClick={onFinish}>Skip setup</button>}
+    <div className="yy-ob" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      <header className="yy-ob-top app-drag">
+        <span className="yy-ob-brand"><YapLogo className="w-[19px] h-[19px]" /> Yap Yap</span>
+        <ol className="yy-ob-steps" aria-label="Setup steps">
+          {STEPS.slice(0, -1).map((item, at) => (
+            <li key={item.id} data-state={at < index ? 'done' : at === index ? 'current' : undefined} aria-current={at === index ? 'step' : undefined}>
+              <span className="yy-ob-step-mark">{at < index ? <Check size={11} strokeWidth={3} aria-hidden="true" /> : at + 1}</span>
+              {item.label}
+            </li>
+          ))}
+        </ol>
+        <div className="yy-ob-top-end app-no-drag">
+          {step !== 'done' && <button type="button" className="yy-ob-skip" onClick={onFinish}>Skip setup</button>}
+          <WindowControls />
         </div>
+      </header>
 
-        <div className="yy-onboarding-body">
-          {step === 'welcome' && <Welcome heading={heading} onImport={onImportDictionary} apps={onOpenImport ? importApps : []} onOpenImport={onOpenImport} />}
-          {step === 'provider' && (
-            <Section heading={heading} title="Connect a provider" lead="Groq is free to start and handles both transcription and cleanup. Use Get an API key below, paste the key in, and you're set.">
-              <div className="yy-onboarding-providers">
-                <ProviderSettings
-                  providers={providers}
-                  settings={settings}
-                  startWith="groq"
-                  onUpdateProvider={onUpdateProvider}
-                  onRemoveProvider={onRemoveProvider}
-                  onUpdateSettings={onUpdateSettings}
-                />
-              </div>
-              <p role="status" className="yy-onboarding-status" data-ok={canDictate || undefined}>
-                {canDictate ? <><Check size={14} aria-hidden="true" /> Connected. You can dictate now.</> : 'Add a key for a provider that can transcribe speech to continue.'}
-              </p>
-            </Section>
-          )}
-          {step === 'microphone' && <Microphone heading={heading} settings={settings} onUpdateSettings={onUpdateSettings} />}
-          {step === 'try' && <TryIt heading={heading} settings={settings} canDictate={canDictate} latestDictation={latestDictation} />}
-          {step === 'writing' && <Writing heading={heading} settings={settings} onUpdateSettings={onUpdateSettings} />}
-          {step === 'done' && (
-            <Section heading={heading} title="You're all set" lead="A few more things you can do:">
-              <ul className="yy-onboarding-tips">
-                <li><kbd>{shortcutLabel(settings.shortcuts.translate)}</kbd> translates what you say.</li>
-                <li><kbd>{shortcutLabel(settings.shortcuts.ask)}</kbd> answers a question you ask out loud.</li>
-                <li><strong>Snippets</strong> insert text you use often when you say its trigger.</li>
-                <li><strong>Settings → Personalization</strong> shows what Yap Yap learns about your writing, and lets you correct it.</li>
-              </ul>
-            </Section>
-          )}
-        </div>
-
-        <div className="yy-onboarding-actions">
-          {index > 0 && step !== 'done' && <button type="button" className="yy-pref-button" onClick={() => go(-1)}>Back</button>}
-          {step === 'done'
-            ? <button type="button" className="yy-pref-button" data-primary onClick={onFinish}>Start dictating</button>
-            : <button type="button" className="yy-pref-button" data-primary disabled={blocked} onClick={() => go(1)}>{step === 'welcome' ? 'Get started' : 'Continue'}</button>}
-        </div>
-      </div>
+      <main className="yy-ob-main">
+        <section className="yy-ob-content" key={step}>
+          <div className="yy-ob-copy">
+            {step === 'welcome' && <WelcomeStep heading={heading} {...props} />}
+            {step === 'provider' && <ProviderStep heading={heading} provider={provider} onPick={setProvider} canDictate={canDictate} {...props} />}
+            {step === 'microphone' && <MicrophoneStep heading={heading} mic={mic} {...props} />}
+            {step === 'try' && <TryStep heading={heading} keys={dictateKeys} tried={tried} canDictate={canDictate} />}
+            {step === 'writing' && <WritingStep heading={heading} level={level} {...props} />}
+            {step === 'done' && (
+              <>
+                <Intro heading={heading} title="You’re ready" lead="Yap Yap waits in the tray. Press your shortcut in any app to start." />
+                <ul className="yy-ob-facts">
+                  <li>
+                    <strong>Snippets</strong>
+                    <span>Save text you type often, like your email signature, and say its trigger to insert it.</span>
+                  </li>
+                  <li>
+                    <strong>It learns how you write</strong>
+                    <span>See what it learned, and correct it, in Settings under Personalization.</span>
+                  </li>
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="yy-ob-actions">
+            {index > 0 && step !== 'done' && <button type="button" className="yy-ob-back" onClick={() => go(index - 1)}>Back</button>}
+            {step === 'done'
+              ? <button type="button" className="yy-ob-next" onClick={onFinish}>Start dictating</button>
+              : (
+                <button type="button" className="yy-ob-next" disabled={step === 'provider' && !canDictate} onClick={() => go(index + 1)}>
+                  {step === 'welcome' ? 'Get started' : 'Continue'}
+                </button>
+              )}
+          </div>
+        </section>
+        <div className="yy-ob-stage" data-step={step}>{scene[step]}</div>
+      </main>
     </div>
   );
 }
 
-function Section({ heading, title, lead, children }: { heading: React.RefObject<HTMLHeadingElement | null>; title: string; lead: ReactNode; children?: ReactNode }) {
+type HeadingRef = React.RefObject<HTMLHeadingElement | null>;
+
+function Intro({ heading, title, lead }: { heading: HeadingRef; title: string; lead: ReactNode }) {
   return (
-    <section>
-      <h2 id="onboarding-title" ref={heading} tabIndex={-1}>{title}</h2>
-      <p className="yy-onboarding-lead">{lead}</p>
-      {children}
-    </section>
+    <>
+      <h1 id="onboarding-title" ref={heading} tabIndex={-1} className="yy-ob-title">{title}</h1>
+      <p className="yy-ob-lead">{lead}</p>
+    </>
   );
 }
 
-function Welcome({ heading, onImport, apps, onOpenImport }: {
-  heading: React.RefObject<HTMLHeadingElement | null>;
-  onImport: (words: ImportedWord[]) => void;
-  apps: { name: string }[];
-  onOpenImport?: () => void;
-}) {
-  const names = new Intl.ListFormat('en', { type: 'disjunction' }).format(apps.map((app) => app.name));
+function WelcomeStep({ heading, onImportDictionary, importApps = [], onOpenImport }: Props & { heading: HeadingRef }) {
   const file = useRef<HTMLInputElement>(null);
   const [imported, setImported] = useState<number>();
+  const apps = onOpenImport ? importApps : [];
+  const names = new Intl.ListFormat('en', { type: 'disjunction' }).format(apps.map((app) => app.name));
   return (
-    <Section heading={heading} title="Welcome to Yap Yap" lead="Talk anywhere you can type. Press a shortcut, speak, and clean text appears where your cursor is.">
-      <div className="yy-onboarding-note">
-        <h3>Why it asks for an API key</h3>
-        <p>Yap Yap runs on an AI provider you choose. You bring your own key, so you pay the provider directly (Groq is free to start) and your audio goes only to them.</p>
+    <>
+      <Intro heading={heading} title="Talk. Yap Yap types." lead="Press a shortcut in any app, speak the way you talk, and clean text lands where your cursor is." />
+      <ul className="yy-ob-facts">
+        <li>
+          <strong>You bring your own AI key.</strong>
+          <span>You pay the provider directly, and Groq is free to start. Your audio goes only to them.</span>
+        </li>
+        <li>
+          <strong>{apps.length ? `Coming from ${names}?` : 'Coming from Wispr Flow or Typeless?'}</strong>
+          {apps.length ? (
+            <span>Yap Yap found it on this computer. <button type="button" className="yy-ob-inline" onClick={onOpenImport}>Bring your dictionary and snippets over</button></span>
+          ) : (
+            <span>
+              Export your dictionary there as a CSV file, then{' '}
+              <button type="button" className="yy-ob-inline" onClick={() => file.current?.click()}>import it here</button>.
+            </span>
+          )}
+          <input
+            ref={file}
+            type="file"
+            accept=".csv,.txt"
+            hidden
+            aria-label="Dictionary file"
+            onChange={async (event) => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen) return;
+              const words = parseDictionaryImportText(await chosen.text());
+              onImportDictionary(words);
+              setImported(words.length);
+            }}
+          />
+          {imported !== undefined && (
+            <span role="status" className="yy-ob-status" data-ok={imported > 0 || undefined}>
+              {imported > 0 ? `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'}.` : 'No words found in that file.'}
+            </span>
+          )}
+        </li>
+      </ul>
+    </>
+  );
+}
+
+const OTHER_PROVIDERS = PROVIDER_ORDER.filter((id) => id !== 'groq' && id !== 'custom');
+
+function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdateProvider, onRemoveProvider, onUpdateSettings }: Props & {
+  heading: HeadingRef; provider: ProviderId; onPick: (id: ProviderId) => void; canDictate: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const connected = isProviderConfigured(state.providers[provider]);
+  const meta = PROVIDER_CATALOG[provider];
+  const pick = (id: ProviderId) => { onPick(id); setEditing(false); };
+  return (
+    <>
+      <Intro heading={heading} title="Connect your AI" lead="Yap Yap sends your voice straight to a provider you choose, with your own key." />
+      <div className="yy-ob-providers" role="radiogroup" aria-label="Provider">
+        <button type="button" role="radio" aria-checked={provider === 'groq'} className="yy-ob-provider-main" onClick={() => pick('groq')}>
+          <ProviderLogo id="groq" size={22} />
+          <span><strong>Groq</strong><small>Free to start. Does transcription and cleanup.</small></span>
+          {isProviderConfigured(state.providers.groq) && <Check size={16} className="yy-ob-ok" aria-label="Connected" />}
+        </button>
+        <div className="yy-ob-provider-chips">
+          {OTHER_PROVIDERS.map((id) => (
+            <button key={id} type="button" role="radio" aria-checked={provider === id} onClick={() => pick(id)}>
+              <ProviderLogo id={id} size={15} />
+              {PROVIDER_CATALOG[id].name.replace(/^(Google|Anthropic)\s+/, '')}
+              {isProviderConfigured(state.providers[id]) && <Check size={12} className="yy-ob-ok" aria-label="Connected" />}
+            </button>
+          ))}
+        </div>
       </div>
-      {apps.length > 0 ? (
-        <div className="yy-onboarding-note">
-          <h3>Coming from {names}?</h3>
-          <p>Yap Yap found it on this computer. Bring your dictionary and snippets over in one step.</p>
-          <button type="button" className="yy-pref-button" onClick={onOpenImport}>Import from {names}</button>
+      {connected && !editing ? (
+        <div className="yy-ob-connected">
+          <Check size={16} aria-hidden="true" />
+          <span>{meta.name} is connected.{meta.supportsStt ? '' : ' It can’t transcribe speech, so connect one that can too.'}</span>
+          <button type="button" className="yy-ob-inline" onClick={() => setEditing(true)}><Pencil size={12} aria-hidden="true" /> Change key</button>
         </div>
       ) : (
-      <div className="yy-onboarding-note">
-        <h3>Coming from Wispr Flow or Typeless?</h3>
-        <p>Export your dictionary there as a CSV file and bring it along. Your words and replacements carry over.</p>
-        <button type="button" className="yy-pref-button" onClick={() => file.current?.click()}>Import dictionary</button>
-        <input
-          ref={file}
-          type="file"
-          accept=".csv,.txt"
-          hidden
-          aria-label="Dictionary file"
-          onChange={async (event) => {
-            const chosen = event.target.files?.[0];
-            event.target.value = '';
-            if (!chosen) return;
-            const words = parseDictionaryImportText(await chosen.text());
-            onImport(words);
-            setImported(words.length);
+        <div className="yy-ob-form">
+          <ProviderSettings
+            key={provider}
+            providers={state.providers}
+            settings={state.settings}
+            startWith={provider}
+            onUpdateProvider={(id, patch) => { onUpdateProvider(id, patch); setEditing(false); }}
+            onRemoveProvider={onRemoveProvider}
+            onUpdateSettings={onUpdateSettings}
+          />
+        </div>
+      )}
+      <p role="status" className="yy-ob-status">
+        {canDictate ? '' : 'Add a key for a provider that can transcribe speech to continue.'}
+      </p>
+    </>
+  );
+}
+
+type MicTest = ReturnType<typeof useMicTest>;
+
+/** A live microphone test while the step is open: levels, and whether a voice was heard. */
+function useMicTest(settings: SettingsState, open: boolean) {
+  const [state, setState] = useState<'off' | 'live' | 'blocked'>('off');
+  const [levels, setLevels] = useState<number[]>(() => Array(20).fill(0.1));
+  const [heard, setHeard] = useState(false);
+  const stop = useRef<(() => void) | undefined>(undefined);
+  const microphones = useMicrophones(open);
+  const halt = () => { stop.current?.(); stop.current = undefined; };
+  const start = async (microphoneId = settings.microphoneId) => {
+    halt();
+    try {
+      stop.current = await startMicrophoneTest(microphoneId === 'default' ? undefined : microphoneId, (next) => {
+        setLevels(next);
+        if (loudness(next) > 0.35) setHeard(true);
+      }, { strongNoiseReduction: settings.strongNoiseReduction });
+      setState('live');
+      microphones.refresh();
+    } catch {
+      setState('blocked');
+    }
+  };
+  useEffect(() => {
+    // Opening the step starts listening, so the pill moves as soon as you speak.
+    if (open) void start();
+    else { halt(); setState('off'); setHeard(false); }
+    return halt;
+    // The test restarts on demand, not on every settings change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  return { state, levels, heard, start, microphones: microphones.microphones };
+}
+
+function MicrophoneStep({ heading, mic, state, onUpdateSettings }: Props & { heading: HeadingRef; mic: MicTest }) {
+  const options = [
+    { value: 'default', label: 'Auto-detect (system default)' },
+    ...mic.microphones.filter((m) => m.id !== 'default').map((m) => ({ value: m.id, label: m.label })),
+  ];
+  return (
+    <>
+      <Intro heading={heading} title="Say something" lead="The pill should move with your voice. If it doesn’t, pick another microphone." />
+      <div className="yy-ob-field">
+        <SelectMenu
+          label="Microphone"
+          value={options.some((o) => o.value === state.settings.microphoneId) ? state.settings.microphoneId : 'default'}
+          options={options}
+          onChange={(microphoneId) => {
+            onUpdateSettings({ microphoneId });
+            if (mic.state === 'live') void mic.start(microphoneId);
           }}
         />
-        {imported !== undefined && (
-          <p role="status" className="yy-onboarding-status" data-ok={imported > 0 || undefined}>
-            {imported > 0 ? `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'}.` : 'No words found in that file.'}
-          </p>
-        )}
       </div>
+      {mic.state !== 'live' && (
+        <button type="button" className="yy-ob-secondary" onClick={() => void mic.start()}>
+          <Mic size={15} aria-hidden="true" /> {mic.state === 'blocked' ? 'Try again' : 'Test my microphone'}
+        </button>
       )}
-    </Section>
+      <p role="status" className="yy-ob-status" data-ok={mic.heard || undefined} data-error={mic.state === 'blocked' || undefined}>
+        {mic.state === 'blocked'
+          ? 'Yap Yap can’t use the microphone. Allow microphone access in your system settings, then try again.'
+          : mic.heard ? 'Yap Yap hears you.' : mic.state === 'live' ? 'Listening…' : ''}
+      </p>
+    </>
   );
 }
 
-function Microphone({ heading, settings, onUpdateSettings }: { heading: React.RefObject<HTMLHeadingElement | null>; settings: SettingsState; onUpdateSettings: Props['onUpdateSettings'] }) {
-  const { microphones, known, refresh } = useMicrophones(true);
-  const [testing, setTesting] = useState(false);
-  const current = settings.microphoneId === 'default'
-    ? 'Auto-detect (your system default)'
-    : microphones.find((mic) => mic.id === settings.microphoneId)?.label ?? 'Saved microphone';
+function TryStep({ heading, keys, tried, canDictate }: { heading: HeadingRef; keys: string[]; tried?: string; canDictate: boolean }) {
   return (
-    <Section heading={heading} title="Check your microphone" lead="Pick the microphone you talk into and make sure Yap Yap hears you.">
-      <div className="yy-onboarding-row">
-        <Mic size={18} aria-hidden="true" />
-        <span>{current}</span>
-        <button type="button" className="yy-pref-button" onClick={() => setTesting(true)}>Test microphone</button>
-      </div>
-      {testing && (
-        <MicrophoneDialog
-          microphones={microphones}
-          devicesKnown={known}
-          value={settings.microphoneId}
-          strongNoiseReduction={settings.strongNoiseReduction}
-          onChange={(microphoneId) => onUpdateSettings({ microphoneId })}
-          onListening={refresh}
-          onClose={() => setTesting(false)}
-        />
-      )}
-    </Section>
+    <>
+      <Intro heading={heading} title="Try it for real" lead={<>Press <Keys keys={keys} />, say a sentence, then press it again.</>} />
+      <p role="status" className="yy-ob-status" data-ok={tried ? true : undefined}>
+        {tried ? 'That’s it. Your words landed in the chat.' : canDictate ? 'Your words will land in the chat on the right.' : 'Connect a provider first, then come back to try it.'}
+      </p>
+      <p className="yy-ob-hint">In other apps, the text goes straight to where your cursor is. You can change the shortcut in Settings.</p>
+    </>
   );
 }
 
-function TryIt({ heading, settings, canDictate, latestDictation }: { heading: React.RefObject<HTMLHeadingElement | null>; settings: SettingsState; canDictate: boolean; latestDictation?: string }) {
-  // Only a dictation made on this step counts, not one from before setup.
-  const [before] = useState(latestDictation);
-  const result = latestDictation !== before ? latestDictation : undefined;
-  const key = shortcutLabel(settings.shortcuts.dictate);
-  return (
-    <Section heading={heading} title="Try it" lead={<>Press <kbd>{key}</kbd>, say a sentence, then press <kbd>{key}</kbd> again.</>}>
-      <div className="yy-onboarding-try" data-done={result ? '' : undefined} aria-live="polite">
-        {result
-          ? <><span className="yy-onboarding-try-label"><Check size={14} aria-hidden="true" /> That's it</span><p>{result}</p></>
-          : <p>{canDictate ? 'Your words will appear here.' : 'Connect a provider first, then come back to try it.'}</p>}
-      </div>
-      <p className="yy-onboarding-hint">In any other app, the text goes straight to where your cursor is. You can change the shortcut in Settings.</p>
-    </Section>
-  );
-}
-
-function Writing({ heading, settings, onUpdateSettings }: { heading: React.RefObject<HTMLHeadingElement | null>; settings: SettingsState; onUpdateSettings: Props['onUpdateSettings'] }) {
-  const [stylesOpen, setStylesOpen] = useState(false);
-  const level = settings.smartCleanup ? settings.cleanupLevel : 'none';
+function WritingStep({ heading, level, state, onUpdateSettings }: Props & { heading: HeadingRef; level: Level }) {
+  const { settings } = state;
+  const [perPlace, setPerPlace] = useState(false);
   const picked = Object.keys(settings.styleCorrections).length;
-  const fallback = STYLE_PRESETS.find((preset) => preset.id === settings.defaultStyle);
   return (
-    <Section heading={heading} title="How should it write?" lead="You can change both any time in Settings.">
-      <h3 className="yy-onboarding-subhead">Cleanup</h3>
-      <div className="yy-onboarding-levels" role="radiogroup" aria-label="Cleanup level">
+    <>
+      <Intro heading={heading} title="Choose how it writes" lead="See the difference on the right. You can change this any time in Settings." />
+      <h2 className="yy-ob-label">Cleanup</h2>
+      <div className="yy-ob-levels" role="radiogroup" aria-label="Cleanup level">
         {LEVELS.map((option) => (
           <button
             key={option.id}
@@ -235,26 +383,28 @@ function Writing({ heading, settings, onUpdateSettings }: { heading: React.RefOb
           </button>
         ))}
       </div>
-      <h3 className="yy-onboarding-subhead">Style</h3>
-      <div className="yy-onboarding-row">
-        <span>
-          {picked > 0
-            ? `You picked a style for ${picked} ${picked === 1 ? 'kind of place' : 'kinds of places'}.`
-            : fallback ? `${fallback.label} everywhere, until Yap Yap learns more.` : 'Yap Yap learns how you write in each app.'}
-        </span>
-        <button type="button" className="yy-pref-button" onClick={() => setStylesOpen(true)}>Choose styles</button>
+      <h2 className="yy-ob-label">Style</h2>
+      <div className="yy-ob-segments" role="radiogroup" aria-label="Style">
+        {STYLES.map((style) => (
+          <button key={style.id || 'learn'} type="button" role="radio" aria-checked={settings.defaultStyle === style.id} disabled={level === 'none'} onClick={() => onUpdateSettings({ defaultStyle: style.id })}>
+            {style.label}
+          </button>
+        ))}
       </div>
-      <p className="yy-onboarding-hint">Pick Formal, Casual or Very casual for emails, chats and more, or let Yap Yap learn from you.</p>
-      {stylesOpen && (
+      <p className="yy-ob-hint">
+        {picked > 0 ? `You set a style for ${picked} ${picked === 1 ? 'kind of place' : 'kinds of places'}. ` : ''}
+        <button type="button" className="yy-ob-inline" onClick={() => setPerPlace(true)}>Pick a style for emails, chats and more</button>
+      </p>
+      {perPlace && (
         <StartingStylesDialog
           corrections={settings.styleCorrections}
           defaultStyle={settings.defaultStyle}
           active={settings.personalizationEnabled && settings.smartCleanup}
           onChange={(styleCorrections) => onUpdateSettings({ styleCorrections })}
           onDefaultChange={(defaultStyle) => onUpdateSettings({ defaultStyle })}
-          onClose={() => setStylesOpen(false)}
+          onClose={() => setPerPlace(false)}
         />
       )}
-    </Section>
+    </>
   );
 }

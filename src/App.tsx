@@ -1829,6 +1829,8 @@ export function App() {
         <Onboarding
           state={appState}
           latestDictation={appState.history.find((item) => item.mode === 'dictate' && item.text.trim())?.text}
+          hudStatus={hud.status}
+          hudLevels={hud.levels}
           onUpdateSettings={updateSettings}
           onUpdateProvider={updateProvider}
           onRemoveProvider={removeProvider}
