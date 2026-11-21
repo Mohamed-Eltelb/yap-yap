@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAC_FIELD_LIMIT, macProbe, parseMacContext, parseMacField } from '../../electron/macContext';
-import { browserDomain } from '../../electron/dictationContext';
+import { browserDomain, nearbyText } from '../../electron/dictationContext';
 
 type Attributes = Record<string, unknown>;
 
@@ -79,5 +79,23 @@ describe('Mac focused field probe', () => {
     expect(parseMacField('[]')).toBeUndefined();
     expect(parseMacContext('')).toBeUndefined();
     expect(parseMacContext('{"application": 5}')).toBeUndefined();
+  });
+});
+
+describe('text beside the caret', () => {
+  const mark = String.fromCharCode(0xfffc);
+  it('stops at the nearest embedded element, so page toolbars never count as writing', () => {
+    // From Google Sheets in Firefox, where the whole page is one editable area.
+    const before = `${mark}${mark} ${mark}10${mark} B8:F8${mark}Then, fill out the tabs. \n${mark}${mark}Add1000more rows at the bottom${mark}${mark}Setup${mark}Expenses${mark}Income${mark}Summary${mark}${mark}Then, fill out the 'expenses' and 'Income' tabs. `;
+    const after = `\n${mark}Turn on screen reader support${mark}${mark}To enable screen reader support`;
+    expect(nearbyText(before, 'before')).toBe("Then, fill out the 'expenses' and 'Income' tabs. ");
+    expect(nearbyText(after, 'after')).toBe('\n');
+  });
+
+  it('keeps plain text whole, within its length limit', () => {
+    expect(nearbyText('Hi Sam, thanks.', 'before')).toBe('Hi Sam, thanks.');
+    expect(nearbyText('x'.repeat(300), 'before')).toHaveLength(240);
+    expect(nearbyText('y'.repeat(300), 'after')).toHaveLength(120);
+    expect(nearbyText(mark, 'after')).toBeUndefined();
   });
 });

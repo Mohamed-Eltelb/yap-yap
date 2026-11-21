@@ -214,6 +214,22 @@ function runContextProbe(file: string, args: string[], maxBuffer = 8192): Promis
   });
 }
 
+/** Marks a button, image, or other element embedded in a stretch of text. */
+const EMBEDDED_OBJECT = String.fromCharCode(0xfffc);
+
+/**
+ * Text beside the caret, up to the nearest embedded element. Web apps like Google Sheets make the
+ * whole page one editable area, so past that mark lie toolbars and tabs, not the user's writing.
+ */
+export function nearbyText(text: string, side: 'before' | 'after'): string | undefined {
+  if (side === 'before') {
+    const start = text.lastIndexOf(EMBEDDED_OBJECT);
+    return text.slice(start + 1).slice(-240) || undefined;
+  }
+  const end = text.indexOf(EMBEDDED_OBJECT);
+  return (end < 0 ? text : text.slice(0, end)).slice(0, 120) || undefined;
+}
+
 export function browserDomain(address: unknown): string | undefined {
   if (typeof address !== 'string' || /\s/.test(address) || address.length > 4096) return;
   try {
@@ -244,8 +260,8 @@ export async function captureDictationContext(): Promise<DictationContext | unde
         application: data.application.trim().slice(0, 100),
         domain: browserDomain(data.address),
         // Not trimmed: whitespace at the caret decides spacing.
-        textBefore: typeof data.textBefore === 'string' ? data.textBefore.slice(-240) || undefined : undefined,
-        textAfter: typeof data.textAfter === 'string' ? data.textAfter.slice(0, 120) || undefined : undefined,
+        textBefore: typeof data.textBefore === 'string' ? nearbyText(data.textBefore, 'before') : undefined,
+        textAfter: typeof data.textAfter === 'string' ? nearbyText(data.textAfter, 'after') : undefined,
       };
     } catch {
       return undefined;
