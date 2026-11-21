@@ -35,6 +35,7 @@ import { UpdateDialog } from './UpdateDialog';
 import { PersonalizationEditor } from './PersonalizationEditor';
 import { SettingsSubdialog } from './SettingsSubdialog';
 import { SourceCategoriesDialog } from './SourceCategoriesDialog';
+import { OtherAppIcons, type ImportSource } from './OtherAppIcons';
 import { Toggle } from './Toggle';
 import { StartingStylesDialog } from './StartingStylesDialog';
 
@@ -64,7 +65,7 @@ interface Props {
   stats: InsightsStats;
   toast: string | null;
   /** Other dictation apps found on this computer that Yap Yap can import from. */
-  importApps: string[];
+  importApps: ImportSource[];
   onOpenImport: () => void;
 }
 
@@ -887,7 +888,10 @@ export function SettingsModal({
                 {importApps.length > 0 && (
                   <div className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
                     <div className="min-w-0">
-                      <h3 className="text-sm font-medium">Import from {importApps.join(' or ')}</h3>
+                      <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <OtherAppIcons apps={importApps} size={16} />
+                        Import from {importApps.map((item) => item.name).join(' or ')}
+                      </h3>
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">Bring your dictionary, snippets, styles, and History from this computer. You review everything first.</p>
                     </div>
                     <button

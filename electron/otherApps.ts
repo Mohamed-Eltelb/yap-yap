@@ -38,6 +38,20 @@ export interface OtherAppData {
   };
   /** What could not be brought over, in plain words. */
   notes: string[];
+  /** The installed app's own icon, as a data URL, when it can be read. */
+  icon?: string;
+}
+
+/** Where each app's program is installed, so its own icon can be shown. Missing paths are skipped. */
+export function appExecutables(app: OtherAppId, env: NodeJS.ProcessEnv = process.env): string[] {
+  const local = env.LOCALAPPDATA ?? '';
+  const programs = [env.ProgramFiles, env['ProgramFiles(x86)']].filter((dir): dir is string => Boolean(dir));
+  const name = app === 'wispr-flow' ? 'Wispr Flow' : 'Typeless';
+  return [
+    ...(app === 'wispr-flow' ? [path.join(local, 'WisprFlow', 'Wispr Flow.exe')] : [path.join(local, 'Programs', 'Typeless', 'Typeless.exe')]),
+    ...programs.map((dir) => path.join(dir, name, `${name}.exe`)),
+    `/Applications/${name}.app`,
+  ].filter((file) => file && path.isAbsolute(file));
 }
 
 type Row = Record<string, unknown>;

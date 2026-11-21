@@ -283,7 +283,7 @@ export function ImportDialog({ apps, state, defaultProvider, onImport, onUndo, o
       onClose={onClose}
     >
       <div className="yy-language-body yy-import-body">
-        {apps.length > 1 && (
+        {apps.length > 1 ? (
           <div className="yy-import-apps" role="tablist" aria-label="Import from">
             {apps.map((app) => (
               <button
@@ -293,9 +293,17 @@ export function ImportDialog({ apps, state, defaultProvider, onImport, onUndo, o
                 aria-selected={app.app === plan.app}
                 onClick={() => { setAppId(app.app); setOpen(undefined); }}
               >
+                {app.icon && <img src={app.icon} alt="" width={16} height={16} />}
                 {app.name}
               </button>
             ))}
+          </div>
+        ) : data.icon && (
+          <div className="yy-import-apps">
+            <span>
+              <img src={data.icon} alt="" width={16} height={16} />
+              {plan.name}
+            </span>
           </div>
         )}
 

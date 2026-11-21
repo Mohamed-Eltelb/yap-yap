@@ -3107,3 +3107,49 @@ html.dark .yy-personalization-options > div {
   color: var(--text-secondary);
   font-size: 11.5px;
 }
+
+/* Other apps' own icons, read from their installed programs. */
+.yy-app-icons {
+  display: inline-flex;
+  flex: none;
+}
+
+.yy-app-icons img {
+  border-radius: 4px;
+}
+
+.yy-app-icons img + img {
+  margin-left: -5px;
+}
+
+.yy-import-card .yy-app-icons {
+  margin-top: 1px;
+}
+
+.yy-import-apps button,
+.yy-import-apps > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.yy-import-apps > span {
+  padding: 5px 14px 5px 10px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.yy-import-apps button:has(img) {
+  padding-left: 10px;
+}
+
+/* Other apps' own icons, read from their installed programs */
+.yy-app-icons { display: inline-flex; flex: none; }
+.yy-app-icons img { border-radius: 4px; }
+.yy-app-icons img + img { margin-left: -5px; }
+.yy-import-card .yy-app-icons { margin-top: 1px; }
+.yy-import-apps button, .yy-import-apps > span { display: inline-flex; align-items: center; gap: 7px; }
+.yy-import-apps > span { padding: 5px 14px 5px 10px; color: var(--text-primary); font-size: 12.5px; font-weight: 500; }
+.yy-import-apps button:has(img) { padding-left: 10px; }
+.yy-import-apps img { border-radius: 4px; flex: none; }

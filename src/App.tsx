@@ -1690,7 +1690,7 @@ export function App() {
         onUpdateProvider={updateProvider}
         dismissedQuickCard={appState.settings.dismissedQuickCard}
         onDismissQuickCard={() => updateSettings({ dismissedQuickCard: true })}
-        importApps={appState.settings.dismissedImportCard ? [] : otherApps.map((item) => item.name)}
+        importApps={appState.settings.dismissedImportCard ? [] : otherApps.map(({ name, icon }) => ({ name, icon }))}
         onOpenImport={openImport}
         onDismissImport={() => updateSettings({ dismissedImportCard: true })}
         isRecording={hud.status === 'recording'}
@@ -1803,7 +1803,7 @@ export function App() {
         }}
         stats={stats}
         toast={toast}
-        importApps={otherApps.map((item) => item.name)}
+        importApps={otherApps.map(({ name, icon }) => ({ name, icon }))}
         onOpenImport={openImport}
       />
 

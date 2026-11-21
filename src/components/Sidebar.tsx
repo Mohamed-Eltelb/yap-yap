@@ -14,6 +14,7 @@ import {
   Sun,
   X,
 } from 'lucide-react';
+import { OtherAppIcons, type ImportSource } from './OtherAppIcons';
 import { ActiveNav, AppearanceMode, CleanupLevel, DictationMode, ProviderConfig, ProviderId, SettingsModalTab, SettingsState } from '../types/app';
 import { SetupCard } from './SetupCard';
 import { UpdateCard } from './UpdateCard';
@@ -41,7 +42,7 @@ interface Props {
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   dismissedQuickCard: boolean;
   /** Other dictation apps found on this computer, offered for import. Empty hides the card. */
-  importApps?: string[];
+  importApps?: ImportSource[];
   onOpenImport?: () => void;
   onDismissImport?: () => void;
   onDismissQuickCard: () => void;
@@ -123,9 +124,11 @@ export function Sidebar({
         {importApps.length > 0 && (
           <div className="relative group yy-import-card">
             <button type="button" onClick={onOpenImport} aria-haspopup="dialog">
-              <Download aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />
+              {importApps.some((item) => item.icon)
+                ? <OtherAppIcons apps={importApps} />
+                : <Download aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />}
               <span>
-                <strong>Coming from {importApps.join(' or ')}?</strong>
+                <strong>Coming from {importApps.map((item) => item.name).join(' or ')}?</strong>
                 <small>Bring your words, snippets, and styles.</small>
               </span>
             </button>

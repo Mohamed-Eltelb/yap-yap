@@ -25,7 +25,7 @@ import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindo
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
-import { readOtherApps } from './otherApps';
+import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
 
 let mainWindow: BrowserWindow | null = null;
@@ -439,6 +439,20 @@ function pasteIntoFocusedField(): Promise<boolean> {
   });
 }
 
+/** The other app's own icon, read from its installed program. Undefined when it can't be read. */
+async function installedAppIcon(id: OtherAppData['app']): Promise<string | undefined> {
+  for (const file of appExecutables(id)) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const icon = await app.getFileIcon(file, { size: 'normal' });
+      if (!icon.isEmpty()) return icon.toDataURL();
+    } catch {
+      // Try the next place it may be installed.
+    }
+  }
+  return undefined;
+}
+
 const skippedUpdatePath = () => path.join(app.getPath('userData'), 'skipped-update.txt');
 
 let updaterConfigured = false;
@@ -584,8 +598,10 @@ app.whenReady().then(() => {
       ? watchPasteCorrections(text, readFocusedField)
       : { words: [] });
   // Reads only the other apps' fixed data folders; the renderer never passes a path.
-  ipcMain.handle('import:other-apps', (event) =>
-    event.sender === mainWindow?.webContents ? readOtherApps(app.getPath('appData')) : []);
+  ipcMain.handle('import:other-apps', async (event): Promise<OtherAppData[]> => {
+    if (event.sender !== mainWindow?.webContents) return [];
+    return Promise.all(readOtherApps(app.getPath('appData')).map(async (data) => ({ ...data, icon: await installedAppIcon(data.app) })));
+  });
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
   });
