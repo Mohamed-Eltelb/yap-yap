@@ -14,8 +14,9 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
+import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
@@ -23,7 +24,7 @@ import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
+import { captureDictationContext, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -246,11 +247,12 @@ function updateHudWindow(): void {
   if (!hudWindow || !hudReady) return;
   if (!hudPayload.show) {
     if (hudHideTimer) return;
-    // The window is never hidden once shown: on Windows a hidden and re-shown window stops
-    // taking clicks. It stays on screen empty, letting every click through.
+    // Linux has no forwarded mouse events. Unmap its idle overlay so the editor gets clicks.
+    // On Windows, hiding and re-showing the window breaks HUD button input.
     const hide = (window: BrowserWindow) => {
       window.webContents.send('hud:state', { status: 'idle', mode: 'dictate', levels: [] });
-      if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
+      if (process.platform === 'linux') window.hide();
+      else window.setIgnoreMouseEvents(true, { forward: true });
       hudEmpty = true;
       hudDisplayId = undefined;
       hudShownStatus = undefined;
@@ -350,7 +352,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
     for (const combo of unique[mode]) {
       const accel = toElectronAccelerator(combo);
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
-      if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
+      if (keyHookAvailable && canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
         modifierShortcuts.push({ combo, trigger });
         if (accel) claims.push(accel);
         continue;
@@ -388,7 +390,8 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
         }
       }
     }
-    return true;
+    // Without the hook (Linux with no X server), the renderer handles these shortcuts while Yap Yap is focused.
+    return keyHookAvailable;
   } catch (error) {
     console.warn('Could not register modifier-only shortcuts', error);
     return false;
@@ -465,6 +468,13 @@ function inPlaceUpdater() {
     autoUpdater.disableWebInstaller = true;
     // Failures reach the caller through the rejected promise. Without a listener, 'error' would crash the app.
     autoUpdater.on('error', () => undefined);
+    autoUpdater.on('appimage-filename-updated', (file) => {
+      try {
+        retargetLinuxAutostart(app.getPath('appData'), [file]);
+      } catch (error) {
+        console.warn(error);
+      }
+    });
   }
   return autoUpdater;
 }
@@ -546,11 +556,13 @@ app.whenReady().then(() => {
       applyAppearance(appearance);
     }
   });
-  ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
-    try {
+  ipcMain.handle('app:set-login-item', (event, enabled: boolean) => {
+    if (!fromMainFrame(event) || typeof enabled !== 'boolean') return;
+    if (process.platform === 'linux') {
+      // Only installed builds can start independently of the development server.
+      if (app.isPackaged) setLinuxAutostart(app.getPath('appData'), enabled, [process.env.APPIMAGE || process.execPath]);
+    } else {
       app.setLoginItemSettings({ openAtLogin: enabled });
-    } catch {
-      // Ignore on unsupported Linux environments
     }
   });
 
@@ -574,10 +586,16 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
-    const previous = keepOnClipboard === true ? undefined : await snapshotClipboard();
+    // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
+    const [target, previous] = await Promise.all([
+      process.platform === 'linux' ? linuxPasteTarget() : undefined,
+      keepOnClipboard === true ? undefined : snapshotClipboard(),
+    ]);
+    if (target === 'page') return false;
     await clipboard.writeText(text);
     try {
-      return await pasteIntoFocusedField();
+      const sent = await pasteIntoFocusedField();
+      return sent && target !== 'unconfirmed';
     } finally {
       // The paste goes through the clipboard; put back what the user had there once the target has read it.
       if (previous) setTimeout(() => {

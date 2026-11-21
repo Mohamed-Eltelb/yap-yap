@@ -222,8 +222,9 @@ export function App() {
 
   useEffect(() => {
     if (!hydrated || isHudRoute) return;
-    void window.yapyap?.setLaunchAtLogin?.(appState.settings.launchAtLogin);
-  }, [appState.settings.launchAtLogin, hydrated, isHudRoute]);
+    void window.yapyap?.setLaunchAtLogin?.(appState.settings.launchAtLogin)
+      .catch(() => showToast('Could not update launch at login.'));
+  }, [appState.settings.launchAtLogin, hydrated, isHudRoute, showToast]);
 
   // Subscribe before telling Electron it can send the current HUD state.
   useEffect(() => {

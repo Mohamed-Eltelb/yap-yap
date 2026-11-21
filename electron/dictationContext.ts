@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { FocusedField } from './pasteCorrections';
 import { macProbe, parseMacContext, parseMacField } from './macContext';
+import { linuxContextProbe } from './linuxContext';
 
 export interface DictationContext {
   application: string;
@@ -185,7 +186,49 @@ function askWindowsHelper(command = ''): Promise<string> {
   });
 }
 
+async function linuxForegroundPid(): Promise<string | undefined> {
+  const pid = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']);
+  return /^\d+$/.test(pid) ? pid : undefined;
+}
+
+const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o', 'comm=']);
+
+// The probe treats a focused field as an address bar only in a browser. Other apps can
+// put ordinary text fields, such as a find bar, in a toolbar.
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste', browser = false): Promise<Record<string, unknown>> {
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 65536);
+  try {
+    return JSON.parse(output);
+  } catch {
+    return {};
+  }
+}
+
+const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
+
+// Paste is still sent when it can't be confirmed, but the result card stays available
+// because a keypress alone does not prove the text arrived. That covers browsers that
+// expose no accessibility tree, and Wayland windows, which X11 tools cannot see.
+export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed' | undefined> {
+  const pid = await linuxForegroundPid();
+  if (!pid) return 'unconfirmed';
+  const [probe, processName] = await Promise.all([
+    linuxProbe(pid, 'paste'),
+    linuxProcessName(pid),
+  ]);
+  if (probe.editable === true) return 'field';
+  if (probe.editable === false) return 'page';
+  if (linuxBrowser.test(processName)) return 'unconfirmed';
+}
+
 export async function readFocusedField(): Promise<FocusedField | undefined> {
+  if (process.platform === 'linux') {
+    const pid = await linuxForegroundPid();
+    if (!pid) return;
+    const { field, text } = await linuxProbe(pid, 'field', linuxBrowser.test(await linuxProcessName(pid)));
+    if (typeof field === 'string' && typeof text === 'string') return { field, text };
+    return;
+  }
   if (process.platform === 'darwin') return parseMacField(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('field')], 1 << 20));
   if (process.platform !== 'win32') return;
   try {
@@ -275,7 +318,18 @@ export async function captureDictationContext(): Promise<DictationContext | unde
     return domain ? { application: mac.application, domain } : { application: mac.application };
   }
 
-  const application = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']).then((pid) =>
-    /^\d+$/.test(pid) ? runContextProbe('ps', ['-p', pid, '-o', 'comm=']) : '');
-  if (application) return { application: application.slice(0, 100) };
+  if (process.platform !== 'linux') return;
+  const pid = await linuxForegroundPid();
+  if (!pid) return;
+  const application = await linuxProcessName(pid);
+  if (!application) return;
+  const browser = linuxBrowser.test(application);
+  const field = await linuxProbe(pid, 'context', browser);
+  return {
+    application: application.slice(0, 100),
+    // Only a browser's page address names a site. Other apps can embed web views of their own.
+    domain: browser ? browserDomain(field.url) : undefined,
+    textBefore: typeof field.textBefore === 'string' ? field.textBefore : undefined,
+    textAfter: typeof field.textAfter === 'string' ? field.textAfter : undefined,
+  };
 }
