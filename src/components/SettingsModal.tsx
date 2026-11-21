@@ -28,7 +28,7 @@ import { PersonalizationChart } from './PersonalizationChart';
 import { CategoryIcon } from './CategoryIcon';
 import { LanguageVariantsDialog, TranslationTargetsDialog, SpokenLanguagesDialog } from './LanguageSettingsDialogs';
 import { SelectMenu } from './SelectMenu';
-import { isMicrophoneMissing, MicrophoneDialog } from './MicrophoneDialog';
+import { isMicrophoneMissing, MicrophoneDialog, useMicrophones } from './MicrophoneDialog';
 import { ProviderSettings } from './ProviderSettings';
 import { feedbackUrl, siteLinks } from '../data/links';
 import { UpdateDialog } from './UpdateDialog';
@@ -211,10 +211,8 @@ export function SettingsModal({
     : PROVIDER_CATALOG[activeLlm].supportsLlm && isProviderConfigured(providers[activeLlm])
       ? providers[activeLlm]
       : Object.values(providers).find((provider) => PROVIDER_CATALOG[provider.id].supportsLlm && isProviderConfigured(provider));
-  const [microphones, setMicrophones] = useState<{ id: string; label: string }[]>([]);
+  const { microphones, known: microphonesKnown, refresh: refreshMicrophones } = useMicrophones(open);
   const [microphoneDialogOpen, setMicrophoneDialogOpen] = useState(false);
-  // Until the app may use the microphone, the system hides device names and ids.
-  const [microphonesKnown, setMicrophonesKnown] = useState(false);
   const microphoneMissing = isMicrophoneMissing(settings.microphoneId, microphones, microphonesKnown);
   const microphoneLabel = settings.microphoneId === 'default'
     ? 'Auto-detect'
@@ -260,31 +258,9 @@ export function SettingsModal({
 
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
 
-  const refreshMicrophones = React.useCallback(() => {
-    navigator.mediaDevices
-      ?.enumerateDevices()
-      .then((devices) => {
-        const mics = devices
-          .filter((d) => d.kind === 'audioinput')
-          .map((d, i) => ({
-            id: d.deviceId || `mic-${i}`,
-            label: d.label || `Microphone ${i + 1}`,
-          }));
-        setMicrophones(mics);
-        setMicrophonesKnown(devices.some((d) => d.kind === 'audioinput' && d.label));
-      })
-      .catch(() => {});
-  }, []);
-
   useEffect(() => {
-    if (!open) {
-      setMicrophoneDialogOpen(false);
-      return;
-    }
-    refreshMicrophones();
-    navigator.mediaDevices?.addEventListener?.('devicechange', refreshMicrophones);
-    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshMicrophones);
-  }, [open, refreshMicrophones]);
+    if (!open) setMicrophoneDialogOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open || activeTab !== 'settings' || !capturingTarget) {

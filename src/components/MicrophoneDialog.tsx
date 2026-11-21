@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, Mic, MicOff, X } from 'lucide-react';
 import { startMicrophoneTest } from '../utils/audioRecorder';
 import { barHeight, bars, loudness } from './DictationHud';
@@ -7,6 +7,32 @@ import { SettingsSubdialog } from './SettingsSubdialog';
 export interface MicrophoneOption {
   id: string;
   label: string;
+}
+
+/**
+ * The connected microphones while `active`, kept current as devices come and go. `known` is false
+ * until the app may use the microphone, since the system hides device names until then.
+ */
+export function useMicrophones(active: boolean) {
+  const [microphones, setMicrophones] = useState<MicrophoneOption[]>([]);
+  const [known, setKnown] = useState(false);
+  const refresh = useCallback(() => {
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      .then((devices) => {
+        const inputs = devices.filter((d) => d.kind === 'audioinput');
+        setMicrophones(inputs.map((d, i) => ({ id: d.deviceId || `mic-${i}`, label: d.label || `Microphone ${i + 1}` })));
+        setKnown(inputs.some((d) => d.label));
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!active) return;
+    refresh();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
+  }, [active, refresh]);
+  return { microphones, known, refresh };
 }
 
 type TestState = 'starting' | 'listening' | 'heard' | 'quiet' | 'missing' | 'error';

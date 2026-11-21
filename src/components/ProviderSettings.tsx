@@ -25,6 +25,8 @@ interface Props {
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
+  /** Opens on this provider's form. Back still leads to the full list. */
+  startWith?: ProviderId;
 }
 
 type View = { type: 'list' } | { type: 'add' | 'manage'; id: ProviderId };
@@ -37,8 +39,10 @@ function ProviderIcon({ id }: { id: ProviderId }) {
   );
 }
 
-export function ProviderSettings({ providers, settings, onUpdateProvider, onRemoveProvider, onUpdateSettings }: Props) {
-  const [view, navigate] = useState<View>({ type: 'list' });
+export function ProviderSettings({ providers, settings, onUpdateProvider, onRemoveProvider, onUpdateSettings, startWith }: Props) {
+  const [view, navigate] = useState<View>(() => startWith
+    ? { type: isProviderConfigured(providers[startWith]) ? 'manage' : 'add', id: startWith }
+    : { type: 'list' });
   const heading = useRef<HTMLHeadingElement>(null);
   const configured = PROVIDER_ORDER.filter((id) => isProviderConfigured(providers[id]));
   const available = PROVIDER_ORDER.filter((id) => !configured.includes(id));
