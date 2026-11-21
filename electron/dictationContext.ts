@@ -180,6 +180,8 @@ async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste'): Pro
   }
 }
 
+const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-esr|brave|msedge|vivaldi|opera)$/i;
+
 // Some browsers expose no accessibility tree. Still send paste there, but leave
 // the result card available because a keypress alone cannot confirm insertion.
 export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed-browser' | undefined> {
@@ -191,7 +193,7 @@ export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirme
   ]);
   if (probe.editable === true) return 'field';
   if (probe.editable === false) return 'page';
-  if (/^(chromium|chrome|firefox|firefox-esr|brave|msedge|vivaldi|opera)$/i.test(processName)) return 'unconfirmed-browser';
+  if (linuxBrowser.test(processName)) return 'unconfirmed-browser';
 }
 
 export async function readFocusedField(): Promise<FocusedField | undefined> {
@@ -282,8 +284,11 @@ export async function captureDictationContext(): Promise<DictationContext | unde
     runContextProbe('ps', ['-p', pid, '-o', 'comm=']),
     linuxProbe(pid, 'context'),
   ]);
-  if (application) return {
+  if (!application) return;
+  return {
     application: application.slice(0, 100),
+    // Only a browser's page address names a site. Other apps can embed web views of their own.
+    domain: linuxBrowser.test(application) ? browserDomain(field.url) : undefined,
     textBefore: typeof field.textBefore === 'string' ? field.textBefore : undefined,
     textAfter: typeof field.textAfter === 'string' ? field.textAfter : undefined,
   };
