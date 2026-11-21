@@ -579,7 +579,7 @@ app.whenReady().then(() => {
     await clipboard.writeText(text);
     try {
       const sent = await pasteIntoFocusedField();
-      return sent && target !== 'unconfirmed-browser';
+      return sent && target !== 'unconfirmed';
     } finally {
       // The paste goes through the clipboard; put back what the user had there once the target has read it.
       if (previous) setTimeout(() => {

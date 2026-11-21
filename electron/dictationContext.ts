@@ -186,18 +186,19 @@ async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste', brow
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
 
-// Some browsers expose no accessibility tree. Still send paste there, but leave
-// the result card available because a keypress alone cannot confirm insertion.
-export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed-browser' | undefined> {
+// Paste is still sent when it can't be confirmed, but the result card stays available
+// because a keypress alone does not prove the text arrived. That covers browsers that
+// expose no accessibility tree, and Wayland windows, which X11 tools cannot see.
+export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed' | undefined> {
   const pid = await linuxForegroundPid();
-  if (!pid) return;
+  if (!pid) return 'unconfirmed';
   const [probe, processName] = await Promise.all([
     linuxProbe(pid, 'paste'),
     linuxProcessName(pid),
   ]);
   if (probe.editable === true) return 'field';
   if (probe.editable === false) return 'page';
-  if (linuxBrowser.test(processName)) return 'unconfirmed-browser';
+  if (linuxBrowser.test(processName)) return 'unconfirmed';
 }
 
 export async function readFocusedField(): Promise<FocusedField | undefined> {
