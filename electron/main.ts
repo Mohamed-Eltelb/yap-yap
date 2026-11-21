@@ -389,7 +389,8 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
         }
       }
     }
-    return true;
+    // Without the hook (Linux with no X server), the renderer handles these shortcuts while Yap Yap is focused.
+    return keyHookAvailable;
   } catch (error) {
     console.warn('Could not register modifier-only shortcuts', error);
     return false;
