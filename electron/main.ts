@@ -14,7 +14,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
@@ -351,7 +351,7 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
     for (const combo of unique[mode]) {
       const accel = toElectronAccelerator(combo);
       const trigger = () => mainWindow?.webContents.send('trigger-mode', mode);
-      if (canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
+      if (keyHookAvailable && canHookShortcut(combo) && (!accel || combo.includes('Right Alt'))) {
         modifierShortcuts.push({ combo, trigger });
         if (accel) claims.push(accel);
         continue;

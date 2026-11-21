@@ -29,6 +29,10 @@ const punctuation: Record<string, string> = {
   '\\': 'Backslash', "'": 'Quote',
 };
 
+// On Linux, uiohook listens through the X server and aborts the whole app when there is
+// none, as on a Wayland desktop without Xwayland. Without it, hook-only shortcuts don't work.
+export const keyHookAvailable = process.platform !== 'linux' || Boolean(process.env.DISPLAY);
+
 export function canHookShortcut(combo: string[]): boolean {
   return combo.length > 0 && combo.every((key) => resolveKey(key) !== undefined);
 }
@@ -111,7 +115,7 @@ export function registerModifierShortcuts(
     });
     if (!nativeHook) {
       // uiohook cannot mask in time, so it is only worth starting for hook shortcuts.
-      if (bindings.length === 0) return;
+      if (bindings.length === 0 || !keyHookAvailable) return;
       uIOhook.start();
     }
     running = true;
