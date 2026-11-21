@@ -27,6 +27,9 @@ interface Props {
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
   onImportDictionary: (words: ImportedWord[]) => void;
+  /** Wispr Flow or Typeless installs found on this computer, which can be imported. */
+  importApps?: { name: string }[];
+  onOpenImport?: () => void;
   /** Finished or skipped. */
   onFinish: () => void;
 }
@@ -37,7 +40,7 @@ export function shortcutLabel(combos: string[][] | undefined): string {
 }
 
 /** First-run setup: from a fresh install to a working dictation. Every step can be skipped. */
-export function Onboarding({ state, latestDictation, onUpdateSettings, onUpdateProvider, onRemoveProvider, onImportDictionary, onFinish }: Props) {
+export function Onboarding({ state, latestDictation, onUpdateSettings, onUpdateProvider, onRemoveProvider, onImportDictionary, importApps = [], onOpenImport, onFinish }: Props) {
   const { settings, providers } = state;
   const [step, setStep] = useState<Step>('welcome');
   const index = STEPS.indexOf(step);
@@ -59,7 +62,7 @@ export function Onboarding({ state, latestDictation, onUpdateSettings, onUpdateP
         </div>
 
         <div className="yy-onboarding-body">
-          {step === 'welcome' && <Welcome heading={heading} onImport={onImportDictionary} />}
+          {step === 'welcome' && <Welcome heading={heading} onImport={onImportDictionary} apps={onOpenImport ? importApps : []} onOpenImport={onOpenImport} />}
           {step === 'provider' && (
             <Section heading={heading} title="Connect a provider" lead="Groq is free to start and handles both transcription and cleanup. Get a key, paste it in, and you're set.">
               <a className="yy-onboarding-link" href={PROVIDER_CATALOG.groq.docsUrl} target="_blank" rel="noreferrer">
@@ -116,7 +119,13 @@ function Section({ heading, title, lead, children }: { heading: React.RefObject<
   );
 }
 
-function Welcome({ heading, onImport }: { heading: React.RefObject<HTMLHeadingElement | null>; onImport: (words: ImportedWord[]) => void }) {
+function Welcome({ heading, onImport, apps, onOpenImport }: {
+  heading: React.RefObject<HTMLHeadingElement | null>;
+  onImport: (words: ImportedWord[]) => void;
+  apps: { name: string }[];
+  onOpenImport?: () => void;
+}) {
+  const names = new Intl.ListFormat('en', { type: 'disjunction' }).format(apps.map((app) => app.name));
   const file = useRef<HTMLInputElement>(null);
   const [imported, setImported] = useState<number>();
   return (
@@ -125,6 +134,13 @@ function Welcome({ heading, onImport }: { heading: React.RefObject<HTMLHeadingEl
         <h3>Why it asks for an API key</h3>
         <p>Yap Yap runs on an AI provider you choose. You bring your own key, so you pay the provider directly (Groq is free to start) and your audio goes only to them.</p>
       </div>
+      {apps.length > 0 ? (
+        <div className="yy-onboarding-note">
+          <h3>Coming from {names}?</h3>
+          <p>Yap Yap found it on this computer. Bring your dictionary and snippets over in one step.</p>
+          <button type="button" className="yy-pref-button" onClick={onOpenImport}>Import from {names}</button>
+        </div>
+      ) : (
       <div className="yy-onboarding-note">
         <h3>Coming from Wispr Flow or Typeless?</h3>
         <p>Export your dictionary there as a CSV file and bring it along. Your words and replacements carry over.</p>
@@ -150,6 +166,7 @@ function Welcome({ heading, onImport }: { heading: React.RefObject<HTMLHeadingEl
           </p>
         )}
       </div>
+      )}
     </Section>
   );
 }

@@ -611,3 +611,23 @@ describe('Learning from edits after a paste', () => {
     expect(engine.detectWritingStyle).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('First-run setup', () => {
+  it('shows on a fresh install and is saved as done when skipped', async () => {
+    seed();
+    (store.loaded as { providers: Record<string, { apiKey: string }> }).providers.groq.apiKey = '';
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Welcome to Yap Yap' })).toBeTruthy();
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Skip setup' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Welcome to Yap Yap' })).toBeNull());
+    await waitFor(() => expect((store.saves.at(-1) as { settings: SettingsState }).settings.onboardingDone).toBe(true));
+  });
+
+  it('never shows for someone who already set up a provider', async () => {
+    seed();
+    render(<App />);
+    await waitFor(() => expect(desktop.trigger).toBeDefined());
+    expect(screen.queryByRole('heading', { name: 'Welcome to Yap Yap' })).toBeNull();
+  });
+});

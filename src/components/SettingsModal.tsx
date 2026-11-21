@@ -67,6 +67,8 @@ interface Props {
   /** Other dictation apps found on this computer that Yap Yap can import from. */
   importApps: ImportSource[];
   onOpenImport: () => void;
+  /** Opens first-run setup again. */
+  onRunSetup: () => void;
 }
 
 function formatKeyName(e: KeyboardEvent): string {
@@ -161,6 +163,7 @@ export function SettingsModal({
   toast,
   importApps,
   onOpenImport,
+  onRunSetup,
   onCapturingShortcutChange,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -1106,6 +1109,17 @@ export function SettingsModal({
                       <ArrowUpRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
                     </a>
                   ))}
+                  <button
+                    type="button"
+                    onClick={onRunSetup}
+                    className="w-full flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-medium text-[var(--text-primary)]">Run setup again</span>
+                      <span className="block text-[13px] text-[var(--text-secondary)] mt-0.5">Walk through keys, microphone, a practice dictation and how Yap Yap writes.</span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+                  </button>
                 </div>
               </div>
             )}

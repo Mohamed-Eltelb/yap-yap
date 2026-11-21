@@ -3,6 +3,8 @@ import { pauseHoldCombo } from '../electron/shortcutBindings';
 import type { DictationContext } from '../electron/dictationContext';
 import { DictionaryView, type ImportedWord } from './components/DictionaryView';
 import { SnippetsView } from './components/SnippetsView';
+import { Onboarding } from './components/Onboarding';
+import { shouldShowOnboarding } from './services/onboarding';
 import { DictationHud, HudState, PAUSE_TIP_MS } from './components/DictationHud';
 import { HistoryView } from './components/HistoryView';
 import { HomeView } from './components/HomeView';
@@ -102,6 +104,10 @@ export function App() {
   /** Wispr Flow and Typeless data on this computer that can be imported. */
   const [otherApps, setOtherApps] = useState<OtherAppData[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  /** First-run setup, shown over the app. */
+  const [setupOpen, setSetupOpen] = useState(false);
+  const setupOpenRef = useRef(false);
+  setupOpenRef.current = setupOpen;
   const lastImportRef = useRef<{ receipt: ImportReceipt; after: Pick<PersistedAppState, 'dictionary' | 'snippets'> } | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
   const [globalModifiers, setGlobalModifiers] = useState(false);
@@ -148,6 +154,8 @@ export function App() {
         // Dictations that expired while the app was closed keep their learned style.
         settings: { ...loaded.settings, retainedStyleSamples: retainRemovedStyles(loaded.history, history, loaded.settings.retainedStyleSamples) },
       });
+      // Once shown, setup stays until finished or skipped, even after a key is added in it.
+      if (shouldShowOnboarding(loaded)) setSetupOpen(true);
       setHydrated(true);
     });
   }, [isHudRoute]);
@@ -1050,6 +1058,11 @@ export function App() {
           updateSettings({ activeSttProvider: sttId });
         } else {
           const message = 'Add an API key in Yap Yap to start dictating.';
+          // Setup is already asking for the key; Settings would open behind it.
+          if (setupOpenRef.current) {
+            closePlaceholder();
+            return;
+          }
           if (document.hasFocus() || !useFloatingHud) {
             closePlaceholder();
             setModalTab('providers');
@@ -1806,7 +1819,28 @@ export function App() {
         toast={toast}
         importApps={otherApps.map(({ name, icon }) => ({ name, icon }))}
         onOpenImport={openImport}
+        onRunSetup={() => {
+          setModalOpen(false);
+          setSetupOpen(true);
+        }}
       />
+
+      {setupOpen && (
+        <Onboarding
+          state={appState}
+          latestDictation={appState.history.find((item) => item.mode === 'dictate' && item.text.trim())?.text}
+          onUpdateSettings={updateSettings}
+          onUpdateProvider={updateProvider}
+          onRemoveProvider={removeProvider}
+          onImportDictionary={handleImportDictionaryWords}
+          importApps={otherApps}
+          onOpenImport={openImport}
+          onFinish={() => {
+            setSetupOpen(false);
+            updateSettings({ onboardingDone: true });
+          }}
+        />
+      )}
 
       {importOpen && (
         <ImportDialog
