@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   BookText,
+  Download,
   HelpCircle,
   History,
   Home,
@@ -39,6 +40,10 @@ interface Props {
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   dismissedQuickCard: boolean;
+  /** Other dictation apps found on this computer, offered for import. Empty hides the card. */
+  importApps?: string[];
+  onOpenImport?: () => void;
+  onDismissImport?: () => void;
   onDismissQuickCard: () => void;
   isRecording: boolean;
 }
@@ -58,6 +63,9 @@ export function Sidebar({
   onUpdateSettings,
   onUpdateProvider,
   dismissedQuickCard,
+  importApps = [],
+  onOpenImport,
+  onDismissImport,
   onDismissQuickCard,
   isRecording,
 }: Props) {
@@ -111,6 +119,26 @@ export function Sidebar({
       {/* Bottom Cards + Utility Icons */}
       <div className="px-3 pb-3 space-y-2.5">
         <UpdateCard />
+
+        {importApps.length > 0 && (
+          <div className="relative group yy-import-card">
+            <button type="button" onClick={onOpenImport} aria-haspopup="dialog">
+              <Download aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                <strong>Coming from {importApps.join(' or ')}?</strong>
+                <small>Bring your words, snippets, and styles.</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={onDismissImport}
+              aria-label="Dismiss import card"
+              className="absolute -top-1.5 -right-1 w-4 h-4 rounded-full bg-zinc-400/80 hover:bg-zinc-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        )}
 
         {!dismissedQuickCard && (
           <div className="relative group">

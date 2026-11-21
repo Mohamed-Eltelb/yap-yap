@@ -25,6 +25,7 @@ import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindo
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
+import { readOtherApps } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
 
 let mainWindow: BrowserWindow | null = null;
@@ -582,6 +583,9 @@ app.whenReady().then(() => {
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()
       ? watchPasteCorrections(text, readFocusedField)
       : { words: [] });
+  // Reads only the other apps' fixed data folders; the renderer never passes a path.
+  ipcMain.handle('import:other-apps', (event) =>
+    event.sender === mainWindow?.webContents ? readOtherApps(app.getPath('appData')) : []);
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
     if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
   });

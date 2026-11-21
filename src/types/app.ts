@@ -187,6 +187,8 @@ export interface SettingsState {
   activeSttProvider: ProviderId;
   activeLlmProvider: ProviderId | 'none';
   dismissedQuickCard: boolean;
+  /** The sidebar offer to import from Wispr Flow or Typeless was dismissed or used. */
+  dismissedImportCard: boolean;
 }
 
 export type ActiveNav = 'home' | 'history' | 'dictionary' | 'snippets';

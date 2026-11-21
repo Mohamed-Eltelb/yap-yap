@@ -2849,3 +2849,100 @@ html.dark .yy-personalization-options > div {
 @media (prefers-reduced-motion: reduce) {
   .yy-mic-stage .yy-hud-wave span { transition: none; }
 }
+
+/* Import from another app. */
+.yy-import-body {
+  gap: 0;
+}
+
+.yy-import-apps {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.yy-import-apps button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.yy-import-apps button[aria-selected="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.yy-import-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.yy-import-heading input {
+  accent-color: var(--text-primary);
+}
+
+.yy-import-row + .yy-import-row {
+  margin-top: 6px;
+}
+
+.yy-import-row[data-muted] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.yy-import-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  background: var(--bg-modal);
+}
+
+.yy-import-actions > span {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-import-card > button:first-child {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: var(--bg-card-solid);
+  color: var(--text-primary);
+  text-align: left;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.yy-import-card > button:first-child:hover {
+  background: var(--bg-hover);
+}
+
+.yy-import-card svg {
+  margin-top: 2px;
+}
+
+.yy-import-card span {
+  display: grid;
+  gap: 1px;
+}
+
+.yy-import-card strong {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.yy-import-card small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}

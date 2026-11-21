@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('yapyap', {
   preparePaste: () => ipcRenderer.send('clipboard:prepare-paste'),
   captureDictationContext: () => ipcRenderer.invoke('dictation:capture-context'),
   watchPasteCorrections: (text: string) => ipcRenderer.invoke('dictation:watch-corrections', text),
+  readOtherApps: () => ipcRenderer.invoke('import:other-apps'),
   pasteText: (text: string, keepOnClipboard?: boolean) => ipcRenderer.invoke('clipboard:paste', text, keepOnClipboard === true),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>

@@ -2,6 +2,7 @@ import type { UpdateState } from '../../../electron/updateController';
 import { speechLanguages } from '../../data/spokenLanguages';
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext } from '../../../electron/dictationContext';
+import type { OtherAppData } from '../../../electron/otherApps';
 import { CleanupLevel, DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
 import { builtInCategory, categoryForDestination, sourceKey, cleanWritingRule, MAX_WRITING_PREFERENCE_RULES, MAX_WRITING_PREFERENCES_LENGTH, parseWritingPreferences, readWritingRule, writeWritingRule, writingRulesFor, parseWritingSample, writingCategoryKey, MAX_CORRECTED_PHRASING_LENGTH, type StyleSampleSinceCorrection, WRITING_CATEGORIES, WRITING_TONES, type WritingDestination, type WritingProfile } from '../personalization';
 import { PROVIDER_CATALOG } from './catalog';
@@ -43,6 +44,8 @@ declare global {
       captureDictationContext: () => Promise<DictationContext | undefined>;
       /** Resolves with words the user respelled in the destination after a paste. */
       watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
+      /** What Wispr Flow and Typeless on this computer hold that Yap Yap can bring over. */
+      readOtherApps?: () => Promise<OtherAppData[]>;
       pasteText: (text: string, keepOnClipboard?: boolean) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;

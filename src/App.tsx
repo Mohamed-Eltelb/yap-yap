@@ -7,6 +7,9 @@ import { DictationHud, HudState, PAUSE_TIP_MS } from './components/DictationHud'
 import { HistoryView } from './components/HistoryView';
 import { HomeView } from './components/HomeView';
 import { SettingsModal } from './components/SettingsModal';
+import { ImportDialog } from './components/ImportDialog';
+import type { OtherAppData } from '../electron/otherApps';
+import { applyImport, undoImport, type ImportPlan, type ImportReceipt, type ImportSelection } from './services/otherAppImport';
 import { ShareModal } from './components/ShareModal';
 import { Sidebar } from './components/Sidebar';
 import { getPreferredLanguageVariants } from './data/languages';
@@ -96,6 +99,10 @@ export function App() {
   const [showHudTargetSettings, setShowHudTargetSettings] = useState(false);
   const [modalTab, setModalTab] = useState<SettingsModalTab>('providers');
   const [shareOpen, setShareOpen] = useState(false);
+  /** Wispr Flow and Typeless data on this computer that can be imported. */
+  const [otherApps, setOtherApps] = useState<OtherAppData[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const lastImportRef = useRef<{ receipt: ImportReceipt; after: Pick<PersistedAppState, 'dictionary' | 'snippets'> } | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
   const [globalModifiers, setGlobalModifiers] = useState(false);
 
@@ -1606,6 +1613,36 @@ export function App() {
     });
   };
 
+  /** Reads Wispr Flow and Typeless again, so the review shows what they hold now. */
+  const readOtherApps = useCallback(() => window.yapyap?.readOtherApps?.()
+    .then((apps) => apps.filter((app) => app.words.length || app.snippets.length || app.history.length || Object.keys(app.settings).length))
+    .catch(() => [] as OtherAppData[]) ?? Promise.resolve([] as OtherAppData[]), []);
+
+  useEffect(() => {
+    if (isHudRoute || !hydrated) return;
+    let live = true;
+    void readOtherApps().then((apps) => { if (live) setOtherApps(apps); });
+    return () => { live = false; };
+  }, [hydrated, isHudRoute, readOtherApps]);
+
+  const openImport = () => {
+    void readOtherApps().then((apps) => {
+      setOtherApps(apps);
+      setImportOpen(true);
+    });
+  };
+
+  const handleImportOtherApp = (plan: ImportPlan, selection: ImportSelection) => {
+    // Counted on the current state for the message; applied again to the saved state in case it changed.
+    const { added } = applyImport(appState, plan, selection);
+    setAppState((prev) => {
+      const applied = applyImport(prev, plan, selection);
+      lastImportRef.current = { receipt: applied.receipt, after: { dictionary: applied.state.dictionary, snippets: applied.state.snippets } };
+      return { ...applied.state, settings: { ...applied.state.settings, dismissedImportCard: true } };
+    });
+    return added;
+  };
+
   const handleImportDictionaryWords = (words: ImportedWord[]) => {
     // Counted on the current list for the message; the saved list is merged again in case it changed.
     const { added, updated } = mergeImportedWords(appState.dictionary, words);
@@ -1653,6 +1690,9 @@ export function App() {
         onUpdateProvider={updateProvider}
         dismissedQuickCard={appState.settings.dismissedQuickCard}
         onDismissQuickCard={() => updateSettings({ dismissedQuickCard: true })}
+        importApps={appState.settings.dismissedImportCard ? [] : otherApps.map((item) => item.name)}
+        onOpenImport={openImport}
+        onDismissImport={() => updateSettings({ dismissedImportCard: true })}
         isRecording={hud.status === 'recording'}
       />
 
@@ -1763,7 +1803,25 @@ export function App() {
         }}
         stats={stats}
         toast={toast}
+        importApps={otherApps.map((item) => item.name)}
+        onOpenImport={openImport}
       />
+
+      {importOpen && (
+        <ImportDialog
+          apps={otherApps}
+          state={appState}
+          defaultProvider={appState.settings.activeSttProvider}
+          onImport={handleImportOtherApp}
+          onUndo={() => {
+            const last = lastImportRef.current;
+            if (!last) return;
+            lastImportRef.current = undefined;
+            setAppState((prev) => undoImport(prev, last.receipt, last.after));
+          }}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
 
       <ShareModal
         open={shareOpen}
