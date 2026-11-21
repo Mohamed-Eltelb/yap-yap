@@ -28,7 +28,9 @@ def page_url(node):
             return value
     return None
 
-def is_address_bar(node, attrs):
+def is_address_bar(node, attrs, browser):
+    if not browser:
+        return False
     # Browser address bars sit in a toolbar of the browser itself, outside any web page. The structure
     # works in every UI language. A toolbar inside a page (role="toolbar") holds ordinary page inputs.
     toolbar = False
@@ -47,7 +49,7 @@ def is_address_bar(node, attrs):
     label = (node.get_name() or '').lower()
     return 'address bar' in label or 'address and search' in label or 'search or enter address' in label
 
-def read_field(pid, mode):
+def read_field(pid, mode, browser):
     desktop = Atspi.get_desktop(0)
     for index in range(desktop.get_child_count()):
         app = desktop.get_child_at_index(index)
@@ -90,7 +92,7 @@ def read_field(pid, mode):
                     caret = node.get_caret_offset()
                     count = node.get_character_count()
                     # Address bars can contain private URLs. Never treat one as editor context.
-                    if is_address_bar(node, attrs) or not 0 <= caret <= count or node.get_n_selections() > 0:
+                    if is_address_bar(node, attrs, browser) or not 0 <= caret <= count or node.get_n_selections() > 0:
                         if mode != 'context':
                             return
                         if url:
@@ -109,5 +111,5 @@ def read_field(pid, mode):
             return dict(editable=False) if focused_page and not queue else None
         return dict(url=url) if url and mode == 'context' else None
 
-print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2]) or {}, ensure_ascii=False))
+print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2], len(sys.argv) > 3 and sys.argv[3] == 'browser') or {}, ensure_ascii=False))
 `;

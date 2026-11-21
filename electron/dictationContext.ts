@@ -171,8 +171,12 @@ async function linuxForegroundPid(): Promise<string | undefined> {
   return /^\d+$/.test(pid) ? pid : undefined;
 }
 
-async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste'): Promise<Record<string, unknown>> {
-  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode], 65536);
+const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o', 'comm=']);
+
+// The probe treats a focused field as an address bar only in a browser. Other apps can
+// put ordinary text fields, such as a find bar, in a toolbar.
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste', browser = false): Promise<Record<string, unknown>> {
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 65536);
   try {
     return JSON.parse(output);
   } catch {
@@ -189,7 +193,7 @@ export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirme
   if (!pid) return;
   const [probe, processName] = await Promise.all([
     linuxProbe(pid, 'paste'),
-    runContextProbe('ps', ['-p', pid, '-o', 'comm=']),
+    linuxProcessName(pid),
   ]);
   if (probe.editable === true) return 'field';
   if (probe.editable === false) return 'page';
@@ -200,7 +204,7 @@ export async function readFocusedField(): Promise<FocusedField | undefined> {
   if (process.platform === 'linux') {
     const pid = await linuxForegroundPid();
     if (!pid) return;
-    const { field, text } = await linuxProbe(pid, 'field');
+    const { field, text } = await linuxProbe(pid, 'field', linuxBrowser.test(await linuxProcessName(pid)));
     if (typeof field === 'string' && typeof text === 'string') return { field, text };
     return;
   }
@@ -280,15 +284,14 @@ export async function captureDictationContext(): Promise<DictationContext | unde
   if (process.platform !== 'linux') return;
   const pid = await linuxForegroundPid();
   if (!pid) return;
-  const [application, field] = await Promise.all([
-    runContextProbe('ps', ['-p', pid, '-o', 'comm=']),
-    linuxProbe(pid, 'context'),
-  ]);
+  const application = await linuxProcessName(pid);
   if (!application) return;
+  const browser = linuxBrowser.test(application);
+  const field = await linuxProbe(pid, 'context', browser);
   return {
     application: application.slice(0, 100),
     // Only a browser's page address names a site. Other apps can embed web views of their own.
-    domain: linuxBrowser.test(application) ? browserDomain(field.url) : undefined,
+    domain: browser ? browserDomain(field.url) : undefined,
     textBefore: typeof field.textBefore === 'string' ? field.textBefore : undefined,
     textAfter: typeof field.textAfter === 'string' ? field.textAfter : undefined,
   };
