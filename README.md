@@ -67,7 +67,7 @@ npm run dev
 | --- | --- |
 | Windows x64 | The source checkout includes the native shortcut DLL. To rebuild it, install Visual Studio C++ Build Tools with the x64 toolchain and Windows SDK, then run `npm run build:keyhook`. |
 | macOS (experimental) | Allow microphone access. Global shortcuts and pasting can require Accessibility, Input Monitoring, and Automation permissions for the app you launch. |
-| Linux (experimental) | Use an X11 session with `xdotool` installed for auto-paste. For cursor context and learning from edits in accessible text fields, install the system Python 3 PyGObject and AT-SPI bindings (Debian/Ubuntu: `python3-gi gir1.2-atspi-2.0`). Without them, context falls back to the application name. Native Wayland shortcuts and paste are unverified. |
+| Linux (experimental) | Use an X11 session with `xdotool` installed for auto-paste. For cursor context and learning from edits in accessible text fields, install the system Python 3 PyGObject and AT-SPI bindings (Debian/Ubuntu: `python3-gi gir1.2-atspi-2.0`). Without them, context falls back to the application name. System mute uses `pactl` (PulseAudio or PipeWire-Pulse) or `amixer` (ALSA). Native Wayland shortcuts and paste are unverified. |
 
 Use `npm run dev:web` to explore the interface in a browser at `http://localhost:5173`. Global shortcuts, the floating desktop recorder, and cross-app paste run in Electron.
 

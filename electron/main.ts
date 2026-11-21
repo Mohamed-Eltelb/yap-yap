@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
+import { setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
@@ -532,11 +533,13 @@ app.whenReady().then(() => {
       applyAppearance(appearance);
     }
   });
-  ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
-    try {
+  ipcMain.handle('app:set-login-item', (event, enabled: boolean) => {
+    if (!fromMainFrame(event) || typeof enabled !== 'boolean') return;
+    if (process.platform === 'linux') {
+      // Only installed builds can start independently of the development server.
+      if (app.isPackaged) setLinuxAutostart(app.getPath('appData'), enabled, [process.env.APPIMAGE || process.execPath]);
+    } else {
       app.setLoginItemSettings({ openAtLogin: enabled });
-    } catch {
-      // Ignore on unsupported Linux environments
     }
   });
 
