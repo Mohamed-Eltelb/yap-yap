@@ -19,9 +19,12 @@ const wispr: OtherAppData = {
   snippets: [{ trigger: 'my sig', expansion: 'Best, Sam' }],
   history: [{ createdAt: '2026-11-16T13:44:31.370Z', mode: 'dictate', text: 'Hey Sam.', application: 'Discord' }],
   settings: { styles: { Messaging: 'casual' }, cleanup: 'light' },
-  notes: [],
+  notes: ['Yap Yap uses your personal style for all messaging.'],
 };
-const typeless: OtherAppData = { ...wispr, app: 'typeless', name: 'Typeless', words: [], snippets: [], settings: {}, notes: ['Typeless keeps your dictionary in your account.'] };
+const typeless: OtherAppData = {
+  ...wispr, app: 'typeless', name: 'Typeless', words: [], snippets: [], settings: {},
+  notes: ['Typeless keeps your dictionary in your account, not on this computer.'],
+};
 
 function renderDialog(apps = [wispr, typeless]) {
   const initial = getInitialState();
@@ -42,44 +45,52 @@ function renderDialog(apps = [wispr, typeless]) {
 }
 
 describe('Import dialog', () => {
-  it('shows everything for review, lets the user untick items, and imports only what stays ticked', async () => {
+  it('summarizes each kind of data and says exactly what will import', () => {
+    renderDialog();
+    expect(screen.getByText('2 new words.')).toBeTruthy();
+    expect(screen.getByText('Messaging casual')).toBeTruthy();
+    expect(screen.getByText('Yap Yap uses your personal style for all messaging.')).toBeTruthy();
+    expect(screen.getByText('Imports 2 words, 1 snippet, 1 setting, and 1 History entry.')).toBeTruthy();
+  });
+
+  it('switches a kind of data off, or one item at a time after review', async () => {
     const { onImport } = renderDialog();
     const user = userEvent.setup();
 
-    expect(screen.getByText('Replaces “hand of”')).toBeTruthy();
-    expect(screen.getByText('Messaging: Casual')).toBeTruthy();
-    // Cleanup is already Light, so there is nothing to change.
-    expect((screen.getByRole('checkbox', { name: /AI cleanup: Light/ }) as HTMLInputElement).disabled).toBe(true);
-
+    await user.click(screen.getByRole('switch', { name: 'Import snippets' }));
+    await user.click(screen.getAllByRole('button', { name: 'Review' })[0]);
     await user.click(screen.getByRole('checkbox', { name: /Supabase/ }));
-    await user.click(screen.getByRole('button', { name: 'Import' }));
+    expect(screen.getByText('1 of 2 new words.')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /handoff.*Fixes “hand of”/ })).toBeTruthy();
 
-    const [plan, selection] = onImport.mock.calls[0] as unknown as [{ app: string }, { words: string[]; snippets: string[]; history: boolean; styles: string[] }];
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    const [plan, selection] = onImport.mock.calls[0] as unknown as [{ app: string }, object];
     expect(plan.app).toBe('wispr-flow');
-    expect(selection).toMatchObject({ words: ['handoff'], snippets: ['my sig'], history: true, styles: ['Messaging'], cleanup: false });
-    expect(screen.getByRole('status').textContent).toBe('Imported 1 word, 1 snippet, 1 History entry, and 1 setting.');
+    expect(selection).toMatchObject({ words: ['handoff'], snippets: [], history: true, styles: ['Messaging'], cleanup: false });
   });
 
-  it('offers Undo after an import', async () => {
+  it('shows what was imported and offers Undo', async () => {
     const { onUndo } = renderDialog();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Import' }));
+    expect(screen.getByRole('heading', { name: 'Imported from Wispr Flow' })).toBeTruthy();
+    expect(screen.getByText('1 snippet ready to say')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onUndo).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: 'Import' })).toBeTruthy();
   });
 
-  it('switches between the apps found and shows what can’t come over', async () => {
+  it('switches between the apps found and says what can’t come over', async () => {
     renderDialog();
     const user = userEvent.setup();
     await user.click(screen.getByRole('tab', { name: 'Typeless' }));
-    expect(screen.getByRole('heading', { name: 'Import from Typeless' })).toBeTruthy();
-    expect(screen.getByText('Typeless keeps your dictionary in your account.')).toBeTruthy();
-    expect(screen.queryByText('Dictionary')).toBeNull();
+    expect(screen.getByText('Typeless keeps your dictionary in your account, not on this computer.')).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: 'Import dictionary' })).toBeNull();
+    expect(screen.getByText('Imports 1 History entry.')).toBeTruthy();
   });
 
   it('says so when no other app is installed', () => {
     renderDialog([]);
-    expect(screen.getByText(/didn’t find Wispr Flow or Typeless/)).toBeTruthy();
+    expect(screen.getByText(/Neither app is on this computer/)).toBeTruthy();
   });
 });
