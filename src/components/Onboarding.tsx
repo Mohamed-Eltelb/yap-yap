@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Check, Mic } from 'lucide-react';
+import { Check, Mic } from 'lucide-react';
 import { PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import { STYLE_PRESETS } from '../services/personalization';
 import type { PersistedAppState } from '../services/storage';
@@ -64,10 +64,7 @@ export function Onboarding({ state, latestDictation, onUpdateSettings, onUpdateP
         <div className="yy-onboarding-body">
           {step === 'welcome' && <Welcome heading={heading} onImport={onImportDictionary} apps={onOpenImport ? importApps : []} onOpenImport={onOpenImport} />}
           {step === 'provider' && (
-            <Section heading={heading} title="Connect a provider" lead="Groq is free to start and handles both transcription and cleanup. Get a key, paste it in, and you're set.">
-              <a className="yy-onboarding-link" href={PROVIDER_CATALOG.groq.docsUrl} target="_blank" rel="noreferrer">
-                Get a free Groq key <ArrowUpRight size={14} aria-hidden="true" />
-              </a>
+            <Section heading={heading} title="Connect a provider" lead="Groq is free to start and handles both transcription and cleanup. Use Get an API key below, paste the key in, and you're set.">
               <div className="yy-onboarding-providers">
                 <ProviderSettings
                   providers={providers}

@@ -47,7 +47,7 @@
 }
 
 .yy-onboarding-dots li[data-state='done'] {
-  background: var(--text-secondary);
+  background: var(--text-muted);
 }
 
 .yy-onboarding-dots li[data-state='current'] {
@@ -113,17 +113,6 @@
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.yy-onboarding-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 12px;
-  font-size: 13.5px;
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 /* The provider settings, minus their own page heading. */
