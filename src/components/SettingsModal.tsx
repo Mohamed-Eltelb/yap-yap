@@ -1090,6 +1090,7 @@ export function SettingsModal({
                 </h2>
                 <div className="-mx-3">
                   {[
+                    { href: siteLinks.helpCenter, title: 'Help Center', detail: 'Guides for every feature, and fixes for common problems.' },
                     { href: siteLinks.setupGuide, title: 'Setup guide', detail: 'Get each API key, plus prices and free plans.' },
                     { href: siteLinks.bestSetups, title: 'Best setups', detail: 'Which providers to combine, from free to best quality.' },
                     { href: siteLinks.home, title: 'Yap Yap website', detail: 'Features, FAQs, and downloads.' },

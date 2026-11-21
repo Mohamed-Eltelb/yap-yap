@@ -5,6 +5,8 @@ export const SITE_URL = 'https://yapyap-app.vercel.app';
 
 export const siteLinks = {
   home: `${SITE_URL}/`,
+  /** Guides and troubleshooting for every part of the app. */
+  helpCenter: `${SITE_URL}/help.html`,
   /** How to get each provider's key, and what it costs. */
   setupGuide: `${SITE_URL}/providers.html`,
   /** Recommended dictation + AI combinations. */
