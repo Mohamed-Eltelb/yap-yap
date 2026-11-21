@@ -15,6 +15,7 @@ import {
   formatWordCount,
 } from '../services/stats';
 import { getInitialState, sanitizeLoadedState } from '../services/storage';
+import { shouldShowOnboarding } from '../services/onboarding';
 import { createDefaultProviders, PROVIDER_CATALOG, isProviderConfigured } from '../services/providers/catalog';
 import {
   detectWritingStyle,
@@ -2097,3 +2098,12 @@ describe('snippets', () => {
   });
 });
 
+
+describe('First-run setup', () => {
+  it('shows on a fresh install and never once a key is added or setup was finished', () => {
+    const fresh = getInitialState();
+    expect(shouldShowOnboarding(fresh)).toBe(true);
+    expect(shouldShowOnboarding({ ...fresh, settings: { ...fresh.settings, onboardingDone: true } })).toBe(false);
+    expect(shouldShowOnboarding({ ...fresh, providers: { ...fresh.providers, groq: { ...fresh.providers.groq, apiKey: 'gsk_test' } } })).toBe(false);
+  });
+});

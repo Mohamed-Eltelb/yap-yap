@@ -181,6 +181,8 @@ export interface SettingsState {
   learnFromEdits: boolean;
   /** A style preset id for places with no style picked or learned, or '' to learn only. */
   defaultStyle: string;
+  /** First-run setup was finished or skipped. */
+  onboardingDone: boolean;
   floatingHud: boolean;
   historyRetention: RetentionPolicy;
   cloudSyncMock: boolean;

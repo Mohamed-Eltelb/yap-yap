@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   contextAwareness: true,
   learnFromEdits: true,
   defaultStyle: '',
+  onboardingDone: false,
   floatingHud: true,
   historyRetention: 'forever',
   cloudSyncMock: false,
