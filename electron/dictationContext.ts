@@ -13,7 +13,33 @@ export interface DictationContext {
 const windowsContext = String.raw`
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type -Namespace YapYap -Name Foreground -MemberDefinition '[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+# The browser's address bar, searched in the toolbar only. A page input is never the address bar.
+function Find-Address($window) {
+  if (!$window) { return $null }
+  $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
+  $queue = [Collections.Generic.Queue[object]]::new()
+  $queue.Enqueue(@{ node = $window; depth = 0 })
+  for ($visited = 0; $queue.Count -and $visited -lt 600; $visited++) {
+    $entry = $queue.Dequeue()
+    $node = $entry.node
+    if ($node.Current.ControlType -in @([Windows.Automation.ControlType]::Document, [Windows.Automation.ControlType]::TabItem)) { continue }
+    # Firefox shows its address bar as a combo box, Chromium browsers as an edit box.
+    if ($node.Current.ControlType -in @([Windows.Automation.ControlType]::Edit, [Windows.Automation.ControlType]::ComboBox) -and
+        ($node.Current.AutomationId -in @('addressEditBox', 'urlbar-input') -or
+         $node.Current.Name -match '^(Address and search bar|Search or enter address|Address bar)$')) {
+      $value = $null
+      if ($node.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$value)) { return $value.Current.Value }
+      return $null
+    }
+    if ($entry.depth -ge 10) { continue }
+    for ($child = $walker.GetFirstChild($node); $child -and $queue.Count -lt 600; $child = $walker.GetNextSibling($child)) {
+      $queue.Enqueue(@{ node = $child; depth = $entry.depth + 1 })
+    }
+  }
+  return $null
+}
 function Get-DictationContext {
 $element = [Windows.Automation.AutomationElement]::FocusedElement
 if (!$element -or !$element.Current.IsEnabled -or $element.Current.IsPassword) { return }
@@ -34,28 +60,19 @@ while ($true) {
   $window = $parent
 }
 
-if ($process.ProcessName -match '^(chrome|msedge|firefox|brave|vivaldi|opera|arc|comet|zen)$' -and $window) {
-  # Search browser chrome only. Never treat a page input as the address bar.
-  $queue = [Collections.Generic.Queue[object]]::new()
-  $queue.Enqueue(@{ node = $window; depth = 0 })
-  for ($visited = 0; $queue.Count -and $visited -lt 600; $visited++) {
-    $entry = $queue.Dequeue()
-    $node = $entry.node
-    if ($node.Current.ControlType -in @([Windows.Automation.ControlType]::Document, [Windows.Automation.ControlType]::TabItem)) { continue }
-    if ($node.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
-        ($node.Current.AutomationId -in @('addressEditBox', 'urlbar-input') -or
-         $node.Current.Name -match '^(Address and search bar|Search or enter address|Address bar)$')) {
-      $address = $null
-      if ($node.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$address)) {
-        $context.address = $address.Current.Value
+if ($process.ProcessName -match '^(chrome|msedge|firefox|brave|vivaldi|opera|arc|comet|zen)$') {
+  $address = Find-Address $window
+  # Firefox can report focus on a window that is not inside its main window. The foreground
+  # window, when it belongs to the same browser, holds the toolbar.
+  if ($null -eq $address) {
+    try {
+      $foreground = [Windows.Automation.AutomationElement]::FromHandle([YapYap.Foreground]::GetForegroundWindow())
+      if ($foreground -and (Get-Process -Id $foreground.Current.ProcessId).ProcessName -eq $process.ProcessName) {
+        $address = Find-Address $foreground
       }
-      break
-    }
-    if ($entry.depth -ge 10) { continue }
-    for ($child = $walker.GetFirstChild($node); $child -and $queue.Count -lt 600; $child = $walker.GetNextSibling($child)) {
-      $queue.Enqueue(@{ node = $child; depth = $entry.depth + 1 })
-    }
+    } catch { }
   }
+  if ($null -ne $address) { $context.address = $address }
 }
 
 if ($element.Current.Name -notmatch 'address.*bar|search or enter address' -and
@@ -63,6 +80,8 @@ if ($element.Current.Name -notmatch 'address.*bar|search or enter address' -and
   $pattern = $null
   if ($element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) {
     $selection = $pattern.GetSelection() | Select-Object -First 1
+    # A caret in a read-only page (no text box focused) would send the page's own text.
+    if ($selection -and $selection.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -eq $true) { $selection = $null }
     if ($selection -and $selection.CompareEndpoints([Windows.Automation.Text.TextPatternRangeEndpoint]::Start, $selection, [Windows.Automation.Text.TextPatternRangeEndpoint]::End) -eq 0) {
       $start = [Windows.Automation.Text.TextPatternRangeEndpoint]::Start
       $end = [Windows.Automation.Text.TextPatternRangeEndpoint]::End
@@ -90,6 +109,7 @@ function Get-FocusedField {
   if (!$element -or $element.Current.IsPassword) { return }
   $pattern = $null
   if (!$element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) { return }
+  if ($pattern.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -eq $true) { return }
   $range = $pattern.DocumentRange
   $selection = $pattern.GetSelection() | Select-Object -First 1
   if ($selection) {
