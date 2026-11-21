@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
@@ -9,9 +9,11 @@ function desktopArgument(value: string): string {
   return '"' + argument.replace(/\\/g, '\\\\') + '"';
 }
 
+const entryPath = (configDir: string) => join(configDir, 'autostart', 'com.yapyap.desktop.desktop');
+
 export function setLinuxAutostart(configDir: string, enabled: boolean, command: string[]): void {
+  const filename = entryPath(configDir);
   const directory = join(configDir, 'autostart');
-  const filename = join(directory, 'com.yapyap.desktop.desktop');
   if (!enabled) {
     rmSync(filename, { force: true });
     return;
@@ -26,4 +28,10 @@ export function setLinuxAutostart(configDir: string, enabled: boolean, command: 
   } finally {
     rmSync(temporary, { force: true });
   }
+}
+
+// An update can move the AppImage to a new versioned file name. When it installs on quit, the app
+// isn't opened again to refresh the entry, so the next sign-in would point at a deleted file.
+export function retargetLinuxAutostart(configDir: string, command: string[]): void {
+  if (existsSync(entryPath(configDir))) setLinuxAutostart(configDir, true, command);
 }

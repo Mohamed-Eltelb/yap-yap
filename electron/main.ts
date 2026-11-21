@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { canHookShortcut, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
-import { setLinuxAutostart } from './linuxAutostart';
+import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
@@ -452,6 +452,13 @@ function inPlaceUpdater() {
     autoUpdater.disableWebInstaller = true;
     // Failures reach the caller through the rejected promise. Without a listener, 'error' would crash the app.
     autoUpdater.on('error', () => undefined);
+    autoUpdater.on('appimage-filename-updated', (file) => {
+      try {
+        retargetLinuxAutostart(app.getPath('appData'), [file]);
+      } catch (error) {
+        console.warn(error);
+      }
+    });
   }
   return autoUpdater;
 }
@@ -563,9 +570,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
-    const target = process.platform === 'linux' ? await linuxPasteTarget() : undefined;
+    // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
+    const [target, previous] = await Promise.all([
+      process.platform === 'linux' ? linuxPasteTarget() : undefined,
+      keepOnClipboard === true ? undefined : snapshotClipboard(),
+    ]);
     if (target === 'page') return false;
-    const previous = keepOnClipboard === true ? undefined : await snapshotClipboard();
     await clipboard.writeText(text);
     try {
       const sent = await pasteIntoFocusedField();
