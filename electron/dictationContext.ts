@@ -180,7 +180,7 @@ async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste'): Pro
   }
 }
 
-const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-esr|brave|msedge|vivaldi|opera)$/i;
+const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
 
 // Some browsers expose no accessibility tree. Still send paste there, but leave
 // the result card available because a keypress alone cannot confirm insertion.
