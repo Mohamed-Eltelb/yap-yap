@@ -272,53 +272,60 @@ function WelcomeStep({ heading, onImportDictionary, importApps = [], onOpenImpor
   );
 }
 
-const OTHER_PROVIDERS = PROVIDER_ORDER.filter((id) => id !== 'groq' && id !== 'custom');
+const LIST_PROVIDERS: ProviderId[] = ['groq', ...PROVIDER_ORDER.filter((id) => id !== 'groq' && id !== 'custom')];
+
+/** What a provider can do for Yap Yap, in a few words. */
+function providerRole(id: ProviderId): string {
+  const { supportsStt, supportsLlm } = PROVIDER_CATALOG[id];
+  const role = supportsStt && supportsLlm ? 'Speech to text and cleanup' : supportsStt ? 'Speech to text' : 'Cleanup';
+  return role;
+}
 
 function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdateProvider, onRemoveProvider, onUpdateSettings }: Props & {
   heading: HeadingRef; provider: ProviderId; onPick: (id: ProviderId) => void; canDictate: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const connected = isProviderConfigured(state.providers[provider]);
-  const meta = PROVIDER_CATALOG[provider];
   const pick = (id: ProviderId) => { onPick(id); setEditing(false); };
   return (
     <>
       <Intro heading={heading} title="Connect your AI" lead="Yap Yap sends your voice straight to a provider you choose, with your own key." />
       <div className="yy-ob-providers" role="radiogroup" aria-label="Provider">
-        <button type="button" role="radio" aria-checked={provider === 'groq'} className="yy-ob-provider-main" onClick={() => pick('groq')}>
-          <ProviderLogo id="groq" size={22} />
-          <span><strong>Groq</strong><small>Free to start. Does transcription and cleanup.</small></span>
-          {isProviderConfigured(state.providers.groq) && <Check size={16} className="yy-ob-ok" aria-label="Connected" />}
-        </button>
-        <div className="yy-ob-provider-chips">
-          {OTHER_PROVIDERS.map((id) => (
-            <button key={id} type="button" role="radio" aria-checked={provider === id} onClick={() => pick(id)}>
-              <ProviderLogo id={id} size={15} />
-              {PROVIDER_CATALOG[id].name.replace(/^(Google|Anthropic)\s+/, '')}
-              {isProviderConfigured(state.providers[id]) && <Check size={12} className="yy-ob-ok" aria-label="Connected" />}
-            </button>
-          ))}
-        </div>
+        {LIST_PROVIDERS.map((id) => {
+          const meta = PROVIDER_CATALOG[id];
+          const connected = isProviderConfigured(state.providers[id]);
+          const open = provider === id;
+          return (
+            <div key={id} className="yy-ob-provider" data-open={open || undefined}>
+              <button type="button" role="radio" aria-checked={open} className="yy-ob-provider-row" onClick={() => pick(id)}>
+                <ProviderLogo id={id} size={20} />
+                <span className="yy-ob-provider-name">
+                  <strong>{meta.name.replace(/^(Google|Anthropic)\s+/, '')}{id === 'groq' && <em className="yy-ob-tag">Free to start</em>}</strong>
+                  <small>{providerRole(id)}</small>
+                </span>
+                {connected && <span className="yy-ob-provider-state"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Connected</span>}
+              </button>
+              {open && (connected && !editing ? (
+                <div className="yy-ob-connected">
+                  {!meta.supportsStt && <span>It can’t transcribe speech, so connect one that can too.</span>}
+                  <button type="button" className="yy-ob-inline" onClick={() => setEditing(true)}><Pencil size={12} aria-hidden="true" /> Change key</button>
+                </div>
+              ) : (
+                <div className="yy-ob-form">
+                  <ProviderSettings
+                    key={id}
+                    providers={state.providers}
+                    settings={state.settings}
+                    startWith={id}
+                    onUpdateProvider={(changed, patch) => { onUpdateProvider(changed, patch); setEditing(false); }}
+                    onRemoveProvider={onRemoveProvider}
+                    onUpdateSettings={onUpdateSettings}
+                  />
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
-      {connected && !editing ? (
-        <div className="yy-ob-connected">
-          <Check size={16} aria-hidden="true" />
-          <span>{meta.name} is connected.{meta.supportsStt ? '' : ' It can’t transcribe speech, so connect one that can too.'}</span>
-          <button type="button" className="yy-ob-inline" onClick={() => setEditing(true)}><Pencil size={12} aria-hidden="true" /> Change key</button>
-        </div>
-      ) : (
-        <div className="yy-ob-form">
-          <ProviderSettings
-            key={provider}
-            providers={state.providers}
-            settings={state.settings}
-            startWith={provider}
-            onUpdateProvider={(id, patch) => { onUpdateProvider(id, patch); setEditing(false); }}
-            onRemoveProvider={onRemoveProvider}
-            onUpdateSettings={onUpdateSettings}
-          />
-        </div>
-      )}
       <p role="status" className="yy-ob-status">
         {canDictate ? '' : 'Add a key for a provider that can transcribe speech to continue.'}
       </p>

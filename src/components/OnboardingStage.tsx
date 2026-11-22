@@ -128,6 +128,7 @@ export function ConnectScene({ jobs }: { jobs: { label: string; provider?: Provi
           </div>
         ))}
       </dl>
+      <p className="yy-ob-note">Your audio goes from this computer straight to these providers. Your keys stay on this device.</p>
     </div>
   );
 }

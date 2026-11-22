@@ -47,7 +47,7 @@ describe('First-run setup', () => {
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
 
     view.rerender(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={onFinish} />);
-    expect(screen.getByText('Groq is connected.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Change key' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false);
   });
 

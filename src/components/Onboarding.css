@@ -218,65 +218,76 @@ html.dark .yy-ob {
   color: var(--text-secondary);
 }
 
-/* Provider picker: Groq first and larger, the rest as a row of choices. */
+/* Provider picker: one list; the chosen provider opens to its key or its status. */
 .yy-ob-providers {
   display: grid;
-  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
 }
 
-.yy-ob-provider-main {
+.yy-ob-provider + .yy-ob-provider {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.yy-ob-provider[data-open] {
+  background: var(--bg-sidebar);
+}
+
+.yy-ob-provider-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 13px 15px;
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
+  width: 100%;
+  padding: 9px 14px;
   text-align: left;
 }
 
-.yy-ob-provider-main span {
-  display: grid;
-  flex: 1;
-  gap: 1px;
-}
-
-.yy-ob-provider-main strong {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-
-.yy-ob-provider-main small {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.yy-ob-provider-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.yy-ob-provider-chips button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px 6px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.yy-ob-provider-main:hover,
-.yy-ob-provider-chips button:hover {
+.yy-ob-provider:not([data-open]) .yy-ob-provider-row:hover {
   background: var(--bg-hover);
 }
 
-.yy-ob-providers [aria-checked='true'] {
-  border-color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--text-primary);
-  color: var(--text-primary);
+.yy-ob-provider-row:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
+.yy-ob-provider-name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.yy-ob-provider-name strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.yy-ob-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ob-ok) 12%, transparent);
+  color: var(--ob-ok);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.yy-ob-provider-name small {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.yy-ob-provider-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ob-ok);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .yy-ob-ok {
@@ -287,13 +298,9 @@ html.dark .yy-ob {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ob-ok) 9%, transparent);
-  color: var(--ob-ok);
-  font-size: 13.5px;
-  font-weight: 500;
+  padding: 0 14px 10px 46px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .yy-ob-connected span {
@@ -302,7 +309,7 @@ html.dark .yy-ob {
 
 /* The provider key form, without its own page heading and back link. */
 .yy-ob-form {
-  margin-top: 16px;
+  padding: 2px 14px 14px 46px;
 }
 
 .yy-ob-form .provider-cancel,
@@ -397,9 +404,13 @@ html.dark .yy-ob {
 }
 
 .yy-ob-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   gap: 8px;
-  padding-top: 22px;
+  margin-bottom: -26px;
+  padding: 22px 0 26px;
+  background: linear-gradient(transparent, var(--bg-main) 18px);
 }
 
 .yy-ob-next,
@@ -647,6 +658,15 @@ html.dark .yy-ob {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+.yy-ob-note {
+  justify-self: start;
+  max-width: 34em;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .yy-ob-job-state {
