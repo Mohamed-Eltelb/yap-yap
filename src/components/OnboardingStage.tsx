@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useState, type CSSProperties } from 'react';
-import { Laptop, MicOff } from 'lucide-react';
+import { MicOff } from 'lucide-react';
 import type { ProviderId } from '../types/app';
 import { DictationHud, type HudState } from './DictationHud';
 import { ProviderLogo } from './ProviderIcon';
 import { SelectMenu } from './SelectMenu';
+import { YapLogo } from './YapLogo';
 
 const ignore = () => undefined;
 
@@ -144,7 +145,7 @@ export function ConnectScene({ jobs }: { jobs: Job[] }) {
       {/* Yap Yap sits between the two: it gets the text from one provider and sends it to the other. */}
       <div className="yy-ob-hub" aria-hidden="true">
         <span className="yy-ob-hub-line"><i /></span>
-        <span className="yy-ob-hub-node"><Laptop size={20} /></span>
+        <span className="yy-ob-hub-node"><YapLogo className="w-6 h-6" /></span>
         <small>Yap Yap, on this computer</small>
         <span className="yy-ob-hub-line"><i /></span>
       </div>
