@@ -55,7 +55,7 @@ const WRITTEN: Record<Exclude<Level, 'none'>, Record<string, string>> = {
 interface Props {
   state: Pick<PersistedAppState, 'settings' | 'providers'>;
   /** The text of the newest dictation, so the Try step can show the first one. */
-  latestDictation?: string;
+  latestDictation?: { id: string; text: string };
   /** The live dictation, so the Try step can follow it. */
   hudStatus?: HudState['status'];
   hudLevels?: number[];
@@ -89,9 +89,10 @@ export function Onboarding(props: Props) {
   const [provider, setProvider] = useState<ProviderId>(() => PROVIDER_ORDER.find((id) => isProviderConfigured(providers[id])) ?? 'groq');
   const mic = useMicTest(settings, step === 'microphone');
   const dictateKeys = shortcutKeys(settings.shortcuts.dictate);
-  const [before, setBefore] = useState(props.latestDictation);
+  // Compared by id: saying the same words twice is still a new dictation.
+  const [before, setBefore] = useState(props.latestDictation?.id);
   const [replay, setReplay] = useState(0);
-  const tried = props.latestDictation !== before ? props.latestDictation : undefined;
+  const tried = props.latestDictation && props.latestDictation.id !== before ? props.latestDictation.text : undefined;
   const level: Level = settings.smartCleanup ? settings.cleanupLevel : 'none';
   const written = level === 'none' ? SPOKEN : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
 
@@ -129,7 +130,7 @@ export function Onboarding(props: Props) {
   const reset: Partial<Record<Step, { label: string; run: () => void }>> = {
     welcome: { label: 'Replay', run: () => setReplay((n) => n + 1) },
     microphone: { label: 'Restart the microphone test', run: () => void mic.start() },
-    ...(tried ? { try: { label: 'Try again', run: () => { setBefore(props.latestDictation); setReplay((n) => n + 1); } } } : {}),
+    ...(tried ? { try: { label: 'Try again', run: () => { setBefore(props.latestDictation?.id); setReplay((n) => n + 1); } } } : {}),
   };
 
   return (

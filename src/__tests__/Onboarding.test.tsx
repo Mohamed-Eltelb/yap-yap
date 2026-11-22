@@ -55,19 +55,31 @@ describe('First-run setup', () => {
     const state = withGroqKey();
     const handlers = { onUpdateSettings: vi.fn(), onUpdateProvider: vi.fn(), onRemoveProvider: vi.fn(), onImportDictionary: vi.fn(), onFinish: vi.fn() };
     const user = userEvent.setup();
-    const view = render(<Onboarding state={state} latestDictation="Old dictation." {...handlers} />);
+    const view = render(<Onboarding state={state} latestDictation={{ id: 'a', text: 'Old dictation.' }} {...handlers} />);
     for (const name of ['Get started', 'Continue', 'Continue']) await user.click(screen.getByRole('button', { name }));
 
     expect(screen.getByRole('heading', { name: 'Try it for real' })).toBeTruthy();
     expect(screen.getAllByText('Right Alt').length).toBeGreaterThan(0);
     expect(screen.queryByText('Old dictation.')).toBeNull();
 
-    view.rerender(<Onboarding state={state} latestDictation="Hello from Yap Yap." {...handlers} />);
+    view.rerender(<Onboarding state={state} latestDictation={{ id: 'b', text: 'Hello from Yap Yap.' }} {...handlers} />);
     expect(screen.getByText('Hello from Yap Yap.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.queryByText('Hello from Yap Yap.')).toBeNull();
     expect(screen.getByText('Try saying')).toBeTruthy();
+  });
+
+  it('shows a new dictation even when it says the same as the last one', async () => {
+    const state = withGroqKey();
+    const handlers = { onUpdateSettings: vi.fn(), onUpdateProvider: vi.fn(), onRemoveProvider: vi.fn(), onImportDictionary: vi.fn(), onFinish: vi.fn() };
+    const user = userEvent.setup();
+    const view = render(<Onboarding state={state} latestDictation={{ id: 'a', text: 'Same words.' }} {...handlers} />);
+    for (const name of ['Get started', 'Continue', 'Continue']) await user.click(screen.getByRole('button', { name }));
+    expect(screen.queryByText('Same words.')).toBeNull();
+
+    view.rerender(<Onboarding state={state} latestDictation={{ id: 'b', text: 'Same words.' }} {...handlers} />);
+    expect(screen.getByText('Same words.')).toBeTruthy();
   });
 
   it('sets the cleanup level and finishes from the last step', async () => {

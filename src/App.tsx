@@ -1683,6 +1683,10 @@ export function App() {
     );
   }
 
+  // The newest dictation, so setup's Try step can show it. History is newest first.
+  const newestDictation = appState.history.find((item) => item.mode === 'dictate' && item.text.trim());
+  const latestDictation = newestDictation && { id: newestDictation.id, text: newestDictation.text };
+
   return (
     <div className="w-screen h-screen flex overflow-hidden bg-[var(--bg-main)] text-[var(--text-primary)]">
       <Sidebar
@@ -1828,7 +1832,7 @@ export function App() {
       {setupOpen && (
         <Onboarding
           state={appState}
-          latestDictation={appState.history.find((item) => item.mode === 'dictate' && item.text.trim())?.text}
+          latestDictation={latestDictation}
           hudStatus={hud.status}
           hudLevels={hud.levels}
           onUpdateSettings={updateSettings}
