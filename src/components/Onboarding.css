@@ -231,6 +231,8 @@ html.dark .yy-ob {
 }
 
 .yy-ob-provider[data-open] {
+  /* Room for Back and Continue, which stick to the bottom. */
+  scroll-margin-bottom: 96px;
   background: var(--bg-sidebar);
 }
 

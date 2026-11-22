@@ -282,10 +282,11 @@ function WelcomeStep({ heading, onImportDictionary, importApps = [], onOpenImpor
   );
 }
 
-const LIST_PROVIDERS: ProviderId[] = ['groq', ...PROVIDER_ORDER.filter((id) => id !== 'groq' && id !== 'custom')];
+const LIST_PROVIDERS: ProviderId[] = ['groq', ...PROVIDER_ORDER.filter((id) => id !== 'groq' && id !== 'custom'), 'custom'];
 
 /** What a provider can do for Yap Yap, in a few words. */
 function providerRole(id: ProviderId): string {
+  if (id === 'custom') return PROVIDER_CATALOG.custom.tagline;
   const { supportsStt, supportsLlm } = PROVIDER_CATALOG[id];
   const role = supportsStt && supportsLlm ? 'Speech to text and cleanup' : supportsStt ? 'Speech to text' : 'Cleanup';
   return role;
@@ -300,10 +301,15 @@ function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdatePr
     setOpen((current) => (current === id ? undefined : id));
     onPick(id);
   };
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Bring an opened row's form into view; it can open below the fold.
+    if (open) list.current?.querySelector('[data-open]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [open]);
   return (
     <>
       <Intro heading={heading} title="Connect your AI" lead="Yap Yap sends your voice straight to a provider you choose, with your own key." />
-      <div className="yy-ob-providers" role="radiogroup" aria-label="Provider">
+      <div ref={list} className="yy-ob-providers" role="radiogroup" aria-label="Provider">
         {LIST_PROVIDERS.map((id) => {
           const meta = PROVIDER_CATALOG[id];
           const connected = isProviderConfigured(state.providers[id]);
@@ -313,7 +319,7 @@ function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdatePr
               <button type="button" role="radio" aria-checked={provider === id} aria-expanded={expanded} className="yy-ob-provider-row" onClick={() => pick(id)}>
                 <ProviderLogo id={id} size={20} />
                 <span className="yy-ob-provider-name">
-                  <strong>{meta.name.replace(/^(Google|Anthropic)\s+/, '')}{id === 'groq' && <em className="yy-ob-tag">Free to start</em>}</strong>
+                  <strong>{id === 'custom' ? 'Custom' : meta.name.replace(/^(Google|Anthropic)\s+/, '')}{id === 'groq' && <em className="yy-ob-tag">Free to start</em>}</strong>
                   <small>{providerRole(id)}</small>
                 </span>
                 {connected && <span className="yy-ob-provider-state"> Connected</span>}
