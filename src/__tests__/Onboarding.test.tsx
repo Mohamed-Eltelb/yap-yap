@@ -148,6 +148,18 @@ describe('First-run setup', () => {
     expect(screen.getByText('Try saying')).toBeTruthy();
   });
 
+  it('tells the app while the Try step is open, so it can hide the floating pill', async () => {
+    const user = userEvent.setup();
+    const onTryStepChange = vi.fn();
+    render(<Onboarding state={withGroqKey()} onTryStepChange={onTryStepChange} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
+    for (const name of ['Get started', 'Continue']) await user.click(screen.getByRole('button', { name }));
+    expect(onTryStepChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onTryStepChange).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onTryStepChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('shows a new dictation even when it says the same as the last one', async () => {
     const state = withGroqKey();
     const handlers = { onUpdateSettings: vi.fn(), onUpdateProvider: vi.fn(), onRemoveProvider: vi.fn(), onImportDictionary: vi.fn(), onFinish: vi.fn() };

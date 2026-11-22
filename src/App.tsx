@@ -80,6 +80,9 @@ function comboMatches(pressed: Set<string>, combo: string[]): boolean {
 
 const modifierOnlyKey = /^(?:(?:Left |Right )?(?:Alt|Shift|Ctrl)|Control|Cmd|Meta|Command)$/;
 
+/** What setup's Try step draws itself. Errors and notices still float, so a failed try is never silent. */
+const SETUP_MIRRORED_STATUSES: ReadonlySet<HudState['status']> = new Set(['armed', 'recording', 'processing', 'result']);
+
 function hideSplash() {
   const splash = document.getElementById('splash');
   if (!splash || splash.classList.contains('hide')) return;
@@ -106,6 +109,10 @@ export function App() {
   const [importOpen, setImportOpen] = useState(false);
   /** First-run setup, shown over the app. */
   const [setupOpen, setSetupOpen] = useState(false);
+  // Setup's Try step draws the pill and the result itself, so the floating ones stay hidden meanwhile.
+  const [setupTrying, setSetupTrying] = useState(false);
+  const setupTryingRef = useRef(false);
+  setupTryingRef.current = setupOpen && setupTrying;
   const setupOpenRef = useRef(false);
   setupOpenRef.current = setupOpen;
   const lastImportRef = useRef<{ receipt: ImportReceipt; after: Pick<PersistedAppState, 'dictionary' | 'snippets'> } | undefined>(undefined);
@@ -249,13 +256,14 @@ export function App() {
   // Forward HUD state from main window to external Electron HUD overlay
   useEffect(() => {
     if (isHudRoute) return;
-    const visible = hud.status !== 'idle' && useFloatingHud;
+    const mirroredBySetup = setupOpen && setupTrying && SETUP_MIRRORED_STATUSES.has(hud.status);
+    const visible = hud.status !== 'idle' && useFloatingHud && !mirroredBySetup;
     window.yapyap?.toggleHud?.(visible, {
       ...hud,
       targets: appState.settings.translationTargets,
       appearance: appState.settings.appearance,
     });
-  }, [hud, isHudRoute, useFloatingHud, appState.settings.translationTargets, appState.settings.appearance]);
+  }, [hud, isHudRoute, useFloatingHud, setupOpen, setupTrying, appState.settings.translationTargets, appState.settings.appearance]);
 
   const updateSettings = useCallback((patch: Partial<SettingsState>) => {
     setAppState((prev) => {
@@ -828,7 +836,8 @@ export function App() {
         playInteractionSound('stop', appState.settings.interactionSounds);
 
         setHud({
-          status: pasted ? 'idle' : 'result',
+          // Setup's Try step shows the result itself; no card to copy it from.
+          status: pasted || setupTryingRef.current ? 'idle' : 'result',
           mode,
           levels: Array(20).fill(0.1),
           resultText: finalText,
@@ -1835,6 +1844,7 @@ export function App() {
           latestDictation={latestDictation}
           hudStatus={hud.status}
           hudLevels={hud.levels}
+          onTryStepChange={setSetupTrying}
           onUpdateSettings={updateSettings}
           onUpdateProvider={updateProvider}
           onRemoveProvider={removeProvider}

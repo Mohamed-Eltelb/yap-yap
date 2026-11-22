@@ -70,6 +70,8 @@ interface Props {
   /** The live dictation, so the Try step can follow it. */
   hudStatus?: HudState['status'];
   hudLevels?: number[];
+  /** The Try step opened or closed: it shows the dictation itself, so the app can hide the floating pill. */
+  onTryStepChange?: (open: boolean) => void;
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
   onUpdateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: ProviderId) => void;
@@ -95,6 +97,12 @@ export function Onboarding(props: Props) {
   const go = (to: number) => setStep(STEPS[Math.min(STEPS.length - 1, Math.max(0, to))].id);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus({ preventScroll: true }), [step]);
+  const { onTryStepChange } = props;
+  useEffect(() => {
+    if (step !== 'try') return;
+    onTryStepChange?.(true);
+    return () => onTryStepChange?.(false);
+  }, [step, onTryStepChange]);
 
   const canDictate = Object.values(providers).some((p) => PROVIDER_CATALOG[p.id].supportsStt && isProviderConfigured(p));
   const [provider, setProvider] = useState<ProviderId>(() => PROVIDER_ORDER.find((id) => isProviderConfigured(providers[id])) ?? 'groq');
