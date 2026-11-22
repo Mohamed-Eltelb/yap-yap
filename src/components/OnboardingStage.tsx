@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useState, type CSSProperties } from 'react';
 import { Check, MicOff } from 'lucide-react';
 import type { ProviderId } from '../types/app';
 import { DictationHud, type HudState } from './DictationHud';
@@ -180,16 +180,23 @@ export function TryScene({ keys, status, levels, result }: { keys: string[]; sta
   );
 }
 
-/** How it writes: what you said, and what Yap Yap writes from it. */
-export function WritingScene({ spoken, written }: { spoken: string; written: string }) {
+/** How it writes: what you said, with what cleanup removes struck out, and what Yap Yap writes. */
+export function WritingScene({ spoken, written, choice }: { spoken: { word: string; struck: boolean }[]; written: string; choice: string }) {
   return (
     <div className="yy-ob-scene yy-ob-writing" aria-hidden="true">
       <div className="yy-ob-said">
         <span>You say</span>
-        <p>{spoken}</p>
+        <p>
+          {spoken.map(({ word, struck }, i) => (
+            <Fragment key={i}>
+              {i > 0 && ' '}
+              <span className="yy-ob-said-word" data-struck={struck || undefined}>{word}</span>
+            </Fragment>
+          ))}
+        </p>
       </div>
       <div className="yy-ob-said" data-written>
-        <span>Yap Yap writes</span>
+        <span className="yy-ob-said-head">Yap Yap writes <em key={choice} className="yy-ob-fade">{choice}</em></span>
         <p key={written} className="yy-ob-fade">{written}</p>
       </div>
     </div>

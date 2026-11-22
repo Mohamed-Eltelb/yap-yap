@@ -35,20 +35,30 @@ type Level = (typeof LEVELS)[number]['id'];
 
 const STYLES = [{ id: '', label: 'Learn from me' }, ...STYLE_PRESETS.map(({ id, label }) => ({ id, label }))];
 
-const SPOKEN = 'um so hey sam I’m uh running a bit late see you soon';
+/** The spoken sentence for the preview, word by word, with the level that removes each word. */
+const SPOKEN: { word: string; dropAt?: Exclude<Level, 'none'> }[] = [
+  ...'um so'.split(' ').map((word) => ({ word, dropAt: 'light' as const })),
+  { word: 'hey' }, { word: 'sam' }, { word: 'I’m' },
+  { word: 'uh', dropAt: 'light' }, { word: 'running' },
+  { word: 'like', dropAt: 'light' }, { word: 'twenty', dropAt: 'light' }, { word: 'no', dropAt: 'light' },
+  { word: 'thirty' }, { word: 'minutes' }, { word: 'late' }, { word: 'so' },
+  { word: 'you', dropAt: 'light' }, { word: 'know', dropAt: 'light' },
+  { word: 'maybe', dropAt: 'medium' }, { word: 'just', dropAt: 'medium' },
+  { word: 'start' }, { word: 'without' }, { word: 'me' }, { word: 'and' }, { word: 'I’ll' }, { word: 'catch' }, { word: 'up' },
+];
 /** What each level and style turns the spoken sentence into, for the preview. */
 const WRITTEN: Record<Exclude<Level, 'none'>, Record<string, string>> = {
   light: {
-    '': 'Hey Sam, I’m running a bit late. See you soon.',
-    formal: 'Hey Sam. I’m running a bit late. See you soon.',
-    casual: 'Hey Sam, I’m running a bit late. See you soon',
-    'very-casual': 'hey sam i’m running a bit late see you soon',
+    '': 'Hey Sam, I’m running thirty minutes late, so maybe just start without me and I’ll catch up.',
+    formal: 'Hey Sam. I’m running thirty minutes late, so maybe just start without me and I’ll catch up.',
+    casual: 'Hey Sam, I’m running thirty minutes late, so maybe just start without me and I’ll catch up',
+    'very-casual': 'hey sam i’m running thirty minutes late so maybe just start without me and i’ll catch up',
   },
   medium: {
-    '': 'Hi Sam, I’m running a little late. See you soon.',
-    formal: 'Hi Sam, I’m running a little late. I’ll see you soon.',
-    casual: 'Hey Sam, running a bit late. See you soon',
-    'very-casual': 'hey sam running a bit late, see you soon',
+    '': 'Hi Sam, I’m running thirty minutes late, so start without me and I’ll catch up.',
+    formal: 'Hi Sam. I’m running thirty minutes late. Please start without me, and I’ll catch up.',
+    casual: 'Hey Sam, running thirty minutes late, so start without me and I’ll catch up',
+    'very-casual': 'hey sam running thirty minutes late so start without me, i’ll catch up',
   },
 };
 
@@ -94,7 +104,10 @@ export function Onboarding(props: Props) {
   const [replay, setReplay] = useState(0);
   const tried = props.latestDictation && props.latestDictation.id !== before ? props.latestDictation.text : undefined;
   const level: Level = settings.smartCleanup ? settings.cleanupLevel : 'none';
-  const written = level === 'none' ? SPOKEN : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
+  const spoken = SPOKEN.map(({ word, dropAt }) => ({ word, struck: level === 'medium' ? !!dropAt : level === 'light' && dropAt === 'light' }));
+  const written = level === 'none' ? SPOKEN.map(({ word }) => word).join(' ') : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
+  const choice = level === 'none' ? 'No cleanup'
+    : `${level === 'light' ? 'Light' : 'Medium'} · ${STYLES.find((style) => style.id === settings.defaultStyle)?.label ?? 'Learn from me'}`;
 
   const configured = (id: ProviderId | 'none') => id !== 'none' && isProviderConfigured(providers[id]);
   // The jobs show the providers in use; one being added takes the jobs it can do.
@@ -116,7 +129,7 @@ export function Onboarding(props: Props) {
     ),
     microphone: <MicrophoneScene levels={mic.levels} state={mic.state} device={deviceLabel} />,
     try: <TryScene keys={dictateKeys} status={props.hudStatus ?? 'idle'} levels={props.hudLevels ?? []} result={tried} />,
-    writing: <WritingScene spoken={SPOKEN} written={written} />,
+    writing: <WritingScene spoken={spoken} written={written} choice={choice} />,
     done: (
       <DoneScene shortcuts={[
         { label: 'Dictate', keys: dictateKeys },

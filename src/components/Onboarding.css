@@ -733,7 +733,7 @@ html.dark .yy-ob {
   gap: 8px;
 }
 
-.yy-ob-said span {
+.yy-ob-said > span {
   color: var(--text-secondary);
   font-size: 13px;
 }
@@ -743,6 +743,28 @@ html.dark .yy-ob {
   color: var(--text-muted);
   font-size: 22px;
   line-height: 1.4;
+}
+
+.yy-ob-said-word {
+  text-decoration: line-through 2px transparent;
+  transition: color 0.25s, text-decoration-color 0.25s;
+}
+
+.yy-ob-said-word[data-struck] {
+  color: color-mix(in srgb, var(--ob-error) 75%, var(--text-muted));
+  text-decoration-color: currentColor;
+}
+
+.yy-ob-said-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.yy-ob-said-head em {
+  color: var(--text-muted);
+  font-style: normal;
 }
 
 .yy-ob-said[data-written] {
