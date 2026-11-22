@@ -102,7 +102,8 @@ export function WelcomeScene() {
         ))}
         {phase !== 'written' && <i className="yy-ob-caret" />}
       </p>
-      <StagePill status={phase === 'written' ? 'armed' : phase} levels={levels} />
+      {/* Like the app: the pill closes once the text is written. */}
+      <StagePill status={phase === 'written' ? 'idle' : phase} levels={levels} />
     </div>
   );
 }
