@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState, type CSSProperties } from 'react';
-import { Check, MicOff } from 'lucide-react';
+import { MicOff } from 'lucide-react';
 import type { ProviderId } from '../types/app';
 import { DictationHud, type HudState } from './DictationHud';
 import { ProviderLogo } from './ProviderIcon';
+import { SelectMenu } from './SelectMenu';
 
 const ignore = () => undefined;
 
@@ -111,28 +112,34 @@ export function WelcomeScene() {
 interface JobOption { id: ProviderId; name: string; model: string }
 interface Job { title: string; detail: string; options: JobOption[]; value?: ProviderId; onChange: (id: ProviderId) => void }
 
-/** Connect: pick which connected provider does each job. */
+/** Connect: pick which connected provider does each job. One compact card per job, however many are connected. */
 export function ConnectScene({ jobs }: { jobs: Job[] }) {
   return (
     <div className="yy-ob-scene yy-ob-chooser">
-      {jobs.map((job) => (
-        <section key={job.title} className="yy-ob-choose">
-          <h3>{job.title}<small>{job.detail}</small></h3>
-          {job.options.length ? (
-            <div className="yy-ob-choices" role="radiogroup" aria-label={job.title}>
-              {job.options.map((option) => (
-                <button key={option.id} type="button" role="radio" aria-checked={job.value === option.id} className="yy-ob-choice" onClick={() => job.onChange(option.id)}>
-                  <ProviderLogo id={option.id} size={20} />
-                  <span><strong>{option.name}</strong><small>{option.model}</small></span>
-                  <span className="yy-ob-choice-mark" aria-hidden="true">{job.value === option.id && <Check size={12} strokeWidth={3} />}</span>
-                </button>
-              ))}
+      {jobs.map((job) => {
+        const chosen = job.options.find((option) => option.id === job.value);
+        return (
+          <section key={job.title} className="yy-ob-choose">
+            <div className="yy-ob-choose-head">
+              <h3>{job.title}</h3>
+              <small>{job.detail}</small>
             </div>
-          ) : (
-            <p className="yy-ob-choose-empty">Connect a provider that can do this.</p>
-          )}
-        </section>
-      ))}
+            {job.options.length ? (
+              <>
+                <SelectMenu
+                  label={`${job.title} provider`}
+                  value={job.value ?? job.options[0].id}
+                  options={job.options.map((option) => ({ value: option.id, label: option.name, icon: <ProviderLogo id={option.id} size={18} /> }))}
+                  onChange={job.onChange}
+                />
+                {chosen && <span className="yy-ob-choose-model">Model: {chosen.model}</span>}
+              </>
+            ) : (
+              <p className="yy-ob-choose-empty">Connect a provider that can do this.</p>
+            )}
+          </section>
+        );
+      })}
       <p className="yy-ob-note">Your audio goes from this computer straight to these providers. Your keys stay on this device.</p>
     </div>
   );

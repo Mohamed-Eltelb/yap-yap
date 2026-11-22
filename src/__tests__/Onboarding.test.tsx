@@ -11,6 +11,7 @@ beforeAll(() => {
   HTMLElement.prototype.showPopover = function showPopover() {};
   HTMLElement.prototype.hidePopover = function hidePopover() {};
   Element.prototype.scrollIntoView = function scrollIntoView() {};
+  document.elementFromPoint = () => null;
 });
 afterEach(() => {
   cleanup();
@@ -88,10 +89,15 @@ describe('First-run setup', () => {
     render(<Onboarding state={state} onUpdateSettings={onUpdateSettings} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'Get started' }));
 
-    const dictation = screen.getByRole('radiogroup', { name: 'Dictation' });
-    await user.click(within(dictation).getByRole('radio', { name: /Deepgram/ }));
+    const menuOf = (name: string) => {
+      const trigger = screen.getByRole('combobox', { name });
+      return { trigger, list: within(document.getElementById(trigger.getAttribute('aria-controls')!)!) };
+    };
+    const dictation = menuOf('Dictation provider');
+    await user.click(dictation.trigger);
+    await user.click(dictation.list.getByRole('option', { name: /Deepgram/, hidden: true }));
     expect(onUpdateSettings).toHaveBeenCalledWith({ activeSttProvider: 'deepgram' });
-    expect(within(screen.getByRole('radiogroup', { name: 'AI' })).queryByRole('radio', { name: /Deepgram/ })).toBeNull();
+    expect(menuOf('AI provider').list.queryByRole('option', { name: /Deepgram/, hidden: true })).toBeNull();
   });
 
   it('shows only a dictation made on the Try step', async () => {
