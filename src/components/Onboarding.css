@@ -460,6 +460,7 @@ html.dark .yy-ob {
 .yy-ob-stage-scene {
   display: grid;
   width: 100%;
+  height: 100%;
   place-items: center;
 }
 
@@ -658,8 +659,14 @@ html.dark .yy-ob {
 
 /* Connect: one compact card per job, with a provider menu. */
 .yy-ob-chooser {
-  justify-items: stretch;
-  gap: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The cards stay centred; the note sits at the bottom of the panel. */
+.yy-ob-chooser > :first-child {
+  margin-top: auto;
 }
 
 /* Between the cards: a line through Yap Yap on this computer, with text moving along it. */
@@ -760,7 +767,11 @@ html.dark .yy-ob {
 }
 
 .yy-ob-chooser .yy-ob-note {
-  margin-top: 20px;
+  justify-self: auto;
+  max-width: none;
+  margin-top: auto;
+  padding-top: 20px;
+  text-align: center;
 }
 
 .yy-ob-note {
