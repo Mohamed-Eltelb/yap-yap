@@ -158,18 +158,12 @@ export function Keys({ keys, pressed = false }: { keys: string[]; pressed?: bool
   );
 }
 
-/** Things to say that cleanup visibly changes, with what to look for. */
-const TRY_EXAMPLES = [
-  { say: 'Let’s meet on Tuesday, no wait, Wednesday at two, actually make it three.', change: 'Only “Wednesday at three” is kept.' },
-  { say: 'Um, pick up some milk, oh never mind, and book the dentist for Monday.', change: 'The milk is dropped, and so is the “um”.' },
-  { say: 'For the trip we need, uh, the tickets, the hotel and the car rental.', change: 'The filler goes and the list is tidied.' },
-];
+/** Something to say that cleanup visibly changes: only “Wednesday at three” is kept. */
+const TRY_EXAMPLE = 'Let’s meet on Tuesday, no wait, Wednesday at two, actually make it three.';
 
 /** Try it: the shortcut, the real pill following the real dictation, and what it wrote. */
 export function TryScene({ keys, status, levels, result }: { keys: string[]; status: HudState['status']; levels: number[]; result?: string }) {
   const recording = status === 'recording';
-  const [example, setExample] = useState(0);
-  const { say, change } = TRY_EXAMPLES[example];
   return (
     <div className="yy-ob-scene">
       <div className="yy-ob-keyboard"><Keys keys={keys} pressed={recording} /></div>
@@ -179,9 +173,7 @@ export function TryScene({ keys, status, levels, result }: { keys: string[]; sta
         : (
           <div className="yy-ob-suggest">
             <span>Try saying</span>
-            <p key={example} className="yy-ob-big-text yy-ob-fade" data-empty>{say}</p>
-            <small key={`c${example}`} className="yy-ob-fade">{change}</small>
-            <button type="button" className="yy-ob-inline" onClick={() => setExample((n) => (n + 1) % TRY_EXAMPLES.length)}>Another example</button>
+            <p className="yy-ob-big-text" data-empty><i className="yy-ob-caret" />{TRY_EXAMPLE}</p>
           </div>
         )}
     </div>

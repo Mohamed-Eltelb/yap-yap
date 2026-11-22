@@ -590,20 +590,15 @@ html.dark .yy-ob {
   width: 100%;
 }
 
+.yy-ob-suggest .yy-ob-caret {
+  margin: 0 3px 0 0;
+}
+
 .yy-ob-suggest > span {
   color: var(--text-secondary);
   font-size: 13px;
 }
 
-.yy-ob-suggest small {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.yy-ob-suggest .yy-ob-inline {
-  margin-top: 6px;
-  font-size: 13px;
-}
 
 /* Microphone. */
 .yy-ob-pill-off {
@@ -695,31 +690,36 @@ html.dark .yy-ob {
   display: inline-block;
   padding: 2px 8px;
   border: 1px solid var(--border-strong);
-  border-bottom-width: 3px;
   border-radius: 7px;
   background: var(--bg-keycap);
+  box-shadow: 0 2px 0 var(--border-strong);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 0.85em;
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
-  transition: transform 0.08s, border-bottom-width 0.08s, background 0.15s, color 0.15s;
+  transition: transform 0.08s, box-shadow 0.08s, background 0.15s, color 0.15s;
 }
 
 .yy-ob-keyboard .yy-ob-keys kbd {
   padding: 12px 26px;
-  border-bottom-width: 4px;
   border-radius: 14px;
+  box-shadow: 0 4px 0 var(--border-strong);
   font-size: 20px;
 }
 
+/* Pressed: the cap sinks into its shadow, so nothing around it moves. */
 .yy-ob-keys[data-pressed] kbd {
-  border-bottom-width: 1px;
   border-color: var(--accent-blue-fill);
   background: var(--accent-blue-fill);
   color: #fff;
-  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--border-strong);
+  transform: translateY(2px);
+}
+
+.yy-ob-keyboard .yy-ob-keys[data-pressed] kbd {
+  transform: translateY(4px);
 }
 
 /* How it writes: what you said, then what it writes. */
