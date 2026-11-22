@@ -318,6 +318,7 @@ function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdatePr
                     startWith={id}
                     onUpdateProvider={onUpdateProvider}
                     onRemoveProvider={onRemoveProvider}
+                    onDone={() => setOpen(undefined)}
                     onUpdateSettings={onUpdateSettings}
                   />
                 </div>

@@ -63,6 +63,20 @@ describe('First-run setup', () => {
     expect(screen.queryByRole('button', { name: 'Remove provider' })).toBeNull();
   });
 
+  it('closes the provider row after removing it, without showing the full provider settings', async () => {
+    const user = userEvent.setup();
+    const onRemoveProvider = vi.fn();
+    render(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={onRemoveProvider} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    await user.click(screen.getByRole('button', { name: 'Remove provider' }));
+    for (const confirm of screen.queryAllByRole('button', { name: /^Remove$/ })) await user.click(confirm);
+
+    expect(onRemoveProvider).toHaveBeenCalledWith('groq');
+    expect(screen.queryByText('Connected providers')).toBeNull();
+    expect(screen.getByRole('radio', { name: /Groq/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('shows only a dictation made on the Try step', async () => {
     const state = withGroqKey();
     const handlers = { onUpdateSettings: vi.fn(), onUpdateProvider: vi.fn(), onRemoveProvider: vi.fn(), onImportDictionary: vi.fn(), onFinish: vi.fn() };

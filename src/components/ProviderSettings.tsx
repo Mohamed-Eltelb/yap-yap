@@ -27,6 +27,8 @@ interface Props {
   onUpdateSettings: (patch: Partial<SettingsState>) => void;
   /** Opens on this provider's form. Back still leads to the full list. */
   startWith?: ProviderId;
+  /** Called after a save or removal instead of going back to the provider list, for embedding one provider's form. */
+  onDone?: () => void;
 }
 
 type View = { type: 'list' } | { type: 'add' | 'manage'; id: ProviderId };
@@ -39,7 +41,7 @@ function ProviderIcon({ id }: { id: ProviderId }) {
   );
 }
 
-export function ProviderSettings({ providers, settings, onUpdateProvider, onRemoveProvider, onUpdateSettings, startWith }: Props) {
+export function ProviderSettings({ providers, settings, onUpdateProvider, onRemoveProvider, onUpdateSettings, startWith, onDone }: Props) {
   const [view, navigate] = useState<View>(() => startWith
     ? { type: isProviderConfigured(providers[startWith]) ? 'manage' : 'add', id: startWith }
     : { type: 'list' });
@@ -74,11 +76,11 @@ export function ProviderSettings({ providers, settings, onUpdateProvider, onRemo
           onRefresh={(discoveredModels) => onUpdateProvider(id, { discoveredModels })}
           onRemove={adding ? undefined : () => {
             onRemoveProvider(id);
-            navigate({ type: 'list' });
+            if (onDone) onDone(); else navigate({ type: 'list' });
           }}
           onSave={(patch) => {
             onUpdateProvider(id, patch);
-            navigate({ type: 'list' });
+            if (onDone) onDone(); else navigate({ type: 'list' });
           }}
         />
       </div>
