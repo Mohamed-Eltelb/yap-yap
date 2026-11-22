@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type CSSProperties } from 'react';
-import { MicOff } from 'lucide-react';
+import { Laptop, MicOff } from 'lucide-react';
 import type { ProviderId } from '../types/app';
 import { DictationHud, type HudState } from './DictationHud';
 import { ProviderLogo } from './ProviderIcon';
@@ -114,32 +114,41 @@ interface Job { title: string; detail: string; options: JobOption[]; value?: Pro
 
 /** Connect: pick which connected provider does each job. One compact card per job, however many are connected. */
 export function ConnectScene({ jobs }: { jobs: Job[] }) {
+  const card = (job: Job) => {
+    const chosen = job.options.find((option) => option.id === job.value);
+    return (
+      <section key={job.title} className="yy-ob-choose">
+        <div className="yy-ob-choose-head">
+          <h3>{job.title}</h3>
+          <small>{job.detail}</small>
+        </div>
+        {job.options.length ? (
+          <>
+            <SelectMenu
+              label={`${job.title} provider`}
+              value={job.value ?? job.options[0].id}
+              options={job.options.map((option) => ({ value: option.id, label: option.name, icon: <ProviderLogo id={option.id} size={18} /> }))}
+              onChange={job.onChange}
+            />
+            {chosen && <span className="yy-ob-choose-model">Model: {chosen.model}</span>}
+          </>
+        ) : (
+          <p className="yy-ob-choose-empty">Connect a provider that can do this.</p>
+        )}
+      </section>
+    );
+  };
   return (
     <div className="yy-ob-scene yy-ob-chooser">
-      {jobs.map((job) => {
-        const chosen = job.options.find((option) => option.id === job.value);
-        return (
-          <section key={job.title} className="yy-ob-choose">
-            <div className="yy-ob-choose-head">
-              <h3>{job.title}</h3>
-              <small>{job.detail}</small>
-            </div>
-            {job.options.length ? (
-              <>
-                <SelectMenu
-                  label={`${job.title} provider`}
-                  value={job.value ?? job.options[0].id}
-                  options={job.options.map((option) => ({ value: option.id, label: option.name, icon: <ProviderLogo id={option.id} size={18} /> }))}
-                  onChange={job.onChange}
-                />
-                {chosen && <span className="yy-ob-choose-model">Model: {chosen.model}</span>}
-              </>
-            ) : (
-              <p className="yy-ob-choose-empty">Connect a provider that can do this.</p>
-            )}
-          </section>
-        );
-      })}
+      {card(jobs[0])}
+      {/* Yap Yap sits between the two: it gets the text from one provider and sends it to the other. */}
+      <div className="yy-ob-hub" aria-hidden="true">
+        <span className="yy-ob-hub-line"><i /></span>
+        <span className="yy-ob-hub-node"><Laptop size={20} /></span>
+        <small>Yap Yap, on this computer</small>
+        <span className="yy-ob-hub-line"><i /></span>
+      </div>
+      {card(jobs[1])}
       <p className="yy-ob-note">Your audio goes from this computer straight to these providers. Your keys stay on this device.</p>
     </div>
   );

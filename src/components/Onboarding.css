@@ -659,7 +659,56 @@ html.dark .yy-ob {
 /* Connect: one compact card per job, with a provider menu. */
 .yy-ob-chooser {
   justify-items: stretch;
-  gap: 12px;
+  gap: 0;
+}
+
+/* Between the cards: a line through Yap Yap on this computer, with text moving along it. */
+.yy-ob-hub {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.yy-ob-hub small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.yy-ob-hub-node {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+}
+
+.yy-ob-hub-line {
+  position: relative;
+  width: 2px;
+  height: 26px;
+  overflow: hidden;
+  background: repeating-linear-gradient(180deg, var(--border-strong) 0 5px, transparent 5px 9px);
+}
+
+.yy-ob-hub-line i {
+  position: absolute;
+  top: -6px;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  animation: yy-ob-hub-flow 1.6s var(--ob-ease) infinite;
+}
+
+.yy-ob-hub-line:last-child i {
+  animation-delay: 0.8s;
+}
+
+@keyframes yy-ob-hub-flow {
+  to { top: 100%; }
 }
 
 .yy-ob-choose {
@@ -711,7 +760,7 @@ html.dark .yy-ob {
 }
 
 .yy-ob-chooser .yy-ob-note {
-  margin-top: 8px;
+  margin-top: 20px;
 }
 
 .yy-ob-note {
@@ -864,5 +913,6 @@ html.dark .yy-ob {
   .yy-ob-fade,
   .yy-ob-line i,
   .yy-ob-word,
+  .yy-ob-hub-line i,
   .yy-ob-caret { animation: none; }
 }
