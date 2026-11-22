@@ -661,6 +661,7 @@ html.dark .yy-ob {
 .yy-ob-chooser {
   display: flex;
   flex-direction: column;
+  gap: 0;
   height: 100%;
 }
 
@@ -673,10 +674,10 @@ html.dark .yy-ob {
 .yy-ob-hub {
   display: grid;
   justify-items: center;
-  gap: 6px;
 }
 
 .yy-ob-hub small {
+  margin: 6px 0;
   color: var(--text-secondary);
   font-size: 12px;
 }
