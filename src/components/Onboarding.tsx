@@ -286,7 +286,6 @@ const LIST_PROVIDERS: ProviderId[] = ['groq', ...PROVIDER_ORDER.filter((id) => i
 
 /** What a provider can do for Yap Yap, in a few words. */
 function providerRole(id: ProviderId): string {
-  if (id === 'custom') return PROVIDER_CATALOG.custom.tagline;
   const { supportsStt, supportsLlm } = PROVIDER_CATALOG[id];
   const role = supportsStt && supportsLlm ? 'Speech to text and cleanup' : supportsStt ? 'Speech to text' : 'Cleanup';
   return role;
