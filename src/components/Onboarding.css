@@ -565,6 +565,16 @@ html.dark .yy-ob {
   font-size: 13px;
 }
 
+.yy-ob-suggest small {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.yy-ob-suggest .yy-ob-inline {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
 /* Microphone. */
 .yy-ob-pill-off {
   display: grid;
