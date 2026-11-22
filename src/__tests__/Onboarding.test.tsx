@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Onboarding } from '../components/Onboarding';
 import { getInitialState } from '../services/storage';
+
+const micTest = vi.hoisted(() => ({ onLevels: undefined as ((levels: number[]) => void) | undefined }));
+vi.mock('../utils/audioRecorder', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/audioRecorder')>()),
+  startMicrophoneTest: vi.fn(async (_id: string | undefined, onLevels: (levels: number[]) => void) => {
+    micTest.onLevels = onLevels;
+    return () => undefined;
+  }),
+}));
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) { this.open = true; };
@@ -98,6 +107,26 @@ describe('First-run setup', () => {
     await user.click(dictation.list.getByRole('option', { name: /Deepgram/, hidden: true }));
     expect(onUpdateSettings).toHaveBeenCalledWith({ activeSttProvider: 'deepgram' });
     expect(menuOf('AI provider').list.queryByRole('option', { name: /Deepgram/, hidden: true })).toBeNull();
+  });
+
+  it('says when the microphone test hears nothing, without blocking Continue', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
+      for (const name of ['Get started', 'Continue']) fireEvent.click(screen.getByRole('button', { name }));
+      await act(async () => {});
+      expect(screen.getByRole('heading', { name: 'Say something' })).toBeTruthy();
+      expect(screen.getByText('Listening…')).toBeTruthy();
+
+      await act(async () => { vi.advanceTimersByTime(6000); });
+      expect(screen.getByText(/Nothing heard yet/)).toBeTruthy();
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false);
+
+      act(() => micTest.onLevels?.(Array(20).fill(0.9)));
+      expect(screen.getByText('Yap Yap hears you.')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows only a dictation made on the Try step', async () => {

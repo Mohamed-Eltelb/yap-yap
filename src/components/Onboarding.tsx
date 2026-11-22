@@ -351,22 +351,30 @@ function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdatePr
 
 type MicTest = ReturnType<typeof useMicTest>;
 
+const QUIET_AFTER_MS = 6000;
+
 /** A live microphone test while the step is open: levels, and whether a voice was heard. */
 function useMicTest(settings: SettingsState, open: boolean) {
   const [state, setState] = useState<'off' | 'live' | 'blocked'>('off');
   const [levels, setLevels] = useState<number[]>(() => Array(20).fill(0.1));
   const [heard, setHeard] = useState(false);
+  // Still nothing heard a few seconds after the test started: the wrong microphone, or a muted one.
+  const [quiet, setQuiet] = useState(false);
   const stop = useRef<(() => void) | undefined>(undefined);
+  const quietTimer = useRef<number | undefined>(undefined);
   const microphones = useMicrophones(open);
-  const halt = () => { stop.current?.(); stop.current = undefined; };
+  const halt = () => { stop.current?.(); stop.current = undefined; window.clearTimeout(quietTimer.current); };
   const start = async (microphoneId = settings.microphoneId) => {
     halt();
+    setHeard(false);
+    setQuiet(false);
     try {
       stop.current = await startMicrophoneTest(microphoneId === 'default' ? undefined : microphoneId, (next) => {
         setLevels(next);
         if (loudness(next) > 0.35) setHeard(true);
       }, { strongNoiseReduction: settings.strongNoiseReduction });
       setState('live');
+      quietTimer.current = window.setTimeout(() => setQuiet(true), QUIET_AFTER_MS);
       microphones.refresh();
     } catch {
       setState('blocked');
@@ -380,7 +388,7 @@ function useMicTest(settings: SettingsState, open: boolean) {
     // The test restarts on demand, not on every settings change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  return { state, levels, heard, start, microphones: microphones.microphones };
+  return { state, levels, heard, quiet: quiet && !heard, start, microphones: microphones.microphones };
 }
 
 function MicrophoneStep({ heading, mic, state, onUpdateSettings }: Props & { heading: HeadingRef; mic: MicTest }) {
@@ -410,7 +418,9 @@ function MicrophoneStep({ heading, mic, state, onUpdateSettings }: Props & { hea
       <p role="status" className="yy-ob-status" data-ok={mic.heard || undefined} data-error={mic.state === 'blocked' || undefined}>
         {mic.state === 'blocked'
           ? 'Yap Yap can’t use the microphone. Allow microphone access in your system settings, then try again.'
-          : mic.heard ? 'Yap Yap hears you.' : mic.state === 'live' ? 'Listening…' : ''}
+          : mic.heard ? 'Yap Yap hears you.'
+            : mic.quiet ? 'Nothing heard yet. Check that the microphone isn’t muted, or pick another one above.'
+              : mic.state === 'live' ? 'Listening…' : ''}
       </p>
     </>
   );
