@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Check, MicOff } from 'lucide-react';
 import type { ProviderId } from '../types/app';
 import { DictationHud, type HudState } from './DictationHud';
@@ -44,37 +44,65 @@ function useFakeLevels(active: boolean): number[] {
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-const WELCOME_TEXT = 'Running about ten minutes late. Start without me.';
+/** What you say, word by word: filler is struck out, the rest is tidied. */
+const SPOKEN_WORDS: { said: string; written?: string; drop?: boolean }[] = [
+  { said: 'um', drop: true },
+  { said: 'so', drop: true },
+  { said: 'i’m', written: 'I’m' },
+  { said: 'uh', drop: true },
+  { said: 'running' },
+  { said: 'like', drop: true },
+  { said: 'ten' },
+  { said: 'minutes' },
+  { said: 'late', written: 'late.' },
+  { said: 'you', drop: true },
+  { said: 'know', drop: true },
+  { said: 'start', written: 'Start' },
+  { said: 'without' },
+  { said: 'me', written: 'me.' },
+];
+const WORD_MS = 230;
 
-/** Welcome: the pill listens, thinks, and the sentence is written out. Plays in a slow loop. */
+type WelcomePhase = 'armed' | 'recording' | 'processing' | 'written';
+
+/** Welcome: the words appear as they are said, then the pill thinks, strikes the filler, and tidies the rest. Loops. */
 export function WelcomeScene() {
   const still = reducedMotion();
-  const [phase, setPhase] = useState<'armed' | 'recording' | 'processing' | 'typed'>(still ? 'typed' : 'armed');
-  const [shown, setShown] = useState(still ? WELCOME_TEXT.length : 0);
+  const [phase, setPhase] = useState<WelcomePhase>(still ? 'written' : 'armed');
+  const [heard, setHeard] = useState(still ? SPOKEN_WORDS.length : 0);
   const [round, setRound] = useState(0);
   const levels = useFakeLevels(phase === 'recording');
   useEffect(() => {
     if (still) return;
+    const talk = 700;
+    const thought = talk + SPOKEN_WORDS.length * WORD_MS + 300;
     const timers = [
-      window.setTimeout(() => { setShown(0); setPhase('armed'); }, 0),
-      window.setTimeout(() => setPhase('recording'), 900),
-      window.setTimeout(() => setPhase('processing'), 3600),
-      window.setTimeout(() => setPhase('typed'), 4600),
-      window.setTimeout(() => setRound((n) => n + 1), 10000),
+      window.setTimeout(() => { setHeard(0); setPhase('armed'); }, 0),
+      window.setTimeout(() => setPhase('recording'), talk),
+      ...SPOKEN_WORDS.map((_, i) => window.setTimeout(() => setHeard(i + 1), talk + 150 + i * WORD_MS)),
+      window.setTimeout(() => setPhase('processing'), thought),
+      window.setTimeout(() => setPhase('written'), thought + 2300),
+      window.setTimeout(() => setRound((n) => n + 1), thought + 7300),
     ];
     return () => timers.forEach(window.clearTimeout);
   }, [still, round]);
-  useEffect(() => {
-    if (phase !== 'typed' || shown >= WELCOME_TEXT.length) return;
-    const id = window.setTimeout(() => setShown((n) => Math.min(WELCOME_TEXT.length, n + 2)), 30);
-    return () => window.clearTimeout(id);
-  }, [phase, shown]);
+  let dropped = 0;
   return (
     <div className="yy-ob-scene" aria-hidden="true">
-      <p className="yy-ob-big-text" data-empty={shown === 0 || undefined}>
-        {WELCOME_TEXT.slice(0, shown)}<i className="yy-ob-caret" />
+      <p className="yy-ob-big-text yy-ob-spoken" data-phase={phase}>
+        {SPOKEN_WORDS.slice(0, heard).map((word, i) => (
+          <span
+            key={`${round}-${i}`}
+            className="yy-ob-word"
+            data-drop={word.drop || undefined}
+            style={word.drop ? { '--strike-delay': `${(dropped++) * 180}ms` } as CSSProperties : undefined}
+          >
+            {phase === 'written' ? word.written ?? word.said : word.said}
+          </span>
+        ))}
+        {phase !== 'written' && <i className="yy-ob-caret" />}
       </p>
-      <StagePill status={phase === 'typed' ? 'armed' : phase} levels={levels} />
+      <StagePill status={phase === 'written' ? 'armed' : phase} levels={levels} />
     </div>
   );
 }

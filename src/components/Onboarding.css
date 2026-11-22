@@ -511,6 +511,47 @@ html.dark .yy-ob {
   animation: yy-ob-enter 0.3s var(--ob-ease);
 }
 
+/* Welcome: words as they are said, then filler struck out and the rest tidied. */
+.yy-ob-spoken {
+  min-height: 4.05em;
+  text-wrap: pretty;
+}
+
+.yy-ob-word {
+  display: inline-block;
+  max-width: 7em;
+  margin-right: 0.27em;
+  overflow: hidden;
+  vertical-align: bottom;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 2px;
+  animation: yy-ob-word-in 0.25s var(--ob-ease);
+  transition: color 0.4s, max-width 0.5s var(--ob-ease), margin 0.5s var(--ob-ease), opacity 0.35s;
+}
+
+@keyframes yy-ob-word-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+.yy-ob-spoken[data-phase="processing"] .yy-ob-word[data-drop] {
+  color: var(--ob-error);
+  background-size: 100% 2px;
+  transition: color 0.2s var(--strike-delay), background-size 0.3s var(--ob-ease) var(--strike-delay);
+}
+
+.yy-ob-spoken[data-phase="written"] .yy-ob-word {
+  color: var(--text-primary);
+}
+
+.yy-ob-spoken[data-phase="written"] .yy-ob-word[data-drop] {
+  max-width: 0;
+  margin-right: 0;
+  opacity: 0;
+  color: var(--ob-error);
+  background-size: 100% 2px;
+}
+
 /* Microphone. */
 .yy-ob-pill-off {
   display: grid;
@@ -673,5 +714,6 @@ html.dark .yy-ob {
   .yy-ob-scene,
   .yy-ob-fade,
   .yy-ob-line i,
+  .yy-ob-word,
   .yy-ob-caret { animation: none; }
 }
