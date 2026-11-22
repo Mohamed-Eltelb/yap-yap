@@ -654,6 +654,108 @@ html.dark .yy-ob {
   font-weight: 600;
 }
 
+/* Connect: choose a connected provider for each job. */
+.yy-ob-chooser {
+  justify-items: stretch;
+  gap: 28px;
+}
+
+.yy-ob-choose {
+  display: grid;
+  gap: 10px;
+}
+
+.yy-ob-choose h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.yy-ob-choose h3 small {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.yy-ob-choices {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-card-solid);
+}
+
+.yy-ob-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.yy-ob-choice + .yy-ob-choice {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.yy-ob-choice:hover {
+  background: var(--bg-hover);
+}
+
+.yy-ob-choice:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
+.yy-ob-choice > span:nth-child(2) {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.yy-ob-choice strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.yy-ob-choice small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.yy-ob-choice-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  color: #fff;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.yy-ob-choice[aria-checked="true"] .yy-ob-choice-mark {
+  border-color: var(--accent-blue-fill);
+  background: var(--accent-blue-fill);
+}
+
+.yy-ob-choose-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .yy-ob-note {
   justify-self: start;
   max-width: 34em;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Onboarding } from '../components/Onboarding';
@@ -26,6 +26,9 @@ function setup(props: Partial<Parameters<typeof Onboarding>[0]> = {}) {
   return { ...handlers, state, view, user: userEvent.setup() };
 }
 
+/** A provider in the list on the left, not the chooser on the right. */
+const providerRow = (name: RegExp) => within(screen.getByRole('radiogroup', { name: 'Provider' })).getByRole('radio', { name });
+
 const withGroqKey = () => {
   const state = getInitialState();
   return { ...state, providers: { ...state.providers, groq: { ...state.providers.groq, apiKey: 'gsk_test' } } };
@@ -42,12 +45,12 @@ describe('First-run setup', () => {
     const { user, view, onFinish } = setup();
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     expect(screen.getByRole('heading', { name: 'Connect your AI' })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Groq/ }).getAttribute('aria-checked')).toBe('true');
+    expect(providerRow(/Groq/).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('button', { name: 'Verify & add' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
 
     view.rerender(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={onFinish} />);
-    expect(screen.getByRole('radio', { name: /Groq/ }).textContent).toContain('Connected');
+    expect(providerRow(/Groq/).textContent).toContain('Connected');
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -57,9 +60,9 @@ describe('First-run setup', () => {
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     expect(screen.queryByRole('button', { name: 'Remove provider' })).toBeNull();
 
-    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    await user.click(providerRow(/Groq/));
     expect(screen.getByRole('button', { name: 'Remove provider' })).toBeTruthy();
-    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    await user.click(providerRow(/Groq/));
     expect(screen.queryByRole('button', { name: 'Remove provider' })).toBeNull();
   });
 
@@ -68,13 +71,27 @@ describe('First-run setup', () => {
     const onRemoveProvider = vi.fn();
     render(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={onRemoveProvider} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'Get started' }));
-    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    await user.click(providerRow(/Groq/));
     await user.click(screen.getByRole('button', { name: 'Remove provider' }));
     for (const confirm of screen.queryAllByRole('button', { name: /^Remove$/ })) await user.click(confirm);
 
     expect(onRemoveProvider).toHaveBeenCalledWith('groq');
     expect(screen.queryByText('Connected providers')).toBeNull();
-    expect(screen.getByRole('radio', { name: /Groq/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(providerRow(/Groq/).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('chooses which connected provider does dictation and AI', async () => {
+    const user = userEvent.setup();
+    const onUpdateSettings = vi.fn();
+    const base = withGroqKey();
+    const state = { ...base, providers: { ...base.providers, deepgram: { ...base.providers.deepgram, apiKey: 'dg_test' } } };
+    render(<Onboarding state={state} onUpdateSettings={onUpdateSettings} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+
+    const dictation = screen.getByRole('radiogroup', { name: 'Dictation' });
+    await user.click(within(dictation).getByRole('radio', { name: /Deepgram/ }));
+    expect(onUpdateSettings).toHaveBeenCalledWith({ activeSttProvider: 'deepgram' });
+    expect(within(screen.getByRole('radiogroup', { name: 'AI' })).queryByRole('radio', { name: /Deepgram/ })).toBeNull();
   });
 
   it('shows only a dictation made on the Try step', async () => {

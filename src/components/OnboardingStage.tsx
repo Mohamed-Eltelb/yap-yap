@@ -108,26 +108,31 @@ export function WelcomeScene() {
   );
 }
 
-const PROVIDER_NAMES: Partial<Record<ProviderId, string>> = {
-  groq: 'Groq', openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Claude', deepgram: 'Deepgram', elevenlabs: 'ElevenLabs',
-};
-const providerName = (id: ProviderId) => (id === 'custom' ? 'Your provider' : PROVIDER_NAMES[id] ?? id);
+interface JobOption { id: ProviderId; name: string; model: string }
+interface Job { title: string; detail: string; options: JobOption[]; value?: ProviderId; onChange: (id: ProviderId) => void }
 
-/** Connect: which provider does each job, and whether it is ready. */
-export function ConnectScene({ jobs }: { jobs: { label: string; provider?: ProviderId; connected: boolean }[] }) {
+/** Connect: pick which connected provider does each job. */
+export function ConnectScene({ jobs }: { jobs: Job[] }) {
   return (
-    <div className="yy-ob-scene" aria-hidden="true">
-      <dl className="yy-ob-jobs">
-        {jobs.map((job) => (
-          <div key={job.label} className="yy-ob-job" data-connected={job.connected || undefined}>
-            <dt>{job.label}</dt>
-            <dd>
-              {job.provider ? <><ProviderLogo id={job.provider} size={22} /> {providerName(job.provider)}</> : 'Not set up'}
-              <span className="yy-ob-job-state">{job.connected ? <><Check size={14} strokeWidth={2.5} /> Ready</> : 'Needs a key'}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
+    <div className="yy-ob-scene yy-ob-chooser">
+      {jobs.map((job) => (
+        <section key={job.title} className="yy-ob-choose">
+          <h3>{job.title}<small>{job.detail}</small></h3>
+          {job.options.length ? (
+            <div className="yy-ob-choices" role="radiogroup" aria-label={job.title}>
+              {job.options.map((option) => (
+                <button key={option.id} type="button" role="radio" aria-checked={job.value === option.id} className="yy-ob-choice" onClick={() => job.onChange(option.id)}>
+                  <ProviderLogo id={option.id} size={20} />
+                  <span><strong>{option.name}</strong><small>{option.model}</small></span>
+                  <span className="yy-ob-choice-mark" aria-hidden="true">{job.value === option.id && <Check size={12} strokeWidth={3} />}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="yy-ob-choose-empty">Connect a provider that can do this.</p>
+          )}
+        </section>
+      ))}
       <p className="yy-ob-note">Your audio goes from this computer straight to these providers. Your keys stay on this device.</p>
     </div>
   );

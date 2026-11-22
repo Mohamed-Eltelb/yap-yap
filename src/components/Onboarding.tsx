@@ -110,21 +110,31 @@ export function Onboarding(props: Props) {
     : `${level === 'light' ? 'Light' : 'Medium'} · ${STYLES.find((style) => style.id === settings.defaultStyle)?.label ?? 'Learn from me'}`;
 
   const configured = (id: ProviderId | 'none') => id !== 'none' && isProviderConfigured(providers[id]);
-  // The jobs show the providers in use; one being added takes the jobs it can do.
-  let stt: ProviderId | undefined = configured(settings.activeSttProvider) ? settings.activeSttProvider : undefined;
-  let llm: ProviderId | undefined = configured(settings.activeLlmProvider) ? (settings.activeLlmProvider as ProviderId) : undefined;
-  if (!configured(provider) || !stt) {
-    if (PROVIDER_CATALOG[provider].supportsStt) stt = provider;
-    if (PROVIDER_CATALOG[provider].supportsLlm && (!llm || !configured(provider))) llm = provider;
-  }
+  // Connected providers that can do each job, for the chooser on the right.
+  const connectedIds = [...PROVIDER_ORDER, 'custom' as ProviderId].filter((id, i, all) => all.indexOf(id) === i && configured(id));
+  const option = (id: ProviderId, model: string, models: { id: string; label: string }[]) => ({
+    id, name: id === 'custom' ? providers[id].name : PROVIDER_CATALOG[id].name, model: models.find((m) => m.id === model)?.label ?? model,
+  });
+  const sttOptions = connectedIds.filter((id) => PROVIDER_CATALOG[id].supportsStt)
+    .map((id) => option(id, providers[id].sttModel, PROVIDER_CATALOG[id].sttModels));
+  const llmOptions = connectedIds.filter((id) => PROVIDER_CATALOG[id].supportsLlm)
+    .map((id) => option(id, providers[id].llmModel, PROVIDER_CATALOG[id].llmModels));
   const deviceLabel = mic.microphones.find((m) => m.id === settings.microphoneId && m.id !== 'default')?.label ?? 'System default microphone';
 
   const scene: Record<Step, ReactNode> = {
     welcome: <WelcomeScene />,
     provider: (
       <ConnectScene jobs={[
-        { label: 'Speech to text', provider: stt, connected: !!stt && configured(stt) },
-        { label: 'Cleanup', provider: llm, connected: !!llm && configured(llm) },
+        {
+          title: 'Dictation', detail: 'Turns your voice into text.', options: sttOptions,
+          value: sttOptions.find((o) => o.id === settings.activeSttProvider)?.id ?? sttOptions[0]?.id,
+          onChange: (activeSttProvider) => props.onUpdateSettings({ activeSttProvider }),
+        },
+        {
+          title: 'AI', detail: 'Cleanup, translation and Ask Anything.', options: llmOptions,
+          value: llmOptions.find((o) => o.id === settings.activeLlmProvider)?.id ?? llmOptions[0]?.id,
+          onChange: (activeLlmProvider) => props.onUpdateSettings({ activeLlmProvider }),
+        },
       ]} />
     ),
     microphone: <MicrophoneScene levels={mic.levels} state={mic.state} device={deviceLabel} />,
