@@ -4,7 +4,7 @@ Tap a shortcut in your notes app, say “um, can we move the launch to Friday?�
 
 **Yap Yap has been tested on Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
 
-**[Download](https://yapyap-app.vercel.app/download.html) · [Try the interactive demo](https://yapyap-app.vercel.app/) · [Setup guide](https://yapyap-app.vercel.app/providers.html) · [Run from source](#run-from-source)**
+**[Download](https://yapyapapp.site/download.html) · [Try the interactive demo](https://yapyapapp.site/) · [Setup guide](https://yapyapapp.site/providers.html) · [Run from source](#run-from-source)**
 
 <p align="center">
   <img src="docs/media/dictation.gif" width="480" alt="Illustrated dictation demo showing a spoken request being cleaned up as the recording pill moves from listening to finished.">
@@ -12,7 +12,7 @@ Tap a shortcut in your notes app, say “um, can we move the launch to Friday?�
 
 ## Install
 
-Download the installer for your platform from the [download page](https://yapyap-app.vercel.app/download.html) or the [latest release](https://github.com/Mohamed-Eltelb/yap-yap/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
+Download the installer for your platform from the [download page](https://yapyapapp.site/download.html) or the [latest release](https://github.com/Mohamed-Eltelb/yap-yap/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
 The installers aren’t code-signed, so your system may warn you the first time:
 
@@ -22,7 +22,7 @@ The installers aren’t code-signed, so your system may warn you the first time:
 
 ## Your first dictation
 
-1. Launch the desktop app and allow microphone access. Under **Settings → API Keys**, choose **Groq**, enter your own key, and select **Verify & add**. Groq can handle both transcription and text cleanup with one key. [Provider setup guide](https://yapyap-app.vercel.app/providers.html#groq)
+1. Launch the desktop app and allow microphone access. Under **Settings → API Keys**, choose **Groq**, enter your own key, and select **Verify & add**. Groq can handle both transcription and text cleanup with one key. [Provider setup guide](https://yapyapapp.site/providers.html#groq)
 2. Click inside a blank note. Tap and release the **Dictate** shortcut shown on Home, speak a sentence, then tap the shortcut again to finish.
 3. With auto-paste enabled, the result appears at your cursor. Open **History** to replay, edit, or retry it with another provider.
 

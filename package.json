@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "Dictate, translate, and ask questions from any text field with your own AI providers.",
   "private": true,
-  "homepage": "https://yapyap-app.vercel.app",
+  "homepage": "https://yapyapapp.site",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Mohamed-Eltelb/yap-yap.git"

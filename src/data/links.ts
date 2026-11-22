@@ -1,7 +1,7 @@
 import type { ProviderId } from '../types/app';
 
 /** The Yap Yap website. Change it here when the site moves to its own domain. */
-export const SITE_URL = 'https://yapyap-app.vercel.app';
+export const SITE_URL = 'https://yapyapapp.site';
 
 export const siteLinks = {
   home: `${SITE_URL}/`,

@@ -306,7 +306,7 @@ export async function renderShareCardToCanvas(
   ctx.textAlign = 'right';
   ctx.fillStyle = '#6b6b73';
   ctx.font = `400 14px ${BODY_FONT}`;
-  ctx.fillText('yapyap-app.vercel.app', W - CARD.padX, y + 16);
+  ctx.fillText('yapyapapp.site', W - CARD.padX, y + 16);
 
   // Clip to the rounded card shape.
   const out = document.createElement('canvas');
