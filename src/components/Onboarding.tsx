@@ -94,10 +94,25 @@ export function Onboarding(props: Props) {
   const level: Level = settings.smartCleanup ? settings.cleanupLevel : 'none';
   const written = level === 'none' ? SPOKEN : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
 
+  const configured = (id: ProviderId | 'none') => id !== 'none' && isProviderConfigured(providers[id]);
+  // The jobs show the providers in use; one being added takes the jobs it can do.
+  let stt: ProviderId | undefined = configured(settings.activeSttProvider) ? settings.activeSttProvider : undefined;
+  let llm: ProviderId | undefined = configured(settings.activeLlmProvider) ? (settings.activeLlmProvider as ProviderId) : undefined;
+  if (!configured(provider) || !stt) {
+    if (PROVIDER_CATALOG[provider].supportsStt) stt = provider;
+    if (PROVIDER_CATALOG[provider].supportsLlm && (!llm || !configured(provider))) llm = provider;
+  }
+  const deviceLabel = mic.microphones.find((m) => m.id === settings.microphoneId && m.id !== 'default')?.label ?? 'System default microphone';
+
   const scene: Record<Step, ReactNode> = {
     welcome: <WelcomeScene />,
-    provider: <ConnectScene provider={provider} connected={isProviderConfigured(providers[provider])} />,
-    microphone: <MicrophoneScene levels={mic.levels} live={mic.state === 'live'} />,
+    provider: (
+      <ConnectScene jobs={[
+        { label: 'Speech to text', provider: stt, connected: !!stt && configured(stt) },
+        { label: 'Cleanup', provider: llm, connected: !!llm && configured(llm) },
+      ]} />
+    ),
+    microphone: <MicrophoneScene levels={mic.levels} state={mic.state} device={deviceLabel} />,
     try: <TryScene keys={dictateKeys} status={props.hudStatus ?? 'idle'} levels={props.hudLevels ?? []} result={tried} />,
     writing: <WritingScene spoken={SPOKEN} written={written} />,
     done: (
