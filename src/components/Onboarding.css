@@ -218,6 +218,31 @@ html.dark .yy-ob {
   color: var(--text-secondary);
 }
 
+.yy-ob-login {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.yy-ob-login span {
+  display: grid;
+  gap: 2px;
+  font-size: 13.5px;
+}
+
+.yy-ob-login strong {
+  font-weight: 600;
+}
+
+.yy-ob-login small {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
 /* Provider picker: one list; the chosen provider opens to its key or its status. */
 .yy-ob-providers {
   display: grid;

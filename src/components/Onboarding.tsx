@@ -13,6 +13,7 @@ import { ProviderLogo } from './ProviderIcon';
 import { ProviderSettings } from './ProviderSettings';
 import { SelectMenu } from './SelectMenu';
 import { StartingStylesDialog } from './StartingStylesDialog';
+import { Toggle } from './Toggle';
 import { WindowControls, YapLogo } from './YapLogo';
 import './Onboarding.css';
 
@@ -195,6 +196,17 @@ export function Onboarding(props: Props) {
                     <span>See what it learned, and correct it, in Settings under Personalization.</span>
                   </li>
                 </ul>
+                <div className="yy-ob-login">
+                  <span>
+                    <strong>Open Yap Yap when your computer starts</strong>
+                    <small>So your shortcut works right after you sign in.</small>
+                  </span>
+                  <Toggle
+                    label="Open Yap Yap when your computer starts"
+                    checked={settings.launchAtLogin}
+                    onChange={(launchAtLogin) => props.onUpdateSettings({ launchAtLogin })}
+                  />
+                </div>
               </>
             )}
           </div>

@@ -174,6 +174,10 @@ describe('First-run setup', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.queryByRole('button', { name: 'Skip setup' })).toBeNull();
+    const login = screen.getByRole('switch', { name: 'Open Yap Yap when your computer starts' });
+    expect(login.getAttribute('aria-checked')).toBe('true');
+    await user.click(login);
+    expect(onUpdateSettings).toHaveBeenCalledWith({ launchAtLogin: false });
     await user.click(screen.getByRole('button', { name: 'Start dictating' }));
     expect(onFinish).toHaveBeenCalledOnce();
   });
