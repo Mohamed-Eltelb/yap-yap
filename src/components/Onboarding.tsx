@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Mic, Pencil } from 'lucide-react';
+import { Check, Mic, Pencil, RotateCcw } from 'lucide-react';
 import { PROVIDER_CATALOG, PROVIDER_ORDER, isProviderConfigured } from '../services/providers/catalog';
 import { STYLE_PRESETS } from '../services/personalization';
 import type { PersistedAppState } from '../services/storage';
@@ -89,7 +89,8 @@ export function Onboarding(props: Props) {
   const [provider, setProvider] = useState<ProviderId>(() => PROVIDER_ORDER.find((id) => isProviderConfigured(providers[id])) ?? 'groq');
   const mic = useMicTest(settings, step === 'microphone');
   const dictateKeys = shortcutKeys(settings.shortcuts.dictate);
-  const [before] = useState(props.latestDictation);
+  const [before, setBefore] = useState(props.latestDictation);
+  const [replay, setReplay] = useState(0);
   const tried = props.latestDictation !== before ? props.latestDictation : undefined;
   const level: Level = settings.smartCleanup ? settings.cleanupLevel : 'none';
   const written = level === 'none' ? SPOKEN : WRITTEN[level][settings.defaultStyle] ?? WRITTEN[level][''];
@@ -122,6 +123,13 @@ export function Onboarding(props: Props) {
         { label: 'Ask anything', keys: shortcutKeys(settings.shortcuts.ask) },
       ]} />
     ),
+  };
+
+  // Start the picture on the right over: replay the demo, restart the mic test, or clear the try.
+  const reset: Partial<Record<Step, { label: string; run: () => void }>> = {
+    welcome: { label: 'Replay', run: () => setReplay((n) => n + 1) },
+    microphone: { label: 'Restart the microphone test', run: () => void mic.start() },
+    ...(tried ? { try: { label: 'Try again', run: () => { setBefore(props.latestDictation); setReplay((n) => n + 1); } } } : {}),
   };
 
   return (
@@ -177,7 +185,14 @@ export function Onboarding(props: Props) {
               )}
           </div>
         </section>
-        <div className="yy-ob-stage" data-step={step}>{scene[step]}</div>
+        <div className="yy-ob-stage" data-step={step}>
+          <div key={`${step}-${replay}`} className="yy-ob-stage-scene">{scene[step]}</div>
+          {reset[step] && (
+            <button type="button" className="yy-ob-reset" aria-label={reset[step].label} title={reset[step].label} onClick={reset[step].run}>
+              <RotateCcw size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </main>
     </div>
   );
@@ -369,7 +384,7 @@ function TryStep({ heading, keys, tried, canDictate }: { heading: HeadingRef; ke
     <>
       <Intro heading={heading} title="Try it for real" lead={<>Press <Keys keys={keys} />, say a sentence, then press it again.</>} />
       <p role="status" className="yy-ob-status" data-ok={tried ? true : undefined}>
-        {tried ? 'That’s it. Your words landed in the chat.' : canDictate ? 'Your words will land in the chat on the right.' : 'Connect a provider first, then come back to try it.'}
+        {tried ? 'That’s it. Your words are on the right.' : canDictate ? 'Your words will appear on the right.' : 'Connect a provider first, then come back to try it.'}
       </p>
       <p className="yy-ob-hint">In other apps, the text goes straight to where your cursor is. You can change the shortcut in Settings.</p>
     </>

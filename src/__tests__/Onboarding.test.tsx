@@ -64,6 +64,10 @@ describe('First-run setup', () => {
 
     view.rerender(<Onboarding state={state} latestDictation="Hello from Yap Yap." {...handlers} />);
     expect(screen.getByText('Hello from Yap Yap.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.queryByText('Hello from Yap Yap.')).toBeNull();
+    expect(screen.getByText('Try saying')).toBeTruthy();
   });
 
   it('sets the cleanup level and finishes from the last step', async () => {

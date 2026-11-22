@@ -450,6 +450,36 @@ html.dark .yy-ob {
   place-items: center;
 }
 
+.yy-ob-stage-scene {
+  display: grid;
+  width: 100%;
+  place-items: center;
+}
+
+/* Start the picture over. */
+.yy-ob-reset {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+
+.yy-ob-reset:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.yy-ob-reset:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
 .yy-ob-scene {
   display: grid;
   justify-items: center;
