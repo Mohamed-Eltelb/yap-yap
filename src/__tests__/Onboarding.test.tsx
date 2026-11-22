@@ -47,8 +47,20 @@ describe('First-run setup', () => {
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
 
     view.rerender(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={onFinish} />);
-    expect(screen.getByRole('button', { name: 'Change key' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Groq/ }).textContent).toContain('Connected');
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('opens a connected provider to its settings when clicked', async () => {
+    const user = userEvent.setup();
+    render(<Onboarding state={withGroqKey()} onUpdateSettings={vi.fn()} onUpdateProvider={vi.fn()} onRemoveProvider={vi.fn()} onImportDictionary={vi.fn()} onFinish={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    expect(screen.queryByRole('button', { name: 'Remove provider' })).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    expect(screen.getByRole('button', { name: 'Remove provider' })).toBeTruthy();
+    await user.click(screen.getByRole('radio', { name: /Groq/ }));
+    expect(screen.queryByRole('button', { name: 'Remove provider' })).toBeNull();
   });
 
   it('shows only a dictation made on the Try step', async () => {
