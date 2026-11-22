@@ -276,6 +276,7 @@ html.dark .yy-ob {
   font-size: 11px;
   font-style: normal;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .yy-ob-provider-name small {

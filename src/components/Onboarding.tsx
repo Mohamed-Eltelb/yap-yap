@@ -318,7 +318,7 @@ function ProviderStep({ heading, provider, onPick, canDictate, state, onUpdatePr
               <button type="button" role="radio" aria-checked={provider === id} aria-expanded={expanded} className="yy-ob-provider-row" onClick={() => pick(id)}>
                 <ProviderLogo id={id} size={20} />
                 <span className="yy-ob-provider-name">
-                  <strong>{id === 'custom' ? 'Custom' : meta.name.replace(/^(Google|Anthropic)\s+/, '')}{id === 'groq' && <em className="yy-ob-tag">Free to start</em>}</strong>
+                  <strong>{id === 'custom' ? 'Custom' : meta.name.replace(/^(Google|Anthropic)\s+/, '')}{meta.freeOffer && <em className="yy-ob-tag">{meta.freeOffer}</em>}</strong>
                   <small>{providerRole(id)}</small>
                 </span>
                 {connected && <span className="yy-ob-provider-state"> Connected</span>}

@@ -13,6 +13,8 @@ export interface ProviderMeta {
   sttModels: { id: string; label: string }[];
   llmModels: { id: string; label: string }[];
   keyPlaceholder: string;
+  /** What a new account gets for free, shown in setup. Check the provider's pricing page before changing it. */
+  freeOffer?: string;
 }
 
 export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
@@ -39,6 +41,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   },
   groq: {
     id: 'groq',
+    freeOffer: 'Free to start',
     name: 'Groq',
     tagline: 'Fast AI text processing, and speech recognition best for one language',
     supportsStt: true,
@@ -103,6 +106,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   },
   deepgram: {
     id: 'deepgram',
+    freeOffer: '$200 free credit',
     name: 'Deepgram',
     tagline: 'Multilingual speech recognition with smart formatting',
     supportsStt: true,
@@ -120,6 +124,7 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderMeta> = {
   },
   elevenlabs: {
     id: 'elevenlabs',
+    freeOffer: '10k free credits monthly',
     name: 'ElevenLabs',
     tagline: 'Multilingual speech recognition',
     supportsStt: true,
