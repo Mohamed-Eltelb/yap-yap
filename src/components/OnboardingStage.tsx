@@ -158,6 +158,8 @@ export function Keys({ keys, pressed = false }: { keys: string[]; pressed?: bool
   );
 }
 
+const TRY_SENTENCE = 'Hey, can we move tomorrow’s meeting to three? Something came up.';
+
 /** Try it: the shortcut, the real pill following the real dictation, and what it wrote. */
 export function TryScene({ keys, status, levels, result }: { keys: string[]; status: HudState['status']; levels: number[]; result?: string }) {
   const recording = status === 'recording';
@@ -165,7 +167,14 @@ export function TryScene({ keys, status, levels, result }: { keys: string[]; sta
     <div className="yy-ob-scene">
       <div className="yy-ob-keyboard"><Keys keys={keys} pressed={recording} /></div>
       <StagePill status={recording || status === 'processing' ? status : 'armed'} levels={levels} />
-      <p className="yy-ob-big-text" data-empty={!result || undefined}>{result ?? 'Your words appear here.'}</p>
+      {result
+        ? <p className="yy-ob-big-text">{result}</p>
+        : (
+          <div className="yy-ob-suggest">
+            <span>Try saying</span>
+            <p className="yy-ob-big-text" data-empty>{TRY_SENTENCE}</p>
+          </div>
+        )}
     </div>
   );
 }

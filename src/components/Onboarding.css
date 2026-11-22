@@ -552,6 +552,19 @@ html.dark .yy-ob {
   background-size: 100% 2px;
 }
 
+/* Try it: a sentence to say, until the first dictation lands. */
+.yy-ob-suggest {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.yy-ob-suggest > span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 /* Microphone. */
 .yy-ob-pill-off {
   display: grid;
