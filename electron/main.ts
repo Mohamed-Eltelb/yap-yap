@@ -216,12 +216,16 @@ function newHudWindow(): BrowserWindow {
   // go to the app underneath. The HUD page turns this off while hovered.
   if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
 
-  window.webContents.on('did-start-loading', () => {
+  // Only a navigation that went through replaces the page, so only then wait for it to say it
+  // is ready again. Blocked ones (see will-frame-navigate) still start loading but keep the page,
+  // which would then never say so, leaving the HUD hidden for good.
+  window.webContents.on('did-navigate', () => {
     if (window !== hudWindow) return;
     hudReady = false;
     if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
     window.hide();
     hudEmpty = true;
+    hudLog().info(`HUD window ${id} page loading`);
   });
   window.webContents.on('render-process-gone', (_event, details) => {
     hudLog().warn(`HUD window ${id} page gone: ${details.reason}`);
