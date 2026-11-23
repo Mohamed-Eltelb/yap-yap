@@ -63,7 +63,7 @@ describe('Copying the selection', () => {
   });
 
   it('never presses Ctrl+C in terminals or in editors that copy the whole line', () => {
-    for (const app of ['WindowsTerminal', 'cmd', 'powershell', 'Code', 'Cursor', 'idea64', 'sublime_text']) {
+    for (const app of ['WindowsTerminal', 'cmd', 'powershell', 'Code', 'Cursor', 'idea64', 'sublime_text', 'mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer']) {
       expect(mayCopySelection(app)).toBe(false);
     }
     for (const app of ['firefox', 'chrome', 'Discord', 'WINWORD', 'Notepad']) {

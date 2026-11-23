@@ -11,6 +11,14 @@ const NEVER_COPY = new RegExp('^(?:' + [
   // IDEs, Visual Studio, Sublime Text, and Zed.
   'code', 'code - insiders', 'cursor', 'windsurf', 'antigravity', 'kiro', 'trae', 'void', 'positron',
   '[a-z]+64', 'fleet', 'devenv', 'sublime_text', 'zed',
+  // Remote desktops and virtual machines pass Ctrl+C on to the other computer, maybe to a terminal.
+  'mstsc', 'msrdc', 'vmconnect', 'vmware', 'vmplayer', 'virtualboxvm', 'teamviewer', 'anydesk', 'parsecd',
+  'vncviewer', 'rustdesk',
+  // Python's IDLE stops the running code on Ctrl+C.
+  'pythonw',
+  // Something is always selected here: the active cell in Excel, a slide or shape in PowerPoint,
+  // files in File Explorer and on the desktop.
+  'excel', 'powerpnt', 'explorer',
 ].join('|') + ')$', 'i');
 
 export function mayCopySelection(processName: string): boolean {

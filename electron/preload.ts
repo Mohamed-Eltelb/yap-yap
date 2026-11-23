@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('yapyap', {
   setShortcutEditorOpen: (open: boolean) => ipcRenderer.send('shortcuts:editor', open),
   preparePaste: () => ipcRenderer.send('clipboard:prepare-paste'),
   captureDictationContext: () => ipcRenderer.invoke('dictation:capture-context'),
-  captureSelection: () => ipcRenderer.invoke('selection:capture'),
+  captureSelection: (allowCopy?: boolean) => ipcRenderer.invoke('selection:capture', allowCopy === true),
   watchPasteCorrections: (text: string) => ipcRenderer.invoke('dictation:watch-corrections', text),
   readOtherApps: () => ipcRenderer.invoke('import:other-apps'),
   pasteText: (text: string, keepOnClipboard?: boolean) => ipcRenderer.invoke('clipboard:paste', text, keepOnClipboard === true),

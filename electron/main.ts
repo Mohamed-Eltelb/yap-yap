@@ -697,9 +697,9 @@ app.whenReady().then(() => {
     if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
-  ipcMain.handle('selection:capture', (event) => {
+  ipcMain.handle('selection:capture', (event, allowCopy?: boolean) => {
     if (event.sender !== mainWindow?.webContents || mainWindow.isFocused()) return;
-    if (!win32Available()) return captureSelection();
+    if (allowCopy !== true || !win32Available()) return captureSelection();
     // The window in front now, before the user can move on, is the one to copy from.
     const window = foregroundWindow();
     return captureSelection((processName) => mayCopySelection(processName) ? copySelection(window, {

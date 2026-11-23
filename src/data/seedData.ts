@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   sourceCategories: {},
   contextAwareness: true,
   askAboutSelection: true,
+  askCopySelection: true,
   learnFromEdits: true,
   defaultStyle: '',
   onboardingDone: false,

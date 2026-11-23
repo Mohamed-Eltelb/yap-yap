@@ -1119,7 +1119,7 @@ export function App() {
       openedTargetsDuringRecording.current = false;
       // Read now, while the other app still has the selection, and resolved while the user speaks.
       selectionProbeRef.current = mode === 'ask' && appState.settings.askAboutSelection
-        ? window.yapyap?.captureSelection?.().catch(() => undefined) : undefined;
+        ? window.yapyap?.captureSelection?.(appState.settings.askCopySelection).catch(() => undefined) : undefined;
       try {
         playInteractionSound('start', appState.settings.interactionSounds);
         const desktop = window.yapyap;
@@ -1185,6 +1185,7 @@ export function App() {
       appState.providers,
       appState.settings.activeSttProvider,
       appState.settings.askAboutSelection,
+      appState.settings.askCopySelection,
       appState.settings.interactionSounds,
       appState.settings.microphoneId,
       appState.settings.muteWhenDictating,

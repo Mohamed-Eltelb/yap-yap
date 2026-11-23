@@ -42,8 +42,8 @@ declare global {
       setShortcutEditorOpen: (open: boolean) => void;
       preparePaste: () => void;
       captureDictationContext: () => Promise<DictationContext | undefined>;
-      /** The text selected in the app in front, read without touching the clipboard. */
-      captureSelection?: () => Promise<SelectedText | undefined>;
+      /** The text selected in the app in front. With allowCopy, apps that don't share it are copied from. */
+      captureSelection?: (allowCopy?: boolean) => Promise<SelectedText | undefined>;
       /** Resolves with words the user respelled in the destination after a paste. */
       watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
       /** What Wispr Flow and Typeless on this computer hold that Yap Yap can bring over. */

@@ -183,6 +183,8 @@ export interface SettingsState {
   contextAwareness: boolean;
   /** Ask anything reads the text selected in the app in front and answers about it. */
   askAboutSelection: boolean;
+  /** When an app doesn't share its selection, copy it with Ctrl+C and put the clipboard back (Windows). */
+  askCopySelection: boolean;
   /** Watch fixes made right after a paste to learn style and dictionary words. */
   learnFromEdits: boolean;
   /** A style preset id for places with no style picked or learned, or '' to learn only. */

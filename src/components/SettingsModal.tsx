@@ -795,7 +795,7 @@ export function SettingsModal({
                           Ask about selected text
                         </div>
                         <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                          Select text in any app, then use Ask anything to summarize, translate, or ask about it. Apps that don't share their selection are copied from, and your clipboard is put back. The selection goes to your AI provider with your question and is kept in History with it, so you can retry it.
+                          Select text in any app, then use Ask anything to summarize, translate, or ask about it. The selection goes to your AI provider with your question and is kept in History with it, so you can retry it.
                         </p>
                       </div>
                       <Toggle
@@ -804,6 +804,24 @@ export function SettingsModal({
                         onChange={(val) => onUpdateSettings({ askAboutSelection: val })}
                       />
                     </div>
+
+                    {settings.askAboutSelection && window.yapyap?.platform === 'win32' && (
+                      <div className="py-2.5 pl-4 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Copy from apps that don't share it
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            Some apps, like Firefox, keep their selection to themselves. Yap Yap then copies it and puts your clipboard back, though the copy can still show in clipboard history (Win+V). Never used in terminals, code editors, or remote desktops.
+                          </p>
+                        </div>
+                        <Toggle
+                          label="Copy from apps that don't share it"
+                          checked={settings.askCopySelection}
+                          onChange={(val) => onUpdateSettings({ askCopySelection: val })}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
