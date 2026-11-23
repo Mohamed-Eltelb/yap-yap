@@ -245,7 +245,13 @@ function askWindowsHelper(command = '', timeoutMs = 1500): Promise<string> {
   });
 }
 
+export const isWayland = process.platform === 'linux' && (process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY));
+
 async function linuxForegroundPid(): Promise<string | undefined> {
+  if (isWayland) {
+    const { pid } = await linuxProbe('0', 'pid');
+    return typeof pid === 'number' && pid > 0 && pid !== process.pid ? String(pid) : undefined;
+  }
   const pid = await runContextProbe('xdotool', ['getactivewindow', 'getwindowpid']);
   return /^\d+$/.test(pid) ? pid : undefined;
 }
@@ -254,8 +260,8 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 
 // The probe treats a focused field as an address bar only in a browser. Other apps can
 // put ordinary text fields, such as a find bar, in a toolbar.
-async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection', browser = false): Promise<Record<string, unknown>> {
-  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18);
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert', browser = false, input?: string): Promise<Record<string, unknown>> {
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18, 1500, input);
   try {
     return JSON.parse(output);
   } catch {
@@ -264,9 +270,15 @@ async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'se
 }
 
 export async function linuxPrimaryStamp(): Promise<number | undefined> {
-  if (!process.env.DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland' || process.env.WAYLAND_DISPLAY) return;
+  if (!process.env.DISPLAY || isWayland) return;
   const stamp = await runContextProbe('/usr/bin/python3', ['-c', linuxPrimaryStampProbe], 8192, 500);
   return stamp ? Number(stamp) : undefined;
+}
+
+export async function insertWaylandText(text: string): Promise<boolean> {
+  const pid = await linuxForegroundPid();
+  if (!pid) return false;
+  return (await linuxProbe(pid, 'insert', false, text)).inserted === true;
 }
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
@@ -314,11 +326,16 @@ export function stopDictationContext(): void {
 }
 
 // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
-function runContextProbe(file: string, args: string[], maxBuffer = 8192, timeout = 1500): Promise<string> {
+function runContextProbe(file: string, args: string[], maxBuffer = 8192, timeout = 1500, input?: string): Promise<string> {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout, windowsHide: true, maxBuffer }, (error, stdout) => {
+    const child = execFile(file, args, { timeout, windowsHide: true, maxBuffer }, (error, stdout) => {
       resolve(error ? '' : stdout.trim());
     });
+    if (input !== undefined) {
+      // The target may have closed before the probe read its input.
+      child.stdin?.on('error', () => resolve(''));
+      child.stdin?.end(input);
+    }
   });
 }
 
@@ -443,12 +460,10 @@ export async function captureSelection(copy?: (processName: string) => Promise<s
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
   }
   if (process.platform !== 'linux') return;
-  // Native Wayland never tells other apps which window is in front, so xdotool finds nothing.
-  // Then "0" has the probe look in every app for the active window, which AT-SPI still reports.
-  const pid = await linuxForegroundPid() ?? '0';
+  const pid = isWayland ? '0' : await linuxForegroundPid() ?? '0';
   const data = await linuxProbe(pid, 'selection');
   const found = parseSelection(data);
-  if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
+  if (found || isWayland || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
   return parseSelection({ text: await copy('') });

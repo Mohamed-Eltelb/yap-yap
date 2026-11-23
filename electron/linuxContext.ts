@@ -63,8 +63,9 @@ def selected_text(node, start, end, depth=0):
     element can't be read, so no words go missing silently. Firefox adds U+FEFF, which is dropped.
     """
     text = Atspi.Text.get_text(node, start, min(end, start + SELECTION_LIMIT + 1))
+    editable = node.get_state_set().contains(Atspi.StateType.EDITABLE)
     if OBJECT not in text:
-        return text.replace('﻿', '')
+        return text.replace('﻿', ''), editable
     if depth > 8:
         return None
     parts = []
@@ -85,16 +86,60 @@ def selected_text(node, start, end, depth=0):
             return None
         if child.get_text_iface() is None:
             continue
-        if child.get_n_selections() > 0:
+        child_selected = child.get_n_selections() > 0
+        if child_selected:
             span = Atspi.Text.get_selection(child, 0)
             piece = selected_text(child, span.start_offset, span.end_offset, depth + 1)
         else:
             piece = selected_text(child, 0, child.get_character_count(), depth + 1)
         if piece is None:
             return None
-        parts.append(piece)
-        length += len(piece)
-    return ''.join(parts).replace('﻿', '')
+        child_text, child_editable = piece
+        # A document reports a selection inside a textarea as just that embedded object.
+        if text == OBJECT and child_selected:
+            editable = editable or child_editable
+        parts.append(child_text)
+        length += len(child_text)
+    return ''.join(parts).replace('﻿', ''), editable
+
+def insert_text(node, text):
+    # Wayland does not let an unfocused app drive Ctrl+V. Edit only the focused field
+    # and check what arrived: some apps acknowledge an edit they did not apply.
+    if not text or node.get_n_selections() > 1:
+        return False
+    start = end = node.get_caret_offset()
+    if node.get_n_selections():
+        span = Atspi.Text.get_selection(node, 0)
+        start, end = sorted((span.start_offset, span.end_offset))
+    count = node.get_character_count()
+    if not 0 <= start <= end <= count:
+        return False
+    old = Atspi.Text.get_text(node, start, end) if end > start else ''
+    size = len(text)
+
+    def matches(offset, expected):
+        return Atspi.Text.get_text(node, offset, offset + len(expected)) == expected
+
+    # Insert first so an unsupported insertion never erases the user's selection.
+    Atspi.EditableText.insert_text(node, end, text, len(text.encode('utf-8')))
+    added = node.get_character_count() - count
+    if old and added == size and matches(start, old) and matches(end, text):
+        Atspi.EditableText.delete_text(node, start, end)
+    if node.get_character_count() == count - (end - start) + size and matches(start, text):
+        Atspi.Text.set_caret_offset(node, start + size)
+        return True
+
+    # A field may cap the insertion or refuse the deletion. Remove only the prefix
+    # we can still identify, leaving the original selection in place.
+    if 0 < added <= size and node.get_character_count() == count + added and matches(end, text[:added]):
+        if not old or matches(start, old):
+            Atspi.EditableText.delete_text(node, end, end + added)
+            if old and node.get_character_count() == count:
+                if node.get_n_selections():
+                    Atspi.Text.set_selection(node, 0, start, end)
+                else:
+                    Atspi.Text.add_selection(node, start, end)
+    return False
 
 def read_field(pid, mode, browser):
     desktop = Atspi.get_desktop(0)
@@ -109,6 +154,10 @@ def read_field(pid, mode, browser):
             window = app.get_child_at_index(i)
             if window and window.get_state_set().contains(Atspi.StateType.ACTIVE):
                 queue.append(window)
+        if mode == 'pid':
+            if queue:
+                return dict(pid=app.get_process_id())
+            continue
         if not pid and not queue:
             continue
         focused_page = False
@@ -136,12 +185,20 @@ def read_field(pid, mode, browser):
                         return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
                     if found is None and span.end_offset > span.start_offset:
-                        text = selected_text(node, span.start_offset, span.end_offset)
-                        if text is None:
+                        selection = selected_text(node, span.start_offset, span.end_offset)
+                        if selection is None:
                             # Part of it could not be read: the last highlight stands in for it.
                             found = dict(incomplete=True)
-                        elif text.strip():
-                            found = dict(text=text, editable=states.contains(Atspi.StateType.EDITABLE))
+                        else:
+                            text, editable = selection
+                            if text.strip():
+                                found = dict(text=text, editable=editable)
+            elif mode == 'insert':
+                if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE):
+                    if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type') == 'password':
+                        return
+                    if node.get_editable_text_iface() and node.get_text_iface():
+                        return dict(inserted=insert_text(node, sys.stdin.read()))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
                     if states.contains(Atspi.StateType.EDITABLE) or role == Atspi.Role.PASSWORD_TEXT:
