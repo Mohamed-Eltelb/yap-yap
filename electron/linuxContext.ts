@@ -100,7 +100,8 @@ def read_field(pid, mode, browser):
     desktop = Atspi.get_desktop(0)
     for index in range(desktop.get_child_count()):
         app = desktop.get_child_at_index(index)
-        if not app or app.get_process_id() != pid:
+        # pid 0: the foreground app is unknown (native Wayland); any app with the active window.
+        if not app or (pid and app.get_process_id() != pid):
             continue
         # Limit the search to an active top-level window in the foreground process.
         queue = deque()
@@ -108,6 +109,8 @@ def read_field(pid, mode, browser):
             window = app.get_child_at_index(i)
             if window and window.get_state_set().contains(Atspi.StateType.ACTIVE):
                 queue.append(window)
+        if not pid and not queue:
+            continue
         focused_page = False
         # Breadth-first order reaches the page document before any field inside it, but a
         # browser can list its address bar before the page. Then keep looking for the page.

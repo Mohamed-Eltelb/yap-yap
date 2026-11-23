@@ -443,8 +443,10 @@ export async function captureSelection(copy?: (processName: string) => Promise<s
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
   }
   if (process.platform !== 'linux') return;
-  const pid = await linuxForegroundPid();
-  const data = pid ? await linuxProbe(pid, 'selection') : undefined;
+  // Native Wayland never tells other apps which window is in front, so xdotool finds nothing.
+  // Then "0" has the probe look in every app for the active window, which AT-SPI still reports.
+  const pid = await linuxForegroundPid() ?? '0';
+  const data = await linuxProbe(pid, 'selection');
   const found = parseSelection(data);
   if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last

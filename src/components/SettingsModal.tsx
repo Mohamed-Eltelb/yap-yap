@@ -845,7 +845,7 @@ export function SettingsModal({
                             Use the last highlight in apps that don't share it
                           </div>
                           <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                            Chrome, Electron apps, and terminals often keep their selection to themselves. Yap Yap then uses the text you last highlighted (what middle-click pastes), if it changed since your last question. It may be text you highlighted a while ago; the selection shows above the answer.
+                            Chrome, Electron apps, and terminals often keep their selection to themselves. Yap Yap then uses the text you last highlighted (what middle-click pastes), if it changed since your last question. It may be text you highlighted a while ago; the selection shows above the answer. Wayland lets only the app in front read the highlight, so this works in X11 sessions only.
                           </p>
                         </div>
                         <Toggle
