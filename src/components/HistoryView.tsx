@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   Download,
+  ExternalLink,
   Flag,
   HardDrive,
   Info,
@@ -661,6 +662,17 @@ export function HistoryView({
               {answer && <button type="button" aria-label="Copy answer" onClick={() => onCopyText(answerAsPlainText(answer))} className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>}
             </header>
             <AnswerMarkdown text={answer ?? undefined} className="px-4 py-3 text-sm leading-relaxed select-text" />
+            {answerItem?.openedUrl && (
+              <a
+                href={answerItem.openedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mx-4 mb-3 inline-flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--bg-hover)]"
+              >
+                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+                <span className="truncate">Open again: {answerItem.openedUrl}</span>
+              </a>
+            )}
           </section>
         </div>
       </dialog>

@@ -62,6 +62,8 @@ export interface HistoryItem {
   selectionTruncated?: boolean;
   /** Ask anything: the answer was a rewrite of the selection, made to replace it. */
   rewroteSelection?: boolean;
+  /** Ask anything: the website the user asked to open, opened instead of pasting an answer. */
+  openedUrl?: string;
   targetLanguage?: string;
   durationMs: number;
   wordCount: number;
@@ -189,6 +191,8 @@ export interface SettingsState {
   askCopySelection: boolean;
   /** When the user asks to rewrite text selected in a field they can edit, paste the rewrite over it. */
   askReplaceSelection: boolean;
+  /** Ask anything opens a website the user asks for ("open Google") in the default browser. */
+  askOpenWebsites: boolean;
   /** Watch fixes made right after a paste to learn style and dictionary words. */
   learnFromEdits: boolean;
   /** A style preset id for places with no style picked or learned, or '' to learn only. */

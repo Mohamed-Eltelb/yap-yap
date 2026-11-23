@@ -792,6 +792,22 @@ export function SettingsModal({
                     <div className="py-2.5 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Open websites you ask for
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Say "open Google" or "search YouTube for lo-fi" in Ask anything, and the page opens in your browser instead of an answer being pasted. A site your AI model doesn't know well opens as a Google search.
+                        </p>
+                      </div>
+                      <Toggle
+                        label="Open websites you ask for"
+                        checked={settings.askOpenWebsites}
+                        onChange={(val) => onUpdateSettings({ askOpenWebsites: val })}
+                      />
+                    </div>
+
+                    <div className="py-2.5 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
                           Ask about selected text
                         </div>
                         <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">

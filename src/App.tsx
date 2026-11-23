@@ -568,6 +568,8 @@ export function App() {
         let searchedWeb: boolean | undefined;
         /** Ask anything: the answer is a rewrite of the selection, to paste in its place. */
         let replaceSelection = false;
+        /** Ask anything: the website the user asked to open, opened instead of pasting. */
+        let openUrl: string | undefined;
         let learnStyle: (() => Promise<WritingSample | undefined>) | undefined;
         /** Learns from the casing and punctuation the user fixes in the pasted text. */
         let learnFromEdit: ((edited: string, pasted: string) => Promise<WritingSample | undefined>) | undefined;
@@ -669,6 +671,7 @@ export function App() {
                 selection,
                 canReplaceSelection,
                 selectionUnreadable: mode === 'ask' && selectionProbe !== undefined && !selection,
+                canOpenWebsites: mode === 'ask' && appState.settings.askOpenWebsites,
                 // The Thinking pill says "Searching the web" from the moment the provider starts searching.
                 onWebSearch: () => {
                   if (!dropped()) setHud((current) => current.status === 'processing' ? { ...current, searchingWeb: true } : current);
@@ -680,6 +683,7 @@ export function App() {
             answer = processed.answer;
             searchedWeb = processed.searchedWeb;
             replaceSelection = processed.replaceSelection === true;
+            openUrl = processed.openUrl;
             if (mode !== 'dictate') {
               usedProviderId = llmProvider.id;
               usedModel = llmProvider.llmModel;
@@ -746,6 +750,7 @@ export function App() {
                     searchedWeb,
                     ...askSelection(mode, selection),
                     rewroteSelection: replaceSelection || undefined,
+                    openedUrl: openUrl,
                     wordCount: words,
                     wpm,
                     providerId: usedProviderId,
@@ -772,7 +777,8 @@ export function App() {
             answer,
             searchedWeb,
             ...askSelection(mode, selection),
-                    rewroteSelection: replaceSelection || undefined,
+            rewroteSelection: replaceSelection || undefined,
+            openedUrl: openUrl,
             targetLanguage:
               mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
             durationMs,
@@ -836,6 +842,17 @@ export function App() {
         void learnStyle?.().then((sample) => sample && keepSample(sample));
 
         const desktop = window.yapyap;
+        // A website the user asked for opens in the browser; nothing is pasted or copied.
+        if (openUrl) {
+          if (dropped()) return;
+          const opened = desktop?.openAskUrl
+            ? await desktop.openAskUrl(openUrl)
+            : (window.open(openUrl, '_blank', 'noopener'), true);
+          if (!opened) throw new Error(`Yap Yap couldn't open ${openUrl}`);
+          playInteractionSound('stop', appState.settings.interactionSounds);
+          setHud({ status: 'idle', mode, levels: Array(20).fill(0.1) });
+          return;
+        }
         // A snippet at the start keeps its text exactly; fitting would lowercase its first letter.
         // An Ask answer is copied without the Markdown its card renders.
         // A rewrite pastes as the model wrote it: the selection may itself be Markdown.

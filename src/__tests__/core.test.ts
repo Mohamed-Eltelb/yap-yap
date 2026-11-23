@@ -1,6 +1,7 @@
 import { heardSpeech } from '../utils/audioRecorder';
 import { applyDictionaryReplacements, expandSnippets, snippetTriggerKey, snippetsSaidIn, snippetsFromCleanup, parseSnippets, wholeSnippet, mergeImportedWords, presetOf, STYLE_PRESETS, stylesForCleanup, applyStyleCorrections, readyStyles, sameHabit, styleDescription, builtInCategory, learnableSource, sourceLabel, listDestinations, parseSourceCategories, forgetRetainedStyles, forgetWritingStyles, parseRetainedStyles, restoreRetainedStyles, retainRemovedStyles, withRetainedStyles, mergeStyleCorrections, parseStyleCorrections, rejectStyles, restoreWritingStyles, samplesSinceCorrection, buildSourceCategories, buildWritingProfiles, categoryForDestination, dictionaryWordsFor, destinationKey, fitToSurroundingText, isStyleEdit, userWrittenText, parseWritingPreferences, parseWritingSample, personalizationScore, writingRulesFor } from '../services/personalization';
 import { browserDomain } from '../../electron/dictationContext';
+import { webUrl } from '../../electron/webUrl';
 import { addCapturedKey, findShortcutConflict, pauseHoldCombo, removeDuplicateShortcuts, reservedShortcut } from '../../electron/shortcutBindings';
 import { editedPaste, extractCorrections, watchPasteCorrections } from '../../electron/pasteCorrections';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -22,6 +23,7 @@ import {
   listProviderModels,
   processTranscriptWithLlm,
   proposeWritingPreferences,
+  splitOpenMarker,
   suggestStyleUpdate,
   testProviderConnection,
   transcribeAudio,
@@ -1912,6 +1914,56 @@ describe('Languages the user speaks', () => {
     const unread = await ask('x', { withSelection: false, selectionUnreadable: true });
     expect(unread.system).toContain('could not read any selected text');
     expect((await ask('x', { withSelection: false })).system).not.toContain('could not read');
+  });
+
+  it('opens a website the user asks for, and never pastes it', async () => {
+    const providers = createDefaultProviders();
+    providers.groq.apiKey = 'key';
+    const ask = async (reply: string, options: { canOpenWebsites?: boolean; canReplaceSelection?: boolean } = { canOpenWebsites: true }) => {
+      const fetchMock = ok({ choices: [{ message: { content: reply } }] });
+      vi.stubGlobal('fetch', fetchMock);
+      const result = await processTranscriptWithLlm('open the Typeless docs', 'ask', providers.groq, {
+        targetLanguages: [], dictionaryWords: [], smartCleanup: true,
+        selection: options.canReplaceSelection ? { text: 'hey', truncated: false, editable: true } : undefined,
+        ...options,
+      });
+      return { result, system: JSON.parse(fetchMock.mock.calls[0][1].body as string).messages[0].content as string };
+    };
+
+    const opened = await ask('[[OPEN]] https://docs.typeless.com/\nOpened the Typeless docs.');
+    expect(opened.result).toEqual({ finalText: 'Opened the Typeless docs.', answer: 'Opened the Typeless docs.', searchedWeb: undefined, openUrl: 'https://docs.typeless.com/' });
+    expect(opened.system).toContain('[[OPEN]]');
+    expect(opened.system).toContain('google.com/search');
+
+    // Opening wins over a rewrite, so nothing is pasted over the selection.
+    const both = await ask('[[OPEN]] https://www.google.com\n[[REPLACE]]\nhi', { canOpenWebsites: true, canReplaceSelection: true });
+    expect(both.result.openUrl).toBe('https://www.google.com/');
+    expect(both.result.replaceSelection).toBeUndefined();
+
+    // With the setting off, nothing is offered and a stray marker opens nothing.
+    const off = await ask('[[OPEN]] https://www.google.com\nOpened Google.', { canOpenWebsites: false });
+    expect(off.system).not.toContain('[[OPEN]]');
+    expect(off.result.openUrl).toBeUndefined();
+  });
+
+  it('reads the address after the open marker however the model wraps it', () => {
+    expect(splitOpenMarker('[[OPEN]] <https://www.youtube.com/results?search_query=lo-fi>\nDone.'))
+      .toEqual({ text: 'Done.', url: 'https://www.youtube.com/results?search_query=lo-fi' });
+    expect(splitOpenMarker('**[[open]]** [Gmail](https://mail.google.com/).').url).toBe('https://mail.google.com/');
+    expect(splitOpenMarker('"[[OPEN]]" https://facebook.com.').url).toBe('https://facebook.com/');
+    expect(splitOpenMarker('No marker https://google.com')).toEqual({ text: 'No marker https://google.com' });
+    // Anything but a web address is never opened, and the reply reads as an answer.
+    expect(splitOpenMarker('[[OPEN]] file:///C:/Windows/System32/calc.exe\nOpened it.')).toEqual({ text: 'file:///C:/Windows/System32/calc.exe\nOpened it.' });
+    expect(splitOpenMarker('[[OPEN]] javascript:alert(1)').url).toBeUndefined();
+    expect(splitOpenMarker('[[OPEN]] I can open websites but not apps.')).toEqual({ text: 'I can open websites but not apps.' });
+  });
+
+  it('opens only plain web addresses', () => {
+    expect(webUrl('https://docs.typeless.com/x?y=1')).toBe('https://docs.typeless.com/x?y=1');
+    expect(webUrl('http://example.com')).toBe('http://example.com/');
+    for (const bad of ['file:///C:/x', 'ms-settings:privacy', 'search-ms:query=x', 'javascript:alert(1)', 'https://google.com@evil.example', 'https://localhost', 'not a url', 42, undefined]) {
+      expect(webUrl(bad)).toBeUndefined();
+    }
   });
 
   it('uses multilingual mode on Nova-3 Medical, without hints it may reject', async () => {

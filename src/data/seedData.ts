@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   askAboutSelection: true,
   askCopySelection: true,
   askReplaceSelection: true,
+  askOpenWebsites: true,
   learnFromEdits: true,
   defaultStyle: '',
   onboardingDone: false,

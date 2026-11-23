@@ -28,6 +28,7 @@ import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindo
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { copyPlanFor, copySelection } from './selectionCopy';
+import { webUrl } from './webUrl';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -719,6 +720,17 @@ app.whenReady().then(() => {
       wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       }, plan) : Promise.resolve(undefined);
     });
+  });
+  // A website the user asked Ask anything to open. Only web addresses: see webUrl.
+  ipcMain.handle('ask:open-url', async (event, address: unknown) => {
+    const url = event.sender === mainWindow?.webContents ? webUrl(address) : undefined;
+    if (!url) return false;
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
   ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()
