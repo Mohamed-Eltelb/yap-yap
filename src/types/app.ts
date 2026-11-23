@@ -187,7 +187,10 @@ export interface SettingsState {
   contextAwareness: boolean;
   /** Ask anything reads the text selected in the app in front and answers about it. */
   askAboutSelection: boolean;
-  /** When an app doesn't share its selection, copy it with Ctrl+C and put the clipboard back (Windows). */
+  /**
+   * When an app doesn't share its selection: on Windows, copy it and put the clipboard back; on
+   * Linux, use the last highlighted text (the primary selection) if it changed since the last Ask.
+   */
   askCopySelection: boolean;
   /** When the user asks to rewrite text selected in a field they can edit, paste the rewrite over it. */
   askReplaceSelection: boolean;

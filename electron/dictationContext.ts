@@ -436,6 +436,10 @@ export async function captureSelection(copy?: (processName: string) => Promise<s
   }
   if (process.platform !== 'linux') return;
   const pid = await linuxForegroundPid();
-  if (!pid) return;
-  return parseSelection(await linuxProbe(pid, 'selection'));
+  const data = pid ? await linuxProbe(pid, 'selection') : undefined;
+  const found = parseSelection(data);
+  if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
+  // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
+  // highlighted text. Where it came from is unknown, so it is never typed over.
+  return parseSelection({ text: await copy('') });
 }

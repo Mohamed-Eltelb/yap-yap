@@ -29,6 +29,7 @@ import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { copyPlanFor, copySelection } from './selectionCopy';
 import { webUrl } from './webUrl';
+import { freshHighlights } from './primarySelection';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -698,8 +699,14 @@ app.whenReady().then(() => {
     if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
-  ipcMain.handle('selection:capture', (event, allowCopy?: boolean) => {
+  const freshHighlight = freshHighlights();
+  ipcMain.handle('selection:capture', async (event, allowCopy?: boolean) => {
     if (event.sender !== mainWindow?.webContents || mainWindow.isFocused()) return;
+    if (process.platform === 'linux' && allowCopy === true) {
+      // Read at every Ask, even when accessibility finds the selection, so it is never reused later.
+      const highlight = await (clipboard.selection?.readText() ?? Promise.resolve(undefined)).then(freshHighlight, () => undefined);
+      return captureSelection(highlight ? async () => highlight : undefined);
+    }
     if (allowCopy !== true || !win32Available()) return captureSelection();
     // The window in front now, before the user can move on, is the one to copy from.
     const window = foregroundWindow();

@@ -838,6 +838,23 @@ export function SettingsModal({
                         />
                       </div>
                     )}
+                    {settings.askAboutSelection && window.yapyap?.platform === 'linux' && (
+                      <div className="py-2.5 pl-4 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Use the last highlight in apps that don't share it
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            Chrome, Electron apps, and terminals often keep their selection to themselves. Yap Yap then uses the text you last highlighted (what middle-click pastes), if it changed since your last question. It may be text you highlighted a while ago; the selection shows above the answer.
+                          </p>
+                        </div>
+                        <Toggle
+                          label="Use the last highlight in apps that don't share it"
+                          checked={settings.askCopySelection}
+                          onChange={(val) => onUpdateSettings({ askCopySelection: val })}
+                        />
+                      </div>
+                    )}
                     {settings.askAboutSelection && window.yapyap?.platform === 'win32' && (
                       <div className="py-2.5 pl-4 flex items-center justify-between gap-4">
                         <div>

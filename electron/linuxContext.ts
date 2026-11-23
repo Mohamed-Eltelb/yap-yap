@@ -76,11 +76,14 @@ def read_field(pid, mode, browser):
             role = node.get_role()
             states = node.get_state_set()
             if mode == 'selection':
+                # A focused password field: nothing is read, and the highlight fallback is not used.
+                if role == Atspi.Role.PASSWORD_TEXT and states.contains(Atspi.StateType.FOCUSED):
+                    return dict(password=True)
                 # Read-only text counts: a selection on a web page is often what is asked about.
                 if role != Atspi.Role.PASSWORD_TEXT and node.get_text_iface() is not None and node.get_n_selections() > 0:
                     attrs = node.get_attributes() or {}
                     if attrs.get('text-input-type', '').lower() == 'password':
-                        return
+                        return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
                     if span.end_offset > span.start_offset:
                         end = min(span.end_offset, span.start_offset + SELECTION_LIMIT + 1)
