@@ -462,7 +462,7 @@ export function App() {
       const run = ++processingRunRef.current;
       const dropped = () => run !== processingRunRef.current;
       // Kept so a dictation cancelled while it is processing can be brought back with Undo.
-      processingAudioRef.current = Promise.resolve([audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste]);
+      processingAudioRef.current = Promise.resolve([audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste, undefined, selectionProbe]);
 
       setHud({
         status: 'processing',
