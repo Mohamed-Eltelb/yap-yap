@@ -4,7 +4,7 @@
 
 <p align="center"><b>Free, open-source voice dictation for your desktop.</b><br>Bring your own AI keys. Windows, macOS and Linux.</p>
 
-<p align="center"><b><a href="https://yapyapapp.site/download.html">Download</a> · <a href="https://youtu.be/43EtNWgVEYs">Watch the trailer</a> · <a href="https://yapyapapp.site/">Try the interactive demo</a> · <a href="https://yapyapapp.site/providers.html">Setup guide</a></b></p>
+<p align="center"><b><a href="https://yapyapapp.site/download">Download</a> · <a href="https://youtu.be/43EtNWgVEYs">Watch the trailer</a> · <a href="https://yapyapapp.site/">Try the interactive demo</a> · <a href="https://yapyapapp.site/providers">Setup guide</a></b></p>
 
 Tap a shortcut in your notes app, say “um, can we move the launch to Friday?”, and Yap Yap types the cleaned-up sentence at your cursor. Use the same floating recorder to translate a message or ask a question. You choose who transcribes your audio and who edits the text.
 
@@ -22,7 +22,7 @@ Tap a shortcut in your notes app, say “um, can we move the launch to Friday?�
 
 ## Install
 
-Download the installer for your platform from the [download page](https://yapyapapp.site/download.html) or the [latest release](https://github.com/Mohamed-Eltelb/yap-yap/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
+Download the installer for your platform from the [download page](https://yapyapapp.site/download) or the [latest release](https://github.com/Mohamed-Eltelb/yap-yap/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
 The installers aren’t code-signed, so your system may warn you the first time:
 
@@ -32,7 +32,7 @@ The installers aren’t code-signed, so your system may warn you the first time:
 
 ## Your first dictation
 
-1. Launch the desktop app. The first-run setup walks you through microphone access, connecting a provider, a microphone check and a test dictation. **Groq** is a good start: one free key handles both transcription and text cleanup. [Provider setup guide](https://yapyapapp.site/providers.html#groq)
+1. Launch the desktop app. The first-run setup walks you through microphone access, connecting a provider, a microphone check and a test dictation. **Groq** is a good start: one free key handles both transcription and text cleanup. [Provider setup guide](https://yapyapapp.site/providers#groq)
 2. Click inside a blank note. Tap and release the **Dictate** shortcut shown on Home, speak a sentence, then tap the shortcut again to finish.
 3. With auto-paste enabled, the result appears at your cursor. Open **History** to replay, edit, or retry it with another provider.
 
