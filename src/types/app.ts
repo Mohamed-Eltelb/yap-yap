@@ -60,6 +60,8 @@ export interface HistoryItem {
   selectedText?: string;
   /** The selected text was cut at the length Yap Yap reads. */
   selectionTruncated?: boolean;
+  /** Ask anything: the answer was a rewrite of the selection, made to replace it. */
+  rewroteSelection?: boolean;
   targetLanguage?: string;
   durationMs: number;
   wordCount: number;
@@ -185,6 +187,8 @@ export interface SettingsState {
   askAboutSelection: boolean;
   /** When an app doesn't share its selection, copy it with Ctrl+C and put the clipboard back (Windows). */
   askCopySelection: boolean;
+  /** When the user asks to rewrite text selected in a field they can edit, paste the rewrite over it. */
+  askReplaceSelection: boolean;
   /** Watch fixes made right after a paste to learn style and dictionary words. */
   learnFromEdits: boolean;
   /** A style preset id for places with no style picked or learned, or '' to learn only. */

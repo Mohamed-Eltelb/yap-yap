@@ -1876,6 +1876,44 @@ describe('Languages the user speaks', () => {
     expect((await ask({ text: '  \n ', truncated: false })).user).toBe('summarize this');
   });
 
+  it('marks an Ask rewrite of editable selected text so it can replace the selection', async () => {
+    const providers = createDefaultProviders();
+    providers.groq.apiKey = 'key';
+    const ask = async (reply: string, options: { canReplaceSelection?: boolean; selectionUnreadable?: boolean; withSelection?: boolean } = {}) => {
+      const fetchMock = ok({ choices: [{ message: { content: reply } }] });
+      vi.stubGlobal('fetch', fetchMock);
+      const result = await processTranscriptWithLlm('make this formal', 'ask', providers.groq, {
+        targetLanguages: [], dictionaryWords: [], smartCleanup: true,
+        selection: options.withSelection === false ? undefined : { text: 'hey can u send it', truncated: false, editable: true },
+        canReplaceSelection: options.canReplaceSelection,
+        selectionUnreadable: options.selectionUnreadable,
+      });
+      return { result, system: JSON.parse(fetchMock.mock.calls[0][1].body as string).messages[0].content as string };
+    };
+
+    const rewrite = await ask('[[REPLACE]]\nCould you please send it?', { canReplaceSelection: true });
+    expect(rewrite.result).toMatchObject({ finalText: 'Could you please send it?', replaceSelection: true });
+    expect(rewrite.system).toContain('[[REPLACE]]');
+
+    // Quotes or bold around the marker still count, and it never reaches the card.
+    expect((await ask('**[[replace]]** Could you please send it?', { canReplaceSelection: true })).result)
+      .toMatchObject({ finalText: 'Could you please send it?', replaceSelection: true });
+
+    // A question about the text is an answer.
+    expect((await ask('It asks someone to send something.', { canReplaceSelection: true })).result.replaceSelection).toBeUndefined();
+
+    // Read-only text is never replaced: no marker offered, and a stray one is only removed.
+    const readOnly = await ask('[[REPLACE]]\nCould you please send it?');
+    expect(readOnly.system).not.toContain('[[REPLACE]]');
+    expect(readOnly.result).toMatchObject({ finalText: 'Could you please send it?' });
+    expect(readOnly.result.replaceSelection).toBeUndefined();
+
+    // With nothing read, the model says so instead of asking to be shown the text.
+    const unread = await ask('x', { withSelection: false, selectionUnreadable: true });
+    expect(unread.system).toContain('could not read any selected text');
+    expect((await ask('x', { withSelection: false })).system).not.toContain('could not read');
+  });
+
   it('uses multilingual mode on Nova-3 Medical, without hints it may reject', async () => {
     const fetchMock = ok({ results: { channels: [{ alternatives: [{ transcript: 'x' }] }] } });
     vi.stubGlobal('fetch', fetchMock);

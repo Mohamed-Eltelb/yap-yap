@@ -99,6 +99,26 @@ function askSelection(mode: DictationMode, selection?: SelectedText): Pick<Histo
     : { selectedText: undefined, selectionTruncated: undefined };
 }
 
+/**
+ * Pastes an Ask rewrite over the selection it was made from. The selection is read again first: if
+ * the user clicked elsewhere while speaking, a paste would land at the caret instead of replacing.
+ * False leaves the rewrite on the answer card.
+ */
+async function replaceSelectedText(
+  selection: SelectedText,
+  text: string,
+  desktop: NonNullable<typeof window.yapyap>,
+  keepOnClipboard: boolean,
+): Promise<boolean> {
+  try {
+    const now = await desktop.captureSelection?.(false);
+    if (now?.text !== selection.text) return false;
+    return await desktop.pasteText(text, keepOnClipboard);
+  } catch {
+    return false;
+  }
+}
+
 /** The selection a History item's question was about, so a retry asks about the same text. */
 function historySelection(item: HistoryItem): SelectedText | undefined {
   return item.mode === 'ask' && item.selectedText ? { text: item.selectedText, truncated: item.selectionTruncated === true } : undefined;
@@ -529,6 +549,11 @@ export function App() {
         const destination = mode === 'dictate' || mode === 'translate' ? await destinationProbe : undefined;
         const selection = mode === 'ask' ? await selectionProbe : undefined;
         if (dropped()) return;
+        // A rewrite replaces the selection only where it can be typed over, and only right after
+        // the question, while that selection is still there (never on a retry from History).
+        const canReplaceSelection = selection?.editable === true && appState.settings.askReplaceSelection
+          && !existingItemId && allowAutoPaste && !!window.yapyap;
+        if (canReplaceSelection) window.yapyap?.preparePaste?.();
         const location = destination && { application: destination.application, domain: destination.domain };
         // Style learning covers dictation only.
         // A retry has no live destination, so it keeps the one the dictation went to.
@@ -541,6 +566,8 @@ export function App() {
         let finalText = rawText;
         let answer: string | undefined;
         let searchedWeb: boolean | undefined;
+        /** Ask anything: the answer is a rewrite of the selection, to paste in its place. */
+        let replaceSelection = false;
         let learnStyle: (() => Promise<WritingSample | undefined>) | undefined;
         /** Learns from the casing and punctuation the user fixes in the pasted text. */
         let learnFromEdit: ((edited: string, pasted: string) => Promise<WritingSample | undefined>) | undefined;
@@ -640,6 +667,8 @@ export function App() {
                 // Spaced out ("my address 12"), so cleanup writes the words, not "address12".
                 keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
                 selection,
+                canReplaceSelection,
+                selectionUnreadable: mode === 'ask' && selectionProbe !== undefined && !selection,
                 // The Thinking pill says "Searching the web" from the moment the provider starts searching.
                 onWebSearch: () => {
                   if (!dropped()) setHud((current) => current.status === 'processing' ? { ...current, searchingWeb: true } : current);
@@ -650,6 +679,7 @@ export function App() {
             finalText = processed.finalText || rawText;
             answer = processed.answer;
             searchedWeb = processed.searchedWeb;
+            replaceSelection = processed.replaceSelection === true;
             if (mode !== 'dictate') {
               usedProviderId = llmProvider.id;
               usedModel = llmProvider.llmModel;
@@ -715,6 +745,7 @@ export function App() {
                     answer,
                     searchedWeb,
                     ...askSelection(mode, selection),
+                    rewroteSelection: replaceSelection || undefined,
                     wordCount: words,
                     wpm,
                     providerId: usedProviderId,
@@ -741,6 +772,7 @@ export function App() {
             answer,
             searchedWeb,
             ...askSelection(mode, selection),
+                    rewroteSelection: replaceSelection || undefined,
             targetLanguage:
               mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
             durationMs,
@@ -806,12 +838,15 @@ export function App() {
         const desktop = window.yapyap;
         // A snippet at the start keeps its text exactly; fitting would lowercase its first letter.
         // An Ask answer is copied without the Markdown its card renders.
+        // A rewrite pastes as the model wrote it: the selection may itself be Markdown.
         const delivered = mode === 'dictate' && !startsWithSnippet
           ? fitToSurroundingText(finalText, destination?.textBefore, dictWords)
-          : mode === 'ask' ? answerAsPlainText(finalText) : finalText;
+          : mode === 'ask' && !replaceSelection ? answerAsPlainText(finalText) : finalText;
         if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
-        const pasted = await deliverDictationResult(
+        const pasted = replaceSelection && selection && desktop
+          ? await replaceSelectedText(selection, delivered, desktop, keepOnClipboard)
+          : await deliverDictationResult(
           mode,
           delivered,
           autoPaste && desktop ? (text) => desktop.pasteText(text, keepOnClipboard) : undefined,
@@ -1366,7 +1401,7 @@ export function App() {
           item.targetLanguage,
           undefined,
           undefined,
-          Promise.resolve(historySelection(item)),
+          item.selectedText ? Promise.resolve(historySelection(item)) : undefined,
         );
         return;
       } catch {

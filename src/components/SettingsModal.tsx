@@ -805,6 +805,23 @@ export function SettingsModal({
                       />
                     </div>
 
+                    {settings.askAboutSelection && (
+                      <div className="py-2.5 pl-4 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                            Replace the selection when you ask for a rewrite
+                          </div>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                            Ask to fix, rewrite, shorten, or translate text you selected in a field you can edit, and the result takes its place. Questions about the text still get an answer card.
+                          </p>
+                        </div>
+                        <Toggle
+                          label="Replace the selection when you ask for a rewrite"
+                          checked={settings.askReplaceSelection}
+                          onChange={(val) => onUpdateSettings({ askReplaceSelection: val })}
+                        />
+                      </div>
+                    )}
                     {settings.askAboutSelection && window.yapyap?.platform === 'win32' && (
                       <div className="py-2.5 pl-4 flex items-center justify-between gap-4">
                         <div>

@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   contextAwareness: true,
   askAboutSelection: true,
   askCopySelection: true,
+  askReplaceSelection: true,
   learnFromEdits: true,
   defaultStyle: '',
   onboardingDone: false,
