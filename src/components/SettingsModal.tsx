@@ -829,7 +829,7 @@ export function SettingsModal({
                             Copy from apps that don't share it
                           </div>
                           <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                            Some apps, like Firefox, keep their selection to themselves. Yap Yap then copies it and puts your clipboard back, though the copy can still show in clipboard history (Win+V). Never used in terminals, code editors, or remote desktops.
+                            Some apps, like Firefox, keep their selection to themselves. Yap Yap then copies it and puts your clipboard back, though the copy can still show in clipboard history (Win+V). Terminals and code editors get Ctrl+Insert, which never stops a running command. Never used in remote desktops.
                           </p>
                         </div>
                         <Toggle

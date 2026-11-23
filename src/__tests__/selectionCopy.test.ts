@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
+import { copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
 
 /** A fake desktop: the clipboard, the window in front, and keys held for a while. */
 function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo }: { selection?: string; heldFor?: number; window?: number; switchTo?: number } = {}) {
@@ -48,7 +48,7 @@ describe('Copying the selection', () => {
 
   it('gives up when keys stay held or the user moved to another window', async () => {
     const held = desktop({ heldFor: 10_000 });
-    expect(await copySelection(1, held.deps, 1000)).toBeUndefined();
+    expect(await copySelection(1, held.deps, undefined, 1000)).toBeUndefined();
     expect(held.deps.sendCopy).not.toHaveBeenCalled();
 
     const moved = desktop({ heldFor: 100, switchTo: 2 });
@@ -62,13 +62,27 @@ describe('Copying the selection', () => {
     expect(fake.clipboard()).toBe('user clipboard');
   });
 
-  it('never presses Ctrl+C in terminals or in editors that copy the whole line', () => {
-    for (const app of ['WindowsTerminal', 'cmd', 'powershell', 'Code', 'Cursor', 'idea64', 'sublime_text', 'mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer']) {
-      expect(mayCopySelection(app)).toBe(false);
+  it('copies with Ctrl+Insert in terminals and code editors, and never in apps where copying is unsafe', () => {
+    for (const app of ['WindowsTerminal', 'powershell', 'Zed', 'Code', 'Cursor', 'idea64']) {
+      expect(copyPlanFor(app)?.keys).toBe('ctrl+insert');
     }
     for (const app of ['firefox', 'chrome', 'Discord', 'WINWORD', 'Notepad']) {
-      expect(mayCopySelection(app)).toBe(true);
+      expect(copyPlanFor(app)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
     }
-    expect(mayCopySelection('')).toBe(false);
+    for (const app of ['mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer', 'mintty', '']) {
+      expect(mayCopySelection(app)).toBe(false);
+    }
+    expect(copyPlanFor('powershell')?.dropLineCopy).toBe(false);
+    expect(copyPlanFor('Zed')?.dropLineCopy).toBe(true);
+  });
+
+  it('ignores the whole line an editor copies when nothing is selected', async () => {
+    const plan = copyPlanFor('Zed');
+    expect(await copySelection(1, desktop({ selection: 'const x = 1;\n' }).deps, plan)).toBeUndefined();
+    expect(await copySelection(1, desktop({ selection: '[0] VITE v8.3.8 ready in 377 ms' }).deps, plan)).toBe('[0] VITE v8.3.8 ready in 377 ms');
+    expect(await copySelection(1, desktop({ selection: 'a\nb\n' }).deps, plan)).toBe('a\nb\n');
+    const fake = desktop();
+    await copySelection(1, fake.deps, plan);
+    expect(fake.deps.sendCopy).toHaveBeenCalledWith('ctrl+insert');
   });
 });

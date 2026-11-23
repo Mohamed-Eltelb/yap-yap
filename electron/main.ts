@@ -27,7 +27,7 @@ import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { copySelection, mayCopySelection } from './selectionCopy';
+import { copyPlanFor, copySelection } from './selectionCopy';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -702,7 +702,9 @@ app.whenReady().then(() => {
     if (allowCopy !== true || !win32Available()) return captureSelection();
     // The window in front now, before the user can move on, is the one to copy from.
     const window = foregroundWindow();
-    return captureSelection((processName) => mayCopySelection(processName) ? copySelection(window, {
+    return captureSelection((processName) => {
+      const plan = copyPlanFor(processName);
+      return plan ? copySelection(window, {
       foregroundWindow,
       modifiersDown,
       clipboardSequence,
@@ -715,7 +717,8 @@ app.whenReady().then(() => {
         };
       },
       wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    }) : Promise.resolve(undefined));
+      }, plan) : Promise.resolve(undefined);
+    });
   });
   ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()

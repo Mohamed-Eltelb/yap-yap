@@ -205,6 +205,7 @@ export function pasteWithKeyboard(): void {
   uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
 }
 
-export function copyWithKeyboard(): void {
-  uIOhook.keyTap(UiohookKey.C, [UiohookKey.Ctrl]);
+/** Ctrl+Insert copies in terminals, where Ctrl+C would stop the running command. */
+export function copyWithKeyboard(keys: 'ctrl+c' | 'ctrl+insert'): void {
+  uIOhook.keyTap(keys === 'ctrl+insert' ? UiohookKey.Insert : UiohookKey.C, [UiohookKey.Ctrl]);
 }
