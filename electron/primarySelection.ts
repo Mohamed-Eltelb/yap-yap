@@ -7,11 +7,15 @@
  * on only when it changed since the last Ask, so a highlight already asked about, or one that was
  * sitting there at an earlier Ask, is never taken for a new selection.
  */
-export function freshHighlights(): (text: string | undefined) => string | undefined {
+export function freshHighlights() {
   let lastSeen: string | undefined;
-  return (text) => {
-    const fresh = text?.trim() && text !== lastSeen ? text : undefined;
+  let lastStamp: number | undefined;
+  return ({ text, stamp }: { text?: string; stamp?: number }) => {
+    // On X11, taking ownership again can mean the user highlighted the same words again.
+    const reselected = stamp !== undefined && lastStamp !== undefined && stamp !== lastStamp;
+    const fresh = text?.trim() && (text !== lastSeen || reselected) ? text : undefined;
     lastSeen = text;
+    lastStamp = stamp;
     return fresh;
   };
 }

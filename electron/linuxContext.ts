@@ -129,3 +129,23 @@ def read_field(pid, mode, browser):
 
 print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2], len(sys.argv) > 3 and sys.argv[3] == 'browser') or {}, ensure_ascii=False))
 `;
+
+// An X11 owner can tell when it took the primary selection. Ask separately: an owner that
+// never replies must not cost us the accessibility result, especially a focused password field.
+export const linuxPrimaryStampProbe = String.raw`
+import sys
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GdkX11', '3.0')
+from gi.repository import Gdk, GdkX11, Gtk
+
+if isinstance(Gdk.Display.get_default(), GdkX11.X11Display):
+    selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
+    data = selection.wait_for_contents(Gdk.Atom.intern('TIMESTAMP', False))
+    if data and data.get_data_type().name() == 'INTEGER' and data.get_format() == 32:
+        # GDK returns an X11 format-32 item in a native long, including on 64-bit systems.
+        value = int.from_bytes(data.get_data(), sys.byteorder)
+        if 0 < value <= 0xffffffff:
+            print(value)
+`;

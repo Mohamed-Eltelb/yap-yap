@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { FocusedField } from './pasteCorrections';
 import { macProbe, parseMacContext, parseMacField } from './macContext';
-import { linuxContextProbe } from './linuxContext';
+import { linuxContextProbe, linuxPrimaryStampProbe } from './linuxContext';
 import { SELECTION_LIMIT } from './selectionLimit';
 import { readNativeSelection } from './nativeSelection';
 
@@ -261,6 +261,12 @@ async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'se
   } catch {
     return {};
   }
+}
+
+export async function linuxPrimaryStamp(): Promise<number | undefined> {
+  if (!process.env.DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland' || process.env.WAYLAND_DISPLAY) return;
+  const stamp = await runContextProbe('/usr/bin/python3', ['-c', linuxPrimaryStampProbe], 8192, 500);
+  return stamp ? Number(stamp) : undefined;
 }
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
