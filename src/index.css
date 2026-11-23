@@ -3089,7 +3089,7 @@ html.dark .yy-personalization-options > div {
   background: var(--bg-hover);
 }
 
-.yy-import-card svg {
+.yy-import-card > button:first-child svg {
   margin-top: 2px;
 }
 

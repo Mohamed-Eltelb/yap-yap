@@ -138,7 +138,7 @@ export function Sidebar({
               aria-label="Dismiss import card"
               className="absolute -top-1.5 -right-1 w-4 h-4 rounded-full bg-zinc-400/80 hover:bg-zinc-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             >
-              <X className="w-2.5 h-2.5" />
+              <X className="w-2 h-2" strokeWidth={3} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -162,7 +162,7 @@ export function Sidebar({
               aria-label="Dismiss quick dictate card"
               className="absolute -top-1.5 -right-1 w-4 h-4 rounded-full bg-zinc-400/80 hover:bg-zinc-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >
-              <X className="w-2.5 h-2.5" />
+              <X className="w-2 h-2" strokeWidth={3} aria-hidden="true" />
             </button>
           </div>
         )}
