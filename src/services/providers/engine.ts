@@ -880,7 +880,7 @@ export async function processTranscriptWithLlm(
     // Opening is the model's call, from the meaning of the request in any language, never keywords.
     // A guessed address can be a lookalike site, so unknown ones become a search.
     const openClause = (searching: boolean) => options.canOpenWebsites
-      ? ` If the spoken request asks you to open, go to, or show a website or web page ("open Google", "open the Typeless docs", "go to my Gmail", "search YouTube for lo-fi music"), Yap Yap opens it in the browser: reply with ${OPEN_MARKER} followed by the full https address on the first line, then one short sentence in the user's language saying what you opened ("Opened the Typeless docs."). Use a site's own address only when you know it well${searching ? ' or found it by searching' : ''}; otherwise open a Google search for what they asked (https://www.google.com/search?q=...). "Search <site> for <thing>" opens that site's own search results. Only a website can be opened: for an app on their computer, say in one sentence that you can open websites but not apps, and offer its website if it has one. Use ${OPEN_MARKER} only when they ask to open something.`
+      ? ` If the spoken request asks you to open, go to, or show a website or web page ("open Google", "open the Typeless docs", "go to my Gmail", "search YouTube for lo-fi music"), Yap Yap opens it in the browser: reply with ${OPEN_MARKER} followed by the full https address on the first line, then one short sentence in the user's language saying what you opened ("Opened the Typeless docs."). Use a site's own address only when you know it well${searching ? ' or found it by searching' : ''}; otherwise open a Google search for what they asked (https://www.google.com/search?q=typeless+docs). Encode search words in the address, with + for spaces. "Search <site> for <thing>" opens that site's own search results. Only a website can be opened: for an app on their computer, say in one sentence that you can open websites but not apps, and offer its website if it has one. Use ${OPEN_MARKER} only when they ask to open something.`
       : '';
     // Without search, the answer says why, so "I can't check that" never reads as "I can't help you".
     const askPrompt = (searching: boolean, noSearchReason = 'the selected AI model cannot search the web') =>
@@ -894,7 +894,8 @@ export async function processTranscriptWithLlm(
         ? ' You can search the web. Search when the answer depends on current information (news, prices, scores, weather, schedules, recent releases), on anything asked about as the latest, most recent, current, or newest, on events that may have happened after your training data, or on a specific fact you are not sure of. What you remember about recent events may be out of date, so search instead of answering those from memory. Otherwise answer from what you know, without searching.' +
           ' For values that change often (prices, exchange rates, scores, weather), use the most recently updated source you find, preferring live pages that show when they were updated over articles or cached snapshots. Give the value with the time it was reported when the source shows one ("as of 3:40 PM UTC"), and otherwise say it may have changed since.' +
           ' Check the dates on what you find: a page from a year or more ago does not show what is latest now, and never give an old release or event today\'s date. If you can only find older information, say how old it is.' +
-          ' Do not include links, source names, or citation marks unless the user asks for them.'
+          ' Do not include links, source names, or citation marks unless the user asks for them' +
+          (options.canOpenWebsites ? `, except the address after ${OPEN_MARKER} when they ask to open something.` : '.')
         // Without search, a model asked about recent events tends to invent an answer.
         : ` You cannot search the web for this question, because ${noSearchReason}. If the answer depends on current information or on events that may be newer than what you know, say in one or two sentences that you could not search the web and why, in the user's language and in plain words, and suggest where they can check it. Keep names and terms such as ${provider.name} and "API key" in English, in any language ("مفتاح الـ API بتاعك في ${provider.name}"). Never guess or make up a current fact. Answer anything else as usual, without mentioning search.`) +
       ' If the user greets you or asks who you are or what you can do, reply in two or three sentences about what they can do: ask any question by voice and get an answer to copy' +
@@ -942,20 +943,23 @@ export function splitReplaceMarker(reply: string): { text: string; replace: bool
 export const OPEN_MARKER = '[[OPEN]]';
 
 /**
- * Takes the open marker and its address off a reply. Models wrap the address in angle brackets,
- * Markdown links or quotes, so the first web address on the marker's line is taken. A marker
- * without a usable address is dropped, and the rest reads as a normal answer.
+ * Takes the open marker and its address off a reply. The marker may start any line, since some
+ * models write a line before it, and it must never reach a paste. Models wrap the address in angle
+ * brackets, Markdown links or quotes, so the first web address on the marker's line is taken. A
+ * marker without a usable address is dropped, and the rest reads as a normal answer.
  */
 export function splitOpenMarker(reply: string): { text: string; url?: string } {
-  const match = reply.match(/^\s*["'`*]*\[\[\s*open\s*\]\]["'`*]*([^\r\n]*)(?:\r?\n|$)/i);
-  if (!match) return { text: reply };
-  const rest = reply.slice(match[0].length).trim();
+  const match = reply.match(/^[ \t]*["'`*]*\[\[\s*open\s*\]\]["'`*]*([^\r\n]*)(?:\r?\n|$)/im);
+  if (match?.index === undefined) return { text: reply };
+  const before = reply.slice(0, match.index).trim();
+  const rest = reply.slice(match.index + match[0].length).trim();
   const address = match[1].match(/https?:\/\/[^\s<>"'`()\]]+/i)?.[0].replace(/[.,;:!?]+$/, '');
   const url = webUrl(address);
-  if (url) return { text: rest, url };
+  // With an address, the words after it say what was opened; a line before it was only preamble.
+  if (url) return { text: rest || before, url };
   // No address: whatever followed the marker on its line is part of the answer.
   const line = match[1].replace(/^[\s:]+/, '').trim();
-  return { text: [line, rest].filter(Boolean).join('\n') };
+  return { text: [before, line, rest].filter(Boolean).join('\n') };
 }
 
 function omitsSamplingTemperature(model: string): boolean {
