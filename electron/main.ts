@@ -19,6 +19,7 @@ import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccel
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
+import { createUpdateLogger, type UpdateLogger } from './updateLog';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
 import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
@@ -458,10 +459,16 @@ async function installedAppIcon(id: OtherAppData['app']): Promise<string | undef
 
 const skippedUpdatePath = () => path.join(app.getPath('userData'), 'skipped-update.txt');
 
+// Settings → About can't show why an update failed or repeated, so updates keep their own log,
+// updates.log in Electron's logs folder (under the app data folder; ~/Library/Logs on a Mac).
+let updateLogger: UpdateLogger | undefined;
+const updateLog = () => (updateLogger ??= createUpdateLogger(path.join(app.getPath('logs'), 'updates.log')));
+
 let updaterConfigured = false;
 function inPlaceUpdater() {
   if (!updaterConfigured) {
     updaterConfigured = true;
+    autoUpdater.logger = updateLog();
     // The user approves each download; an approved update not installed yet goes in on quit.
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -485,6 +492,7 @@ function setTaskbarProgress(state: UpdateState) {
   window.setProgressBar(state.status === 'downloading' ? state.percent / 100 : -1);
 }
 
+let lastLoggedUpdateStatus: UpdateState['status'] | undefined;
 const updates = new UpdateController({
   currentVersion: app.getVersion(),
   inPlace: app.isPackaged && installsUpdatesInPlace(),
@@ -514,6 +522,12 @@ const updates = new UpdateController({
   readSkipped: () => fs.promises.readFile(skippedUpdatePath(), 'utf8').catch(() => ''),
   writeSkipped: version => fs.promises.writeFile(skippedUpdatePath(), version),
   onChange(state) {
+    // Progress ticks would flood the log; each status change is enough to follow an update.
+    if (state.status !== lastLoggedUpdateStatus) {
+      lastLoggedUpdateStatus = state.status;
+      const { status, ...details } = state;
+      updateLog().info(`Update state: ${status} ${JSON.stringify(details)}`);
+    }
     setTaskbarProgress(state);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:state', state);
   },
