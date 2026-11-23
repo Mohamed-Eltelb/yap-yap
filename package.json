@@ -90,6 +90,10 @@
         {
           "from": "native/windows/build/yapyap-keys.dll",
           "to": "yapyap-keys.dll"
+        },
+        {
+          "from": "native/windows/build/yapyap-text.dll",
+          "to": "yapyap-text.dll"
         }
       ]
     },

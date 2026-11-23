@@ -3,6 +3,7 @@ import type { FocusedField } from './pasteCorrections';
 import { macProbe, parseMacContext, parseMacField } from './macContext';
 import { linuxContextProbe } from './linuxContext';
 import { SELECTION_LIMIT } from './selectionLimit';
+import { readNativeSelection } from './nativeSelection';
 
 export interface DictationContext {
   application: string;
@@ -420,7 +421,11 @@ function parseJson(output: string): unknown {
  */
 export async function captureSelection(copy?: (processName: string) => Promise<string | undefined>): Promise<SelectedText | undefined> {
   if (process.platform === 'win32') {
-    const data = parseJson(await askWindowsHelper('selection', 3000));
+    // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
+    const native = await readNativeSelection();
+    const data = native
+      ? (native.password ? {} : native.text ? { text: native.text, editable: native.editable } : { process: native.process })
+      : parseJson(await askWindowsHelper('selection', 3000));
     const found = parseSelection(data);
     const processName = (data as { process?: unknown } | undefined)?.process;
     if (found || !copy || typeof processName !== 'string') return found;

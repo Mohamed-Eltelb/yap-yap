@@ -27,7 +27,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Compile Windows shortcut helper
+      - name: Compile Windows helpers (shortcuts and selection)
         if: runner.os == 'Windows'
         run: npm run build:keyhook
       - run: npm run typecheck
