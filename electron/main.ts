@@ -15,7 +15,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, copyWithKeyboard, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
@@ -27,6 +27,8 @@ import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
+import { copySelection, mayCopySelection } from './selectionCopy';
+import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
@@ -696,7 +698,24 @@ app.whenReady().then(() => {
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
   ipcMain.handle('selection:capture', (event) => {
-    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureSelection();
+    if (event.sender !== mainWindow?.webContents || mainWindow.isFocused()) return;
+    if (!win32Available()) return captureSelection();
+    // The window in front now, before the user can move on, is the one to copy from.
+    const window = foregroundWindow();
+    return captureSelection((processName) => mayCopySelection(processName) ? copySelection(window, {
+      foregroundWindow,
+      modifiersDown,
+      clipboardSequence,
+      sendCopy: copyWithKeyboard,
+      readCopied: () => clipboard.readText(),
+      async saveClipboard() {
+        const previous = await snapshotClipboard();
+        return async (copied) => {
+          if (await clipboard.readText() === copied) await restoreClipboard(previous);
+        };
+      },
+      wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    }) : Promise.resolve(undefined));
   });
   ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()

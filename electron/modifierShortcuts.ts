@@ -204,3 +204,7 @@ export function stopModifierShortcuts() {
 export function pasteWithKeyboard(): void {
   uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
 }
+
+export function copyWithKeyboard(): void {
+  uIOhook.keyTap(UiohookKey.C, [UiohookKey.Ctrl]);
+}

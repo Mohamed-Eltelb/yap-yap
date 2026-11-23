@@ -795,7 +795,7 @@ export function SettingsModal({
                           Ask about selected text
                         </div>
                         <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                          Select text in any app, then use Ask anything to summarize, translate, or ask about it. The selection goes to your AI provider with your question and is kept in History with it, so you can retry it.
+                          Select text in any app, then use Ask anything to summarize, translate, or ask about it. Apps that don't share their selection are copied from, and your clipboard is put back. The selection goes to your AI provider with your question and is kept in History with it, so you can retry it.
                         </p>
                       </div>
                       <Toggle

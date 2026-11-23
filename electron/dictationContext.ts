@@ -139,14 +139,16 @@ function Get-Selection {
   $limit = ${SELECTION_LIMIT}
   $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
   $root = [Windows.Automation.AutomationElement]::RootElement
-  $pattern = $null
-  # Chromium and Electron apps answer the first query with an empty placeholder pane and expose
-  # the real focused element shortly after.
-  for ($attempt = 0; $attempt -lt 6 -and !$pattern; $attempt++) {
+  # Browsers and Electron apps switch their accessibility on at the first query: until then they
+  # show an empty placeholder pane, or a page whose selection reads as empty. So a browser that
+  # shows no selection is asked again for about half a second. It runs while the user speaks.
+  for ($attempt = 0; $attempt -lt 7; $attempt++) {
     if ($attempt) { Start-Sleep -Milliseconds 80 }
     $element = [Windows.Automation.AutomationElement]::FocusedElement
     if (!$element -or $element.Current.IsPassword) { return }
+    $web = $element.Current.FrameworkId -in @('Chrome', 'Gecko')
     # A selection on a page belongs to the document, which may be an ancestor of what has focus.
+    $pattern = $null
     $node = $element
     for ($depth = 0; $node -and $depth -lt 12; $depth++) {
       if ($node.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) { break }
@@ -154,21 +156,25 @@ function Get-Selection {
       $node = $walker.GetParent($node)
       if ($node -and [Windows.Automation.Automation]::Compare($node, $root)) { break }
     }
-    if (!$pattern -and ($element.Current.FrameworkId -ne 'Chrome' -or $element.Current.ControlType -ne [Windows.Automation.ControlType]::Pane)) { return }
+    $parts = @()
+    $length = 0
+    $editable = $true
+    if ($pattern) {
+      foreach ($range in @($pattern.GetSelection())) {
+        if (!$range -or $length -gt $limit) { continue }
+        $piece = $range.GetText($limit + 1 - $length)
+        if (!$piece) { continue }
+        $parts += $piece
+        $length += $piece.Length
+        if ($range.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -ne $false) { $editable = $false }
+      }
+    }
+    if ($parts.Count -or !$web) { break }
   }
-  if (!$pattern) { return }
-  $parts = @()
-  $length = 0
-  $editable = $true
-  foreach ($range in @($pattern.GetSelection())) {
-    if (!$range -or $length -gt $limit) { continue }
-    $piece = $range.GetText($limit + 1 - $length)
-    if (!$piece) { continue }
-    $parts += $piece
-    $length += $piece.Length
-    if ($range.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -ne $false) { $editable = $false }
+  # No selection that accessibility can see: name the app, so the copy fallback can decide.
+  if (!$parts.Count) {
+    try { return @{ process = (Get-Process -Id $element.Current.ProcessId).ProcessName } | ConvertTo-Json -Compress } catch { return }
   }
-  if (!$parts.Count) { return }
   @{ text = ($parts -join [Environment]::NewLine); editable = $editable } | ConvertTo-Json -Compress
 }
 # One request per input line: an id, then an optional command. Each answer repeats the id so
@@ -407,12 +413,19 @@ function parseJson(output: string): unknown {
 }
 
 /**
- * The text selected in the app in front, read through accessibility (UI Automation, AX, AT-SPI)
- * without touching the clipboard. Used by Ask anything, and meant for transforms as well.
+ * The text selected in the app in front, read through accessibility (UI Automation, AX, AT-SPI).
+ * On Windows, an app that does not share its selection that way can be copied from instead: `copy`
+ * gets the app's process name and decides. Used by Ask anything, and meant for transforms as well.
  * It runs while the user is speaking, so it may take longer than the caret context.
  */
-export async function captureSelection(): Promise<SelectedText | undefined> {
-  if (process.platform === 'win32') return parseSelection(parseJson(await askWindowsHelper('selection', 3000)));
+export async function captureSelection(copy?: (processName: string) => Promise<string | undefined>): Promise<SelectedText | undefined> {
+  if (process.platform === 'win32') {
+    const data = parseJson(await askWindowsHelper('selection', 3000));
+    const found = parseSelection(data);
+    const processName = (data as { process?: unknown } | undefined)?.process;
+    if (found || !copy || typeof processName !== 'string') return found;
+    return parseSelection({ text: await copy(processName) });
+  }
   if (process.platform === 'darwin') {
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
   }
