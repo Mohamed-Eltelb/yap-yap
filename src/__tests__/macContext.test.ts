@@ -5,16 +5,45 @@ import { SELECTION_LIMIT, browserDomain, nearbyText, parseSelection } from '../.
 type Attributes = Record<string, unknown>;
 
 /** Runs the probe script against a fake System Events and fake browsers. */
-function runProbe(command: 'context' | 'field' | 'selection', { app, address, field, launched = [] as string[] }: {
+function runProbe(command: 'context' | 'field' | 'selection', {
+  app, address, field, launched = [] as string[], switches = {} as Attributes, writes = [] as string[], hiddenUntilSwitched,
+}: {
   app?: string; address?: string; field?: Attributes; launched?: string[];
+  /** The app's accessibility switches (AXManualAccessibility, AXEnhancedUserInterface). */
+  switches?: Attributes;
+  /** Every switch the probe sets, as "name=value". */
+  writes?: string[];
+  /** The focused element shows up only once this switch is on, and a few reads later. */
+  hiddenUntilSwitched?: string;
 }) {
   const element = field && {
     attributes: { byName: (name: string) => ({ value: () => { if (!(name in field)) throw new Error('no attribute'); return field[name]; } }) },
   };
+  let readsSinceSwitch = 0;
+  const focused = () => {
+    if (!hiddenUntilSwitched) return element;
+    if (switches[hiddenUntilSwitched] !== true) return undefined;
+    return ++readsSinceSwitch >= 3 ? element : undefined;
+  };
+  const attribute = (name: string) => ({
+    get value() {
+      return () => {
+        if (name === 'AXFocusedUIElement') { const found = focused(); if (!found) throw new Error('none'); return found; }
+        if (!(name in switches)) throw new Error('no attribute');
+        return switches[name];
+      };
+    },
+    set value(to: unknown) {
+      // System Events refuses an attribute the app does not have.
+      if (!(name in switches)) throw new Error('no attribute');
+      writes.push(`${name}=${String(to)}`);
+      switches[name] = to;
+    },
+  });
   const process = {
     name: () => { if (!app) throw new Error('no access'); return app; },
     unixId: () => 4242,
-    attributes: { byName: (name: string) => ({ value: () => { if (name !== 'AXFocusedUIElement' || !element) throw new Error('none'); return element; } }) },
+    attributes: { byName: attribute },
   };
   const tab = { url: () => { if (address === undefined) throw new Error('no window'); return address; } };
   const Application = (name: string) => {
@@ -22,7 +51,8 @@ function runProbe(command: 'context' | 'field' | 'selection', { app, address, fi
     launched.push(name);
     return { windows: [{ currentTab: tab, activeTab: tab }] };
   };
-  return new Function('Application', `${macProbe(command)}\nreturn run();`)(Application) as string;
+  const delay = () => undefined;
+  return new Function('Application', 'delay', `${macProbe(command)}\nreturn run();`)(Application, delay) as string;
 }
 
 describe('Mac context probe', () => {
@@ -121,6 +151,35 @@ describe('Selected text probe', () => {
     expect(long?.text).toHaveLength(SELECTION_LIMIT);
     expect(long?.truncated).toBe(true);
     expect(parseSelection({ text: 'a'.repeat(SELECTION_LIMIT) })?.truncated).toBe(false);
+  });
+
+  it('switches on accessibility in Electron apps and leaves it on', () => {
+    const writes: string[] = [];
+    const field = { AXRole: 'AXWebArea', AXSelectedText: 'from Slack' };
+    const read = runProbe('selection', { app: 'Slack', field, writes, switches: { AXManualAccessibility: false }, hiddenUntilSwitched: 'AXManualAccessibility' });
+    expect(parseSelection(JSON.parse(read))?.text).toBe('from Slack');
+    expect(writes).toEqual(['AXManualAccessibility=true']);
+
+    const again: string[] = [];
+    runProbe('selection', { app: 'Slack', field, writes: again, switches: { AXManualAccessibility: true } });
+    expect(again).toEqual([]);
+  });
+
+  it('switches on a Chromium browser\'s accessibility only for the read', () => {
+    const writes: string[] = [];
+    const read = runProbe('selection', {
+      app: 'Google Chrome', field: { AXRole: 'AXTextArea', AXSelectedText: 'from Chrome' }, writes,
+      switches: { AXEnhancedUserInterface: false }, hiddenUntilSwitched: 'AXEnhancedUserInterface',
+    });
+    expect(parseSelection(JSON.parse(read))).toEqual({ text: 'from Chrome', truncated: false, editable: true });
+    expect(writes).toEqual(['AXEnhancedUserInterface=true', 'AXEnhancedUserInterface=false']);
+  });
+
+  it('reads native apps that have no switch', () => {
+    const writes: string[] = [];
+    expect(JSON.parse(runProbe('selection', { app: 'TextEdit', field: { AXRole: 'AXTextArea', AXSelectedText: 'plain' }, writes })))
+      .toEqual({ text: 'plain', editable: true });
+    expect(writes).toEqual([]);
   });
 
   it('treats whitespace and malformed output as no selection', () => {

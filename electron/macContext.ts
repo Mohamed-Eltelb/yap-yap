@@ -23,6 +23,24 @@ export const MAC_FIELD_LIMIT = 12_000;
  */
 export function macProbe(command: 'context' | 'field' | 'selection'): string {
   return `
+// The focused element's selection as JSON, '{}' when there is none, or 'password'.
+function readSelection(process) {
+  try {
+    var element = process.attributes.byName('AXFocusedUIElement').value();
+    var read = function (name) {
+      try { return element.attributes.byName(name).value(); } catch (error) { return undefined; }
+    };
+    var role = read('AXRole');
+    if (role === 'AXSecureTextField' || read('AXSubrole') === 'AXSecureTextField') return 'password';
+    var selected = read('AXSelectedText');
+    if (typeof selected !== 'string' || !selected) return '{}';
+    var editable = role === 'AXTextField' || role === 'AXTextArea' || role === 'AXComboBox';
+    return JSON.stringify({ text: selected.slice(0, ${SELECTION_LIMIT} + 1), editable: editable });
+  } catch (error) {
+    return '{}';
+  }
+}
+
 function run() {
   var command = ${JSON.stringify(command)};
   var webkit = ${JSON.stringify(MAC_WEBKIT_BROWSERS)};
@@ -44,6 +62,33 @@ function run() {
     else delete out.address;
     return JSON.stringify(out);
   }
+  if (command === 'selection') {
+    // Chromium browsers and Electron apps (Slack, Discord, VS Code) build their accessibility tree
+    // only when asked. Electron listens for AXManualAccessibility, which has no side effects and
+    // stays on. Browsers need AXEnhancedUserInterface, which can make window animations jumpy and
+    // confuse window managers, so it is switched off again after the read.
+    var flag = chromium.indexOf(out.application) >= 0 ? 'AXEnhancedUserInterface' : 'AXManualAccessibility';
+    var switched = false;
+    try {
+      var on;
+      try { on = process.attributes.byName(flag).value(); } catch (error) {}
+      if (on !== true) {
+        process.attributes.byName(flag).value = true;
+        switched = true;
+      }
+    } catch (error) {}
+    // A tree that was just switched on fills in over a few tens of milliseconds.
+    var found = '{}';
+    for (var attempt = 0; attempt < (switched ? 8 : 1); attempt++) {
+      if (attempt && typeof delay === 'function') delay(0.08);
+      found = readSelection(process);
+      if (found !== '{}') break;
+    }
+    if (switched && flag === 'AXEnhancedUserInterface') {
+      try { process.attributes.byName(flag).value = false; } catch (error) {}
+    }
+    return found === 'password' ? '{}' : found;
+  }
   try {
     var element = process.attributes.byName('AXFocusedUIElement').value();
     var read = function (name) {
@@ -51,12 +96,6 @@ function run() {
     };
     var role = read('AXRole');
     if (role === 'AXSecureTextField' || read('AXSubrole') === 'AXSecureTextField') return '{}';
-    if (command === 'selection') {
-      var selected = read('AXSelectedText');
-      if (typeof selected !== 'string' || !selected) return '{}';
-      var editable = role === 'AXTextField' || role === 'AXTextArea' || role === 'AXComboBox';
-      return JSON.stringify({ text: selected.slice(0, ${SELECTION_LIMIT} + 1), editable: editable });
-    }
     var text = read('AXValue');
     if (typeof text !== 'string' || text.length > ${MAC_FIELD_LIMIT}) return '{}';
     var position = read('AXPosition');
