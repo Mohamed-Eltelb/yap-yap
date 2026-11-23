@@ -1,6 +1,7 @@
 import { SelectMenu } from './SelectMenu';
 import { hasHistoryAudio, loadHistoryAudio } from '../services/storage';
 import { AnswerMarkdown } from './AnswerMarkdown';
+import { SelectionQuote } from './SelectionQuote';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -650,6 +651,7 @@ export function HistoryView({
               <button type="button" aria-label="Copy question" onClick={() => onCopyText(question)} className="shrink-0 rounded-md p-1 hover:bg-[var(--bg-hover)]"><Copy size={14} /></button>
             </div>
           )}
+          {answerItem?.selectedText && <SelectionQuote text={answerItem.selectedText} className="mx-3 mb-1 ml-[2.1rem] text-sm" />}
           <section className="mt-2 min-h-[min(300px,45dvh)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)]">
             <header className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-3">
               <Sparkles aria-hidden="true" className="size-4" />

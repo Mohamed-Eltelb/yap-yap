@@ -142,3 +142,10 @@ it('leaves out holding when no shortcut can be held', () => {
   expect(html).not.toContain('Hold');
   expect(html).toMatch(/Hover <span class="yy-hud-tip-finish"[^]*<\/span> and click <svg[^>]*class="yy-hud-tip-pause"[^]*?<\/svg> to pause the recording/);
 });
+
+it('quotes the selected text an Ask question was about', () => {
+  const about = renderHud({ status: 'result', mode: 'ask', levels: [], questionText: 'What does this mean?', selectionText: 'Microsoft Windows [Version 10.0]', resultText: 'Answer.' });
+  const plain = renderHud({ status: 'result', mode: 'ask', levels: [], questionText: 'What time is it?', resultText: 'Answer.' });
+  expect(about).toContain('aria-label="Selected text">Microsoft Windows [Version 10.0]</p>');
+  expect(plain).not.toContain('Selected text');
+});

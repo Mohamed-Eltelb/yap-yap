@@ -56,6 +56,10 @@ export interface HistoryItem {
   answer?: string;
   /** The Ask anything answer used a web search. */
   searchedWeb?: boolean;
+  /** Ask anything: the text the user selected and asked about, kept so a retry asks about it again. */
+  selectedText?: string;
+  /** The selected text was cut at the length Yap Yap reads. */
+  selectionTruncated?: boolean;
   targetLanguage?: string;
   durationMs: number;
   wordCount: number;

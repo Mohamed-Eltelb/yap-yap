@@ -2339,6 +2339,43 @@ html.dark .yy-personalization-options > div {
   flex-shrink: 0;
 }
 
+/* The selected text a question was about, quoted under it. */
+.yy-selection-quote {
+  border-left: 2px solid var(--border-subtle);
+  padding-left: 10px;
+  color: var(--text-muted);
+}
+
+.yy-selection-quote p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.yy-selection-quote p[data-open] {
+  display: block;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.yy-selection-quote button {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.yy-selection-quote button:hover {
+  color: var(--text-primary);
+}
+
+.yy-hud-selection {
+  margin: -2px 5px 0 28px;
+  font-size: 12.5px;
+}
+
 .yy-hud-answer-card {
   display: flex;
   flex: 1;

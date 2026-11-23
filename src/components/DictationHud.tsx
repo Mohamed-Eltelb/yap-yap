@@ -4,6 +4,7 @@ import type { AppearanceMode, DictationMode } from '../types/app';
 import { AnswerMarkdown } from './AnswerMarkdown';
 import { answerAsPlainText } from '../utils/answerText';
 import { YapLogo } from './YapLogo';
+import { SelectionQuote } from './SelectionQuote';
 
 export interface HudState {
   status: 'idle' | 'armed' | 'recording' | 'processing' | 'cancelled' | 'notice' | 'result' | 'error';
@@ -11,6 +12,8 @@ export interface HudState {
   levels: number[];
   resultText?: string;
   questionText?: string;
+  /** Ask anything: the selected text the question was about. */
+  selectionText?: string;
   /** The Ask anything answer used a web search. */
   searchedWeb?: boolean;
   /** While processing: the provider is searching the web for the Ask anything answer. */
@@ -387,6 +390,7 @@ export function DictationHud({
               <CopyButton label="Copy question" onCopy={() => onCopyResult(questionText)} />
             </div>
           )}
+          {hud.selectionText && <SelectionQuote text={hud.selectionText} className="yy-hud-selection" />}
           <div className="yy-hud-answer-card">
             <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
               {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}

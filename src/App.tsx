@@ -92,6 +92,18 @@ function hideSplash() {
   });
 }
 
+/** The History fields that keep what an Ask anything question was about. */
+function askSelection(mode: DictationMode, selection?: SelectedText): Pick<HistoryItem, 'selectedText' | 'selectionTruncated'> {
+  return mode === 'ask' && selection
+    ? { selectedText: selection.text, selectionTruncated: selection.truncated || undefined }
+    : { selectedText: undefined, selectionTruncated: undefined };
+}
+
+/** The selection a History item's question was about, so a retry asks about the same text. */
+function historySelection(item: HistoryItem): SelectedText | undefined {
+  return item.mode === 'ask' && item.selectedText ? { text: item.selectedText, truncated: item.selectionTruncated === true } : undefined;
+}
+
 export function App() {
   const [appState, setAppState] = useState<PersistedAppState>(() => getInitialState());
   const [hydrated, setHydrated] = useState(false);
@@ -702,6 +714,7 @@ export function App() {
                     aiText: undefined,
                     answer,
                     searchedWeb,
+                    ...askSelection(mode, selection),
                     wordCount: words,
                     wpm,
                     providerId: usedProviderId,
@@ -727,6 +740,7 @@ export function App() {
             plainText,
             answer,
             searchedWeb,
+            ...askSelection(mode, selection),
             targetLanguage:
               mode === 'translate' ? targetLanguage ?? appState.settings.translationTargets[0] : undefined,
             durationMs,
@@ -846,6 +860,7 @@ export function App() {
           levels: Array(20).fill(0.1),
           resultText: finalText,
           questionText: mode === 'ask' ? rawText : undefined,
+          selectionText: mode === 'ask' ? selection?.text : undefined,
           searchedWeb,
         });
       } catch (err) {
@@ -1347,7 +1362,10 @@ export function App() {
           audioDataUrl,
           item.audioMimeType,
           item.id,
-          item.targetLanguage
+          item.targetLanguage,
+          undefined,
+          undefined,
+          Promise.resolve(historySelection(item)),
         );
         return;
       } catch {
@@ -1388,6 +1406,7 @@ export function App() {
           // The category learned for this dictation stands in for its destination.
           destinationCategory: item.writingSample?.category,
           keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
+          selection: historySelection(item),
         }
       );
       const cleaned = processed.finalText || item.text;
