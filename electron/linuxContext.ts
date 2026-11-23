@@ -1,5 +1,7 @@
 // AT-SPI exposes Unicode character offsets and stable object paths on the desktop bus.
 // The system Python uses the distro's PyGObject and AT-SPI bindings.
+import { SELECTION_LIMIT } from './selectionLimit';
+
 export const linuxContextProbe = String.raw`
 import json
 import sys
@@ -11,6 +13,7 @@ from gi.repository import Atspi
 
 warnings.simplefilter('ignore')
 LIMIT = 600
+SELECTION_LIMIT = ${SELECTION_LIMIT}
 PAGES = (Atspi.Role.DOCUMENT_WEB, Atspi.Role.DOCUMENT_FRAME)
 
 def page_url(node):
@@ -72,7 +75,17 @@ def read_field(pid, mode, browser):
             node = queue.popleft()
             role = node.get_role()
             states = node.get_state_set()
-            if mode == 'paste':
+            if mode == 'selection':
+                # Read-only text counts: a selection on a web page is often what is asked about.
+                if role != Atspi.Role.PASSWORD_TEXT and node.get_text_iface() is not None and node.get_n_selections() > 0:
+                    attrs = node.get_attributes() or {}
+                    if attrs.get('text-input-type', '').lower() == 'password':
+                        return
+                    span = Atspi.Text.get_selection(node, 0)
+                    if span.end_offset > span.start_offset:
+                        end = min(span.end_offset, span.start_offset + SELECTION_LIMIT + 1)
+                        return dict(text=Atspi.Text.get_text(node, span.start_offset, end), editable=states.contains(Atspi.StateType.EDITABLE))
+            elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
                     if states.contains(Atspi.StateType.EDITABLE) or role == Atspi.Role.PASSWORD_TEXT:
                         return dict(editable=True)

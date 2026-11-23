@@ -27,7 +27,7 @@ import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { captureDictationContext, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
+import { captureDictationContext, captureSelection, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -693,6 +693,10 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('dictation:capture-context', (event) => {
     if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
+  });
+  // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
+  ipcMain.handle('selection:capture', (event) => {
+    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureSelection();
   });
   ipcMain.handle('dictation:watch-corrections', (event, text: string) =>
     event.sender === mainWindow?.webContents && typeof text === 'string' && text.trim()

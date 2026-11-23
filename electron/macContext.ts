@@ -3,6 +3,7 @@
 // pasting already uses. Reading a browser's address sends that browser an Apple event, so macOS
 // asks once per browser. Every read fails quietly, leaving just the app name.
 import type { FocusedField } from './pasteCorrections';
+import { SELECTION_LIMIT } from './selectionLimit';
 
 /** Browsers whose address the probe reads, by process name. Firefox offers no scripting for it. */
 export const MAC_WEBKIT_BROWSERS = ['Safari', 'Safari Technology Preview', 'Orion'];
@@ -17,9 +18,10 @@ export const MAC_FIELD_LIMIT = 12_000;
 /**
  * The script for one read. "context" returns the frontmost app and, for a known browser that is
  * frontmost (so nothing is launched), its address. "field" returns the focused field's text.
+ * "selection" returns the text selected in the focused element, read-only text included.
  * Password fields are never read. Sizes are capped in the script so the output stays small.
  */
-export function macProbe(command: 'context' | 'field'): string {
+export function macProbe(command: 'context' | 'field' | 'selection'): string {
   return `
 function run() {
   var command = ${JSON.stringify(command)};
@@ -49,6 +51,12 @@ function run() {
     };
     var role = read('AXRole');
     if (role === 'AXSecureTextField' || read('AXSubrole') === 'AXSecureTextField') return '{}';
+    if (command === 'selection') {
+      var selected = read('AXSelectedText');
+      if (typeof selected !== 'string' || !selected) return '{}';
+      var editable = role === 'AXTextField' || role === 'AXTextArea' || role === 'AXComboBox';
+      return JSON.stringify({ text: selected.slice(0, ${SELECTION_LIMIT} + 1), editable: editable });
+    }
     var text = read('AXValue');
     if (typeof text !== 'string' || text.length > ${MAC_FIELD_LIMIT}) return '{}';
     var position = read('AXPosition');

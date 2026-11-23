@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   retainedStyleSamples: [],
   sourceCategories: {},
   contextAwareness: true,
+  askAboutSelection: true,
   learnFromEdits: true,
   defaultStyle: '',
   onboardingDone: false,

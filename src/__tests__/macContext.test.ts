@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { MAC_FIELD_LIMIT, macProbe, parseMacContext, parseMacField } from '../../electron/macContext';
-import { browserDomain, nearbyText } from '../../electron/dictationContext';
+import { SELECTION_LIMIT, browserDomain, nearbyText, parseSelection } from '../../electron/dictationContext';
 
 type Attributes = Record<string, unknown>;
 
 /** Runs the probe script against a fake System Events and fake browsers. */
-function runProbe(command: 'context' | 'field', { app, address, field, launched = [] as string[] }: {
+function runProbe(command: 'context' | 'field' | 'selection', { app, address, field, launched = [] as string[] }: {
   app?: string; address?: string; field?: Attributes; launched?: string[];
 }) {
   const element = field && {
@@ -97,5 +97,35 @@ describe('text beside the caret', () => {
     expect(nearbyText('x'.repeat(300), 'before')).toHaveLength(240);
     expect(nearbyText('y'.repeat(300), 'after')).toHaveLength(120);
     expect(nearbyText(mark, 'after')).toBeUndefined();
+  });
+});
+
+describe('Selected text probe', () => {
+  const selection = (field: Record<string, unknown>) => parseSelection(JSON.parse(runProbe('selection', { app: 'Safari', field })));
+
+  it('reads the selection in read-only and editable text', () => {
+    expect(selection({ AXRole: 'AXWebArea', AXSelectedText: 'Quarterly sales rose.' }))
+      .toEqual({ text: 'Quarterly sales rose.', truncated: false, editable: false });
+    expect(selection({ AXRole: 'AXTextArea', AXSelectedText: ' keep spacing ' }))
+      .toEqual({ text: ' keep spacing ', truncated: false, editable: true });
+  });
+
+  it('finds nothing without a selection or in a password field', () => {
+    expect(selection({ AXRole: 'AXTextArea', AXSelectedText: '' })).toBeUndefined();
+    expect(selection({ AXRole: 'AXTextArea' })).toBeUndefined();
+    expect(selection({ AXRole: 'AXSecureTextField', AXSelectedText: 'hunter2' })).toBeUndefined();
+  });
+
+  it('cuts a long selection and says so', () => {
+    const long = selection({ AXRole: 'AXTextArea', AXSelectedText: 'a'.repeat(SELECTION_LIMIT + 500) });
+    expect(long?.text).toHaveLength(SELECTION_LIMIT);
+    expect(long?.truncated).toBe(true);
+    expect(parseSelection({ text: 'a'.repeat(SELECTION_LIMIT) })?.truncated).toBe(false);
+  });
+
+  it('treats whitespace and malformed output as no selection', () => {
+    expect(parseSelection({ text: ' \n\t' })).toBeUndefined();
+    expect(parseSelection(undefined)).toBeUndefined();
+    expect(parseSelection({ text: 5 })).toBeUndefined();
   });
 });

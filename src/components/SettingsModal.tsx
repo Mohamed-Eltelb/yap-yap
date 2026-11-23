@@ -788,6 +788,22 @@ export function SettingsModal({
                         onChange={(val) => onUpdateSettings({ keepOnClipboard: val })}
                       />
                     </div>
+
+                    <div className="py-2.5 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium text-[var(--text-primary)]">
+                          Ask about selected text
+                        </div>
+                        <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
+                          Select text in any app, then use Ask anything to summarize, translate, or ask about it. The selection goes to your AI provider with your question and is never saved.
+                        </p>
+                      </div>
+                      <Toggle
+                        label="Ask about selected text"
+                        checked={settings.askAboutSelection}
+                        onChange={(val) => onUpdateSettings({ askAboutSelection: val })}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

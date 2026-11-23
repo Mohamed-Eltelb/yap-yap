@@ -177,6 +177,8 @@ export interface SettingsState {
    */
   sourceCategories: Record<string, string>;
   contextAwareness: boolean;
+  /** Ask anything reads the text selected in the app in front and answers about it. */
+  askAboutSelection: boolean;
   /** Watch fixes made right after a paste to learn style and dictionary words. */
   learnFromEdits: boolean;
   /** A style preset id for places with no style picked or learned, or '' to learn only. */

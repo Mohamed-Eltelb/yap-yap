@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pauseHoldCombo } from '../electron/shortcutBindings';
-import type { DictationContext } from '../electron/dictationContext';
+import type { DictationContext, SelectedText } from '../electron/dictationContext';
 import { DictionaryView, type ImportedWord } from './components/DictionaryView';
 import { SnippetsView } from './components/SnippetsView';
 import { Onboarding } from './components/Onboarding';
@@ -434,6 +434,8 @@ export function App() {
       targetLanguage?: string,
       allowAutoPaste = true,
       destinationProbe?: Promise<DictationContext | undefined>,
+      /** Ask anything: the text selected when the shortcut was pressed. Read once, so a retry asks about the same text. */
+      selectionProbe?: Promise<SelectedText | undefined>,
     ) => {
       retryAudioRef.current = null;
       const autoPaste = mode !== 'ask' && allowAutoPaste && appState.settings.autoPaste;
@@ -513,6 +515,7 @@ export function App() {
         // App and site always set the tone. Text near the caret stays on the device unless
         // context awareness is on.
         const destination = mode === 'dictate' || mode === 'translate' ? await destinationProbe : undefined;
+        const selection = mode === 'ask' ? await selectionProbe : undefined;
         if (dropped()) return;
         const location = destination && { application: destination.application, domain: destination.domain };
         // Style learning covers dictation only.
@@ -624,6 +627,7 @@ export function App() {
                 // Snippet phrases must survive cleanup to expand. Their saved text is never sent.
                 // Spaced out ("my address 12"), so cleanup writes the words, not "address12".
                 keepPhrases: saidSnippets.map((snippet) => snippetTriggerKey(snippet.trigger)),
+                selection,
                 // The Thinking pill says "Searching the web" from the moment the provider starts searching.
                 onWebSearch: () => {
                   if (!dropped()) setHud((current) => current.status === 'processing' ? { ...current, searchingWeb: true } : current);
@@ -847,7 +851,7 @@ export function App() {
       } catch (err) {
         if (dropped()) return;
         retryAudioRef.current = [
-          audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste,
+          audioBlob, durationMs, mode, audioDataUrl, audioMimeType, existingItemId, targetLanguage, allowAutoPaste, undefined, selectionProbe,
         ];
         playInteractionSound('error', appState.settings.interactionSounds);
         const message = err instanceof Error ? err.message : 'Transcription failed';
@@ -863,6 +867,8 @@ export function App() {
   );
 
   const retryAudioRef = useRef<Parameters<typeof processAudioPipeline> | null>(null);
+  /** Ask anything: the selection read when the shortcut started this recording. */
+  const selectionProbeRef = useRef<Promise<SelectedText | undefined> | undefined>(undefined);
   /** The audio of the dictation now processing, for Undo after it is cancelled. */
   const processingAudioRef = useRef<Promise<Parameters<typeof processAudioPipeline> | null> | null>(null);
 
@@ -875,6 +881,8 @@ export function App() {
     const allowAutoPaste = !openedTargetsDuringRecording.current || !document.hasFocus();
     const destinationProbe = currentMode === 'dictate' || currentMode === 'translate'
       ? window.yapyap?.captureDictationContext?.().catch(() => undefined) : undefined;
+    const selectionProbe = currentMode === 'ask' ? selectionProbeRef.current : undefined;
+    selectionProbeRef.current = undefined;
     setHud((current) => ({ ...current, status: 'processing', paused: undefined, pauseTip: undefined }));
     const run = processingRunRef.current;
     const stopping = session.stop();
@@ -886,7 +894,7 @@ export function App() {
     const isEmpty = ({ blob, durationMs, heardSpeech }: Awaited<typeof stopping>) =>
       blob.size === 0 || durationMs < 500 || heardSpeech === false;
     processingAudioRef.current = stopping.then((audio): Parameters<typeof processAudioPipeline> | null => isEmpty(audio) ? null
-      : [audio.blob, audio.durationMs, currentMode, audio.dataUrl, audio.mimeType, undefined, selectedTarget, allowAutoPaste], () => null);
+      : [audio.blob, audio.durationMs, currentMode, audio.dataUrl, audio.mimeType, undefined, selectedTarget, allowAutoPaste, undefined, selectionProbe], () => null);
     try {
       const stopped = await stopping;
       const { blob, durationMs, dataUrl, mimeType } = stopped;
@@ -901,7 +909,7 @@ export function App() {
         }, 2000);
         return;
       }
-      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste, destinationProbe);
+      await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste, destinationProbe, selectionProbe);
     } catch (err) {
       playInteractionSound('error', appState.settings.interactionSounds);
       setHud({
@@ -957,6 +965,8 @@ export function App() {
     recorderRef.current = null;
     restoreAudioMute();
     const { mode, targetLanguage } = hudRef.current;
+    const selectionProbe = mode === 'ask' ? selectionProbeRef.current : undefined;
+    selectionProbeRef.current = undefined;
     // A recording cancelled within a second is a slip, not something worth keeping.
     if (!session || Date.now() - recordingSinceRef.current < 1000) {
       session?.cancel();
@@ -990,7 +1000,7 @@ export function App() {
           outcome: 'cancelled' as const,
         }, ...prev.history], prev.settings.historyRetention),
       }));
-      return [blob, durationMs, mode, dataUrl, mimeType, id, selectedTarget, allowAutoPaste] as Parameters<typeof processAudioPipeline>;
+      return [blob, durationMs, mode, dataUrl, mimeType, id, selectedTarget, allowAutoPaste, undefined, selectionProbe] as Parameters<typeof processAudioPipeline>;
     }).catch(() => null);
     setHud({ status: 'cancelled', mode, levels: Array(20).fill(0.1) });
     scheduleCancelBackstop();
@@ -1092,6 +1102,9 @@ export function App() {
       const start = Symbol();
       recorderStartRef.current = start;
       openedTargetsDuringRecording.current = false;
+      // Read now, while the other app still has the selection, and resolved while the user speaks.
+      selectionProbeRef.current = mode === 'ask' && appState.settings.askAboutSelection
+        ? window.yapyap?.captureSelection?.().catch(() => undefined) : undefined;
       try {
         playInteractionSound('start', appState.settings.interactionSounds);
         const desktop = window.yapyap;
@@ -1156,6 +1169,7 @@ export function App() {
     [
       appState.providers,
       appState.settings.activeSttProvider,
+      appState.settings.askAboutSelection,
       appState.settings.interactionSounds,
       appState.settings.microphoneId,
       appState.settings.muteWhenDictating,

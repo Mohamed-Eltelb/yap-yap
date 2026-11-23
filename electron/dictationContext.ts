@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child
 import type { FocusedField } from './pasteCorrections';
 import { macProbe, parseMacContext, parseMacField } from './macContext';
 import { linuxContextProbe } from './linuxContext';
+import { SELECTION_LIMIT } from './selectionLimit';
 
 export interface DictationContext {
   application: string;
@@ -10,6 +11,17 @@ export interface DictationContext {
   textBefore?: string;
   textAfter?: string;
 }
+
+/** Text the user selected in another app. Never stored. */
+export interface SelectedText {
+  text: string;
+  /** The selection was longer than SELECTION_LIMIT and was cut there. */
+  truncated: boolean;
+  /** The selection sits in a field the user can type in, so it could be replaced. */
+  editable?: boolean;
+}
+
+export { SELECTION_LIMIT };
 
 const windowsContext = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -121,13 +133,53 @@ function Get-FocusedField {
   }
   @{ field = ($element.GetRuntimeId() -join '.'); text = $range.GetText(6000) } | ConvertTo-Json -Compress
 }
+# The text the user selected, read through accessibility so the clipboard is never touched.
+# Read-only text counts too: a selection on a web page or in a PDF is often what is asked about.
+function Get-Selection {
+  $limit = ${SELECTION_LIMIT}
+  $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
+  $root = [Windows.Automation.AutomationElement]::RootElement
+  $pattern = $null
+  # Chromium and Electron apps answer the first query with an empty placeholder pane and expose
+  # the real focused element shortly after.
+  for ($attempt = 0; $attempt -lt 6 -and !$pattern; $attempt++) {
+    if ($attempt) { Start-Sleep -Milliseconds 80 }
+    $element = [Windows.Automation.AutomationElement]::FocusedElement
+    if (!$element -or $element.Current.IsPassword) { return }
+    # A selection on a page belongs to the document, which may be an ancestor of what has focus.
+    $node = $element
+    for ($depth = 0; $node -and $depth -lt 12; $depth++) {
+      if ($node.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) { break }
+      $pattern = $null
+      $node = $walker.GetParent($node)
+      if ($node -and [Windows.Automation.Automation]::Compare($node, $root)) { break }
+    }
+    if (!$pattern -and ($element.Current.FrameworkId -ne 'Chrome' -or $element.Current.ControlType -ne [Windows.Automation.ControlType]::Pane)) { return }
+  }
+  if (!$pattern) { return }
+  $parts = @()
+  $length = 0
+  $editable = $true
+  foreach ($range in @($pattern.GetSelection())) {
+    if (!$range -or $length -gt $limit) { continue }
+    $piece = $range.GetText($limit + 1 - $length)
+    if (!$piece) { continue }
+    $parts += $piece
+    $length += $piece.Length
+    if ($range.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -ne $false) { $editable = $false }
+  }
+  if (!$parts.Count) { return }
+  @{ text = ($parts -join [Environment]::NewLine); editable = $editable } | ConvertTo-Json -Compress
+}
 # One request per input line: an id, then an optional command. Each answer repeats the id so
 # answers are matched to their requests.
 while ($null -ne ($line = [Console]::In.ReadLine())) {
   $id, $command = $line.Split(' ', 2)
   $json = $null
   try {
-    if ($command -eq 'field') { $json = @(Get-FocusedField)[-1] } else { $json = @(Get-DictationContext)[-1] }
+    if ($command -eq 'field') { $json = @(Get-FocusedField)[-1] }
+    elseif ($command -eq 'selection') { $json = @(Get-Selection)[-1] }
+    else { $json = @(Get-DictationContext)[-1] }
   } catch { }
   if (!$json) { $json = '{}' }
   [Console]::Out.WriteLine($id + ' ' + $json)
@@ -167,7 +219,7 @@ function windowsHelper(): ChildProcessWithoutNullStreams {
   return child;
 }
 
-function askWindowsHelper(command = ''): Promise<string> {
+function askWindowsHelper(command = '', timeoutMs = 1500): Promise<string> {
   return new Promise((resolve) => {
     const id = ++requestId;
     const done = (line: string) => {
@@ -176,7 +228,7 @@ function askWindowsHelper(command = ''): Promise<string> {
       resolve(line);
     };
     // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
-    const timer = setTimeout(() => done(''), 1500);
+    const timer = setTimeout(() => done(''), timeoutMs);
     waiting.set(id, done);
     try {
       windowsHelper().stdin.write(`${id} ${command}\n`);
@@ -195,8 +247,8 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 
 // The probe treats a focused field as an address bar only in a browser. Other apps can
 // put ordinary text fields, such as a find bar, in a toolbar.
-async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste', browser = false): Promise<Record<string, unknown>> {
-  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 65536);
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection', browser = false): Promise<Record<string, unknown>> {
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18);
   try {
     return JSON.parse(output);
   } catch {
@@ -249,9 +301,9 @@ export function stopDictationContext(): void {
 }
 
 // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
-function runContextProbe(file: string, args: string[], maxBuffer = 8192): Promise<string> {
+function runContextProbe(file: string, args: string[], maxBuffer = 8192, timeout = 1500): Promise<string> {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout: 1500, windowsHide: true, maxBuffer }, (error, stdout) => {
+    execFile(file, args, { timeout, windowsHide: true, maxBuffer }, (error, stdout) => {
       resolve(error ? '' : stdout.trim());
     });
   });
@@ -332,4 +384,40 @@ export async function captureDictationContext(): Promise<DictationContext | unde
     textBefore: typeof field.textBefore === 'string' ? field.textBefore : undefined,
     textAfter: typeof field.textAfter === 'string' ? field.textAfter : undefined,
   };
+}
+
+/** A selection from any probe's JSON. Whitespace alone is no selection; the text is otherwise kept exactly. */
+export function parseSelection(data: unknown): SelectedText | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const { text, editable } = data as Record<string, unknown>;
+  if (typeof text !== 'string' || !text.trim()) return undefined;
+  return {
+    text: text.slice(0, SELECTION_LIMIT),
+    truncated: text.length > SELECTION_LIMIT,
+    ...(typeof editable === 'boolean' ? { editable } : {}),
+  };
+}
+
+function parseJson(output: string): unknown {
+  try {
+    return JSON.parse(output);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The text selected in the app in front, read through accessibility (UI Automation, AX, AT-SPI)
+ * without touching the clipboard. Used by Ask anything, and meant for transforms as well.
+ * It runs while the user is speaking, so it may take longer than the caret context.
+ */
+export async function captureSelection(): Promise<SelectedText | undefined> {
+  if (process.platform === 'win32') return parseSelection(parseJson(await askWindowsHelper('selection', 3000)));
+  if (process.platform === 'darwin') {
+    return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
+  }
+  if (process.platform !== 'linux') return;
+  const pid = await linuxForegroundPid();
+  if (!pid) return;
+  return parseSelection(await linuxProbe(pid, 'selection'));
 }
