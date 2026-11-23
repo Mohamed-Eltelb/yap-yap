@@ -151,6 +151,11 @@ describe('Selected text probe', () => {
     expect(long?.text).toHaveLength(SELECTION_LIMIT);
     expect(long?.truncated).toBe(true);
     expect(parseSelection({ text: 'a'.repeat(SELECTION_LIMIT) })?.truncated).toBe(false);
+    // An emoji across the limit is left out whole, never cut in half.
+    const fox = parseSelection({ text: 'x'.repeat(SELECTION_LIMIT - 1) + '🦊' });
+    expect(fox?.text).toBe('x'.repeat(SELECTION_LIMIT - 1));
+    expect(fox?.truncated).toBe(true);
+    expect(parseSelection({ text: 'x'.repeat(SELECTION_LIMIT - 2) + '🦊' })?.text.endsWith('🦊')).toBe(true);
   });
 
   it('switches on accessibility in Electron apps and leaves it on', () => {

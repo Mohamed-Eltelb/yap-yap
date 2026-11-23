@@ -52,6 +52,50 @@ def is_address_bar(node, attrs, browser):
     label = (node.get_name() or '').lower()
     return 'address bar' in label or 'address and search' in label or 'search or enter address' in label
 
+OBJECT = '￼'
+
+def selected_text(node, start, end, depth=0):
+    """The text from start to end, with each embedded element read in place.
+
+    Browsers show each element inside a text (a bold word, a link) as U+FFFC in its parent's
+    text. Each one is replaced with that element's text: the part selected in it, or all of it
+    when the selection runs across it. Elements without text (images) add nothing. None when an
+    element can't be read, so no words go missing silently. Firefox adds U+FEFF, which is dropped.
+    """
+    text = Atspi.Text.get_text(node, start, min(end, start + SELECTION_LIMIT + 1))
+    if OBJECT not in text:
+        return text.replace('﻿', '')
+    if depth > 8:
+        return None
+    parts = []
+    length = 0
+    for index, char in enumerate(text):
+        if length > SELECTION_LIMIT:
+            break
+        if char != OBJECT:
+            parts.append(char)
+            length += 1
+            continue
+        try:
+            link = Atspi.Hypertext.get_link(node, Atspi.Hypertext.get_link_index(node, start + index))
+            child = Atspi.Hyperlink.get_object(link, 0)
+        except Exception:
+            return None
+        if child is None:
+            return None
+        if child.get_text_iface() is None:
+            continue
+        if child.get_n_selections() > 0:
+            span = Atspi.Text.get_selection(child, 0)
+            piece = selected_text(child, span.start_offset, span.end_offset, depth + 1)
+        else:
+            piece = selected_text(child, 0, child.get_character_count(), depth + 1)
+        if piece is None:
+            return None
+        parts.append(piece)
+        length += len(piece)
+    return ''.join(parts).replace('﻿', '')
+
 def read_field(pid, mode, browser):
     desktop = Atspi.get_desktop(0)
     for index in range(desktop.get_child_count()):
@@ -89,11 +133,11 @@ def read_field(pid, mode, browser):
                         return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
                     if found is None and span.end_offset > span.start_offset:
-                        end = min(span.end_offset, span.start_offset + SELECTION_LIMIT + 1)
-                        # Chromium shows each child element as U+FFFC in its parent's text. A
-                        # selection that is only those is read from the children further down.
-                        text = Atspi.Text.get_text(node, span.start_offset, end).replace('￼', '')
-                        if text.strip():
+                        text = selected_text(node, span.start_offset, span.end_offset)
+                        if text is None:
+                            # Part of it could not be read: the last highlight stands in for it.
+                            found = dict(incomplete=True)
+                        elif text.strip():
                             found = dict(text=text, editable=states.contains(Atspi.StateType.EDITABLE))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):

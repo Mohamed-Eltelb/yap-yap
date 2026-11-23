@@ -404,8 +404,10 @@ export function parseSelection(data: unknown): SelectedText | undefined {
   if (!data || typeof data !== 'object') return undefined;
   const { text, editable } = data as Record<string, unknown>;
   if (typeof text !== 'string' || !text.trim()) return undefined;
+  // An emoji is two UTF-16 units: a cut between them would leave half of one.
+  const cut = /[\uD800-\uDBFF]/.test(text.charAt(SELECTION_LIMIT - 1)) ? SELECTION_LIMIT - 1 : SELECTION_LIMIT;
   return {
-    text: text.slice(0, SELECTION_LIMIT),
+    text: text.slice(0, cut),
     truncated: text.length > SELECTION_LIMIT,
     ...(typeof editable === 'boolean' ? { editable } : {}),
   };
