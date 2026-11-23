@@ -7,6 +7,7 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  powerMonitor,
   screen,
   shell,
   Tray,
@@ -24,6 +25,7 @@ import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './upd
 import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
+import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { captureDictationContext, linuxPasteTarget, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -177,8 +179,18 @@ function createMainWindow(): void {
   });
 }
 
+/** Creates the HUD window and makes it the current one. */
 function createHudWindow(): void {
-  hudWindow = new BrowserWindow({
+  hudWindow = newHudWindow();
+  hudLog().info(`HUD window ${hudWindow.id} created`);
+}
+
+/**
+ * A HUD window. Its events only change the HUD state while it is the current window, so a
+ * replacement can load beside the old one (see hudRefresh.ts).
+ */
+function newHudWindow(): BrowserWindow {
+  const window = new BrowserWindow({
     ...HUD_WINDOW_SIZE,
     frame: false,
     transparent: true,
@@ -197,38 +209,93 @@ function createHudWindow(): void {
     },
   });
 
-  hudWindow.webContents.on('will-frame-navigate', (event) => event.preventDefault());
-  hudWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const id = window.id;
+  window.webContents.on('will-frame-navigate', (event) => event.preventDefault());
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   // The window is larger than the HUD it draws; clicks on the transparent part
   // go to the app underneath. The HUD page turns this off while hovered.
-  if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
+  if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
 
-  hudWindow.webContents.on('did-start-loading', () => {
+  window.webContents.on('did-start-loading', () => {
+    if (window !== hudWindow) return;
     hudReady = false;
-    if (process.platform !== 'linux') hudWindow?.setIgnoreMouseEvents(true, { forward: true });
-    hudWindow?.hide();
+    if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
+    window.hide();
     hudEmpty = true;
   });
-  hudWindow.webContents.on('render-process-gone', () => {
+  window.webContents.on('render-process-gone', (_event, details) => {
+    hudLog().warn(`HUD window ${id} page gone: ${details.reason}`);
+    if (window === hudReplacement) {
+      hudReplacement = null;
+      window.destroy();
+      return;
+    }
+    if (window !== hudWindow) return;
     hudReady = false;
-    hudWindow?.hide();
+    window.hide();
     hudEmpty = true;
   });
   if (isDev) {
-    void hudWindow.loadURL('http://localhost:5173/#/hud');
+    void window.loadURL('http://localhost:5173/#/hud');
   } else {
-    void hudWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+    void window.loadFile(path.join(__dirname, '../dist/index.html'), {
       hash: '/hud',
     });
   }
 
-  hudWindow.on('closed', () => {
+  window.on('closed', () => {
+    if (window === hudReplacement) hudReplacement = null;
+    if (window !== hudWindow) return;
     hudReady = false;
     hudWindow = null;
     hudEmpty = true;
     clearHudTimer();
     hudPlacer.forget();
   });
+  return window;
+}
+
+// The HUD window's own log, hud.log in Electron's logs folder, so a HUD that stops showing
+// leaves a trail of the window replacements and the power and display events around it.
+let hudLogger: UpdateLogger | undefined;
+const hudLog = () => (hudLogger ??= createUpdateLogger(path.join(app.getPath('logs'), 'hud.log')));
+
+/** A new HUD window loading in the background, to replace the current one once ready. */
+let hudReplacement: BrowserWindow | null = null;
+
+function hudIsIdle(): boolean {
+  return Boolean(hudWindow && hudReady && hudEmpty && !hudHideTimer && !hudPayload.show);
+}
+
+const hudRefresher = new HudRefresher({
+  isIdle: hudIsIdle,
+  refresh(reason) {
+    if (hudReplacement) return;
+    hudReplacement = newHudWindow();
+    hudLog().info(`HUD window ${hudReplacement.id} loading to replace ${hudWindow?.id} (${reason})`);
+  },
+});
+
+/** The replacement's page is ready: swap it in, unless the HUD started showing meanwhile. */
+function swapInHudReplacement(): void {
+  const next = hudReplacement;
+  if (!next) return;
+  hudReplacement = null;
+  if (!hudIsIdle()) {
+    hudLog().info(`HUD window ${next.id} dropped: the HUD is showing`);
+    next.destroy();
+    hudRefresher.request('retry');
+    return;
+  }
+  const previous = hudWindow;
+  hudWindow = next;
+  hudReady = true;
+  hudEmpty = true;
+  hudDisplayId = undefined;
+  hudShownStatus = undefined;
+  hudPlacer.forget();
+  previous?.destroy();
+  hudLog().info(`HUD window ${next.id} replaced ${previous?.id}`);
 }
 
 let hudHideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -257,6 +324,7 @@ function updateHudWindow(): void {
       hudEmpty = true;
       hudDisplayId = undefined;
       hudShownStatus = undefined;
+      if (window === hudWindow) hudRefresher.idle();
     };
     if (hudEmpty) return;
     if (!hudWindow.isVisible() || hudHideDelay(hudShownStatus) === 0) {
@@ -287,6 +355,7 @@ function updateHudWindow(): void {
   if (hudEmpty) {
     // Start letting clicks through and have the page ask again when hovered.
     hudEmpty = false;
+    hudRefresher.busy();
     if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
     hudWindow.webContents.send('hud:shown');
   }
@@ -647,9 +716,34 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('hud:ready', (event) => {
+    if (hudReplacement && event.sender === hudReplacement.webContents) {
+      swapInHudReplacement();
+      return;
+    }
     if (event.sender !== hudWindow?.webContents) return;
     hudReady = true;
     updateHudWindow();
+    // Starts the idle wait for the first window.
+    if (hudIsIdle()) hudRefresher.idle();
+  });
+
+  // Events that can leave the HUD window drawing nothing on screen (see hudRefresh.ts).
+  const refreshHudOn = (reason: string) => () => {
+    hudLog().info(`HUD: ${reason}`);
+    hudRefresher.request(reason);
+  };
+  powerMonitor.on('resume', refreshHudOn('resume'));
+  powerMonitor.on('unlock-screen', refreshHudOn('unlock-screen'));
+  screen.on('display-added', refreshHudOn('display-added'));
+  screen.on('display-removed', refreshHudOn('display-removed'));
+  screen.on('display-metrics-changed', (_event, _display, changed) => {
+    hudLog().info(`HUD: display-metrics-changed ${changed.join(',')}`);
+    hudRefresher.request('display-metrics-changed');
+  });
+  app.on('child-process-gone', (_event, details) => {
+    if (details.type !== 'GPU') return;
+    hudLog().warn(`HUD: GPU process gone (${details.reason})`);
+    hudRefresher.request('gpu-process-gone');
   });
 
   ipcMain.on('hud:ignore-mouse', (event, ignore: boolean) => {
