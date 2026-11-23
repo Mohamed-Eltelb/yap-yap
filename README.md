@@ -1,14 +1,24 @@
-# Yap Yap
+<p align="center">
+  <img src="docs/media/cover.png" width="720" alt="Yap Yap">
+</p>
+
+<p align="center"><b>Free, open-source voice dictation for your desktop.</b><br>Bring your own AI keys. Windows, macOS and Linux.</p>
+
+<p align="center"><b><a href="https://yapyapapp.site/download.html">Download</a> · <a href="https://youtu.be/43EtNWgVEYs">Watch the trailer</a> · <a href="https://yapyapapp.site/">Try the interactive demo</a> · <a href="https://yapyapapp.site/providers.html">Setup guide</a></b></p>
 
 Tap a shortcut in your notes app, say “um, can we move the launch to Friday?”, and Yap Yap types the cleaned-up sentence at your cursor. Use the same floating recorder to translate a message or ask a question. You choose who transcribes your audio and who edits the text.
-
-**Yap Yap has been tested on Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms.
-
-**[Download](https://yapyapapp.site/download.html) · [Try the interactive demo](https://yapyapapp.site/) · [Setup guide](https://yapyapapp.site/providers.html) · [Run from source](#run-from-source)**
 
 <p align="center">
   <img src="docs/media/dictation.gif" width="480" alt="Illustrated dictation demo showing a spoken request being cleaned up as the recording pill moves from listening to finished.">
 </p>
+
+- **Your keys, your models.** Pick one provider to transcribe and another to edit, or run fully local with an OpenAI-compatible server. No account and no subscription.
+- **You decide how much it edits.** **None** keeps your exact words, **Light** drops the ums and fixes punctuation, **Medium** also rewords for clarity.
+- **Writes like you.** A writing style for each kind of app, a personal dictionary, snippets for text you use often, and learning from the edits you make.
+- **Stays on your computer.** History, recordings and settings live in your local profile, with a retention period you choose.
+- **Coming from Wispr Flow or Typeless?** Import your dictionary, snippets, writing styles and history, and undo it all in one click.
+
+**Yap Yap has been tested on Windows x64.** The macOS and Linux builds are experimental. They pass automated checks, but recording, global shortcuts, and pasting have yet to be tested end to end on those platforms. [Help test them](https://github.com/Mohamed-Eltelb/yap-yap/issues/2).
 
 ## Install
 
@@ -22,7 +32,7 @@ The installers aren’t code-signed, so your system may warn you the first time:
 
 ## Your first dictation
 
-1. Launch the desktop app and allow microphone access. Under **Settings → API Keys**, choose **Groq**, enter your own key, and select **Verify & add**. Groq can handle both transcription and text cleanup with one key. [Provider setup guide](https://yapyapapp.site/providers.html#groq)
+1. Launch the desktop app. The first-run setup walks you through microphone access, connecting a provider, a microphone check and a test dictation. **Groq** is a good start: one free key handles both transcription and text cleanup. [Provider setup guide](https://yapyapapp.site/providers.html#groq)
 2. Click inside a blank note. Tap and release the **Dictate** shortcut shown on Home, speak a sentence, then tap the shortcut again to finish.
 3. With auto-paste enabled, the result appears at your cursor. Open **History** to replay, edit, or retry it with another provider.
 
