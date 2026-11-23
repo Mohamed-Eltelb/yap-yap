@@ -69,6 +69,7 @@ def read_field(pid, mode, browser):
         # browser can list its address bar before the page. Then keep looking for the page.
         url = None
         text_hidden = False
+        found = None
         for _ in range(LIMIT):
             if not queue:
                 break
@@ -77,6 +78,8 @@ def read_field(pid, mode, browser):
             states = node.get_state_set()
             if mode == 'selection':
                 # A focused password field: nothing is read, and the highlight fallback is not used.
+                # The search goes on past a selection found first, since another field (an old
+                # selection in a sibling field) may come before the focused password field.
                 if role == Atspi.Role.PASSWORD_TEXT and states.contains(Atspi.StateType.FOCUSED):
                     return dict(password=True)
                 # Read-only text counts: a selection on a web page is often what is asked about.
@@ -85,9 +88,13 @@ def read_field(pid, mode, browser):
                     if attrs.get('text-input-type', '').lower() == 'password':
                         return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
-                    if span.end_offset > span.start_offset:
+                    if found is None and span.end_offset > span.start_offset:
                         end = min(span.end_offset, span.start_offset + SELECTION_LIMIT + 1)
-                        return dict(text=Atspi.Text.get_text(node, span.start_offset, end), editable=states.contains(Atspi.StateType.EDITABLE))
+                        # Chromium shows each child element as U+FFFC in its parent's text. A
+                        # selection that is only those is read from the children further down.
+                        text = Atspi.Text.get_text(node, span.start_offset, end).replace('￼', '')
+                        if text.strip():
+                            found = dict(text=text, editable=states.contains(Atspi.StateType.EDITABLE))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
                     if states.contains(Atspi.StateType.EDITABLE) or role == Atspi.Role.PASSWORD_TEXT:
@@ -122,6 +129,8 @@ def read_field(pid, mode, browser):
                 child = node.get_child_at_index(i)
                 if child:
                     queue.append(child)
+        if mode == 'selection':
+            return found
         if mode == 'paste':
             # A search cut short by the limit can't tell that no field has focus.
             return dict(editable=False) if focused_page and not queue else None
