@@ -75,8 +75,8 @@ export function UpdateCard() {
     case 'downloading':
       title = (
         <span className="flex items-baseline justify-between gap-2">
-          <span>Downloading v{state.version}…</span>
-          <span className="tabular-nums text-[var(--text-secondary)]">{state.percent}%</span>
+          <span className="min-w-0">Downloading v{state.version}…</span>
+          <span className="shrink-0 tabular-nums text-[var(--text-secondary)]">{state.percent}%</span>
         </span>
       );
       detail = <UpdateProgress percent={state.percent} />;
@@ -122,7 +122,7 @@ export function UpdateCard() {
       aria-label="App update"
       className="relative p-3 rounded-[14px] bg-[var(--bg-card-solid)] shadow-xs space-y-2"
     >
-      <div role="status" className="pe-4 text-[12.5px] font-semibold leading-snug text-[var(--text-primary)]">
+      <div role="status" className="text-[12.5px] font-semibold leading-snug text-[var(--text-primary)]">
         {title}
       </div>
       {typeof detail === 'string' ? (
