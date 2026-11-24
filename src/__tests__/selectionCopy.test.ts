@@ -56,6 +56,19 @@ describe('Copying the selection', () => {
     expect(moved.deps.sendCopy).not.toHaveBeenCalled();
   });
 
+  it('does not send Copy if focus changes while saving the clipboard', async () => {
+    const fake = desktop();
+    let window = 1;
+    fake.deps.foregroundWindow = () => window;
+    fake.deps.saveClipboard = async () => {
+      window = 2;
+      return async () => undefined;
+    };
+
+    expect(await copySelection(1, fake.deps)).toBeUndefined();
+    expect(fake.deps.sendCopy).not.toHaveBeenCalled();
+  });
+
   it('finds nothing when the copy leaves the clipboard unchanged', async () => {
     const fake = desktop({ selection: '' });
     expect(await copySelection(1, fake.deps)).toBeUndefined();

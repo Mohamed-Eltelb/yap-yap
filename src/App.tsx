@@ -109,8 +109,10 @@ async function replaceSelectedText(
   text: string,
   desktop: NonNullable<typeof window.yapyap>,
   keepOnClipboard: boolean,
+  allowCopy: boolean,
 ): Promise<boolean> {
   try {
+    if (desktop.platform === 'win32') return await desktop.pasteText(text, keepOnClipboard, selection, allowCopy);
     const now = await desktop.captureSelection?.(false);
     if (now?.text !== selection.text) return false;
     return await desktop.pasteText(text, keepOnClipboard);
@@ -551,7 +553,9 @@ export function App() {
         if (dropped()) return;
         // A rewrite replaces the selection only where it can be typed over, and only right after
         // the question, while that selection is still there (never on a retry from History).
-        const canReplaceSelection = selection?.editable === true && appState.settings.askReplaceSelection
+        const copyBackedRewrite = selection?.viaCopy === true && !!selection.windowId && appState.settings.askCopySelection;
+        const canReplaceSelection = (selection?.editable === true || copyBackedRewrite) && !selection?.truncated
+          && appState.settings.askReplaceSelection
           && !existingItemId && allowAutoPaste && !!window.yapyap;
         if (canReplaceSelection) window.yapyap?.preparePaste?.();
         const location = destination && { application: destination.application, domain: destination.domain };
@@ -862,7 +866,7 @@ export function App() {
         if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
         const pasted = replaceSelection && selection && desktop
-          ? await replaceSelectedText(selection, delivered, desktop, keepOnClipboard)
+          ? await replaceSelectedText(selection, delivered, desktop, keepOnClipboard, appState.settings.askCopySelection)
           : await deliverDictationResult(
           mode,
           delivered,

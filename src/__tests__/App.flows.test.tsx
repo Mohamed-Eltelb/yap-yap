@@ -54,6 +54,8 @@ function installDesktop() {
     onShortcutPhase: vi.fn((callback) => { desktop.phase = callback; return () => undefined; }),
     toggleHud: vi.fn(),
     captureDictationContext: vi.fn(async () => desktop.context),
+    captureSelection: vi.fn(),
+    preparePaste: vi.fn(),
     pasteText: vi.fn(async () => true),
     copyText: vi.fn(async () => undefined),
     watchPasteCorrections: vi.fn(async () => desktop.edits),
@@ -138,6 +140,21 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   delete (window as unknown as { yapyap?: unknown }).yapyap;
+});
+
+describe('Ask anything rewrite', () => {
+  it('hands a Copy-backed Windows highlight to the desktop for verification and paste', async () => {
+    seed({ settings: { askCopySelection: true, askReplaceSelection: true } });
+    const selection = { text: 'Original', truncated: false, viaCopy: true, windowId: '42' };
+    desktop.api.captureSelection.mockResolvedValue(selection);
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
+
+    await dictate('ask');
+
+    expect(desktop.api.captureSelection).toHaveBeenCalledExactlyOnceWith(true);
+    expect(cleanupOptions()).toMatchObject({ canReplaceSelection: true });
+    expect(desktop.api.pasteText).toHaveBeenCalledWith('Rewritten', false, selection, true);
+  });
 });
 
 describe('Dictation flow', () => {

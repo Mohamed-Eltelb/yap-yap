@@ -31,7 +31,7 @@ import { copyPlanFor, copySelection } from './selectionCopy';
 import { webUrl } from './webUrl';
 import { freshHighlights } from './primarySelection';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
-import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext } from './dictationContext';
+import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -500,9 +500,72 @@ async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
   else clipboard.clear();
 }
 
+function copyWindowsSelection(
+  window: string, processName: string, active: () => boolean = () => true, maxWaitMs?: number,
+): Promise<string | undefined> {
+  const plan = copyPlanFor(processName);
+  return plan ? copySelection(window, {
+    foregroundWindow: () => active() ? foregroundWindow() : undefined,
+    modifiersDown,
+    clipboardSequence,
+    sendCopy: copyWithKeyboard,
+    readCopied: () => clipboard.readText(),
+    async saveClipboard() {
+      const previous = await snapshotClipboard();
+      return async (copied) => {
+        if (await clipboard.readText() === copied) await restoreClipboard(previous);
+      };
+    },
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  }, plan, maxWaitMs) : Promise.resolve(undefined);
+}
+
+async function pasteWindowsRewrite(
+  selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean,
+): Promise<boolean> {
+  const window = selection.windowId;
+  if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return false;
+
+  let previous: ClipboardSnapshot | undefined;
+  let wrote = false;
+  let sent = false;
+  try {
+    return await pasteIntoWindowsField(async (active) => {
+      if (!active() || foregroundWindow() !== window) return false;
+      previous = await snapshotClipboard();
+      if (!active() || foregroundWindow() !== window) return false;
+      const copy = selection.viaCopy && allowCopy
+        ? (name: string) => copyWindowsSelection(window, name, active, 500)
+        : undefined;
+      const now = await captureSelection(copy);
+      if (!now || now.truncated || now.text !== selection.text || (now.viaCopy !== true && now.editable !== true)
+        || !active() || foregroundWindow() !== window || modifiersDown()) return false;
+      await clipboard.writeText(text);
+      wrote = true;
+      if (!active() || foregroundWindow() !== window || modifiersDown()) return false;
+      pasteWithKeyboard();
+      sent = true;
+      return true;
+    }, selection.viaCopy === true);
+  } finally {
+    if (wrote && previous && (!sent || !keepOnClipboard)) restoreAfterPaste(previous, text, sent ? 600 : 0);
+  }
+}
+
+function restoreAfterPaste(previous: ClipboardSnapshot, text: string, delay: number): void {
+  setTimeout(() => {
+    void clipboard.readText()
+      .then((current) => current === text ? restoreClipboard(previous) : undefined)
+      .catch(console.warn);
+  }, delay);
+}
+
 function pasteIntoFocusedField(): Promise<boolean> {
   if (process.platform === 'win32') {
-    return pasteIntoWindowsField(pasteWithKeyboard);
+    return pasteIntoWindowsField(() => {
+      pasteWithKeyboard();
+      return true;
+    });
   }
 
   // These commands can send the shortcut but cannot confirm insertion, so a
@@ -675,8 +738,14 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
+  ipcMain.handle('clipboard:paste', async (
+    event, text: string, keepOnClipboard?: boolean, selection?: SelectedText, allowCopy?: boolean,
+  ) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
+    if (selection) {
+      return process.platform === 'win32' && !mainWindow.isFocused()
+        && pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
+    }
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
@@ -689,11 +758,7 @@ app.whenReady().then(() => {
       return sent && target !== 'unconfirmed';
     } finally {
       // The paste goes through the clipboard; put back what the user had there once the target has read it.
-      if (previous) setTimeout(() => {
-        void clipboard.readText()
-          .then((current) => current === text ? restoreClipboard(previous) : undefined)
-          .catch(console.warn);
-      }, 600);
+      if (previous) restoreAfterPaste(previous, text, 600);
     }
   });
   ipcMain.on('clipboard:prepare-paste', (event) => {
@@ -712,26 +777,11 @@ app.whenReady().then(() => {
         .then(([text, stamp]) => freshHighlight({ text, stamp }), () => undefined);
       return captureSelection(() => highlight);
     }
-    if (allowCopy !== true || !win32Available()) return captureSelection();
-    // The window in front now, before the user can move on, is the one to copy from.
-    const window = foregroundWindow();
-    return captureSelection((processName) => {
-      const plan = copyPlanFor(processName);
-      return plan ? copySelection(window, {
-      foregroundWindow,
-      modifiersDown,
-      clipboardSequence,
-      sendCopy: copyWithKeyboard,
-      readCopied: () => clipboard.readText(),
-      async saveClipboard() {
-        const previous = await snapshotClipboard();
-        return async (copied) => {
-          if (await clipboard.readText() === copied) await restoreClipboard(previous);
-        };
-      },
-      wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      }, plan) : Promise.resolve(undefined);
-    });
+    if (!win32Available()) return captureSelection();
+    const windowId = foregroundWindow();
+    if (!windowId || windowId === '0') return;
+    const selection = await captureSelection(allowCopy === true ? (name) => copyWindowsSelection(windowId, name) : undefined);
+    if (selection && foregroundWindow() === windowId) return { ...selection, windowId };
   });
   // A website the user asked Ask anything to open. Only web addresses: see webUrl.
   ipcMain.handle('ask:open-url', async (event, address: unknown) => {

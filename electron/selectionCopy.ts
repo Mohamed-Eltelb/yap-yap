@@ -83,6 +83,7 @@ export async function copySelection(
   if (deps.foregroundWindow() !== window) return undefined;
 
   const restore = await deps.saveClipboard();
+  if (deps.foregroundWindow() !== window || deps.modifiersDown()) return undefined;
   const before = deps.clipboardSequence();
   deps.sendCopy(plan.keys);
   // Apps put the copy on the clipboard within a few tens of milliseconds; nothing means no selection.

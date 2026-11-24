@@ -20,6 +20,9 @@ export interface SelectedText {
   truncated: boolean;
   /** The selection sits in a field the user can type in, so it could be replaced. */
   editable?: boolean;
+  /** Windows foreground window at capture, used to verify a live rewrite. */
+  windowId?: string;
+  viaCopy?: boolean;
 }
 
 export { SELECTION_LIMIT };
@@ -437,7 +440,8 @@ export async function captureSelection(copy?: (processName: string) => Promise<s
     const found = parseSelection(data);
     const processName = (data as { process?: unknown } | undefined)?.process;
     if (found || !copy || typeof processName !== 'string') return found;
-    return parseSelection({ text: await copy(processName) });
+    const copied = parseSelection({ text: await copy(processName) });
+    return copied && { ...copied, viaCopy: true };
   }
   if (process.platform === 'darwin') {
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));

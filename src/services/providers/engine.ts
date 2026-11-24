@@ -51,7 +51,7 @@ declare global {
       watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
       /** What Wispr Flow and Typeless on this computer hold that Yap Yap can bring over. */
       readOtherApps?: () => Promise<OtherAppData[]>;
-      pasteText: (text: string, keepOnClipboard?: boolean) => Promise<boolean>;
+      pasteText: (text: string, keepOnClipboard?: boolean, selection?: SelectedText, allowCopy?: boolean) => Promise<boolean>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;

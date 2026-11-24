@@ -12,7 +12,8 @@ $types = [Windows.Automation.ControlType]
 # Asking once now, while the dictation is still being transcribed, wakes them up.
 try { $null = $automation::FocusedElement } catch {}
 # The helper is started early so this wait hides the PowerShell startup time.
-if ($null -eq [Console]::ReadLine()) { exit 1 }
+$request = [Console]::ReadLine()
+if ($null -eq $request) { exit 1 }
 
 # A Chromium placeholder is retried in case the early query came too late.
 $read = $null
@@ -35,6 +36,16 @@ for ($attempt = 0; $attempt -lt 12 -and !$read; $attempt++) {
 }
 
 $type = $element.Current.ControlType
+# A Copy can pick up a read-only highlight even where the app also has an input.
+# Only send a rewrite if the focused control itself exposes writable text.
+if ($request -eq 'require-writable') {
+  if ($type -eq $types::Edit -and $value) {
+    if ($value.Current.IsReadOnly) { exit 1 }
+  } elseif (($type -eq $types::Edit -or $type -eq $types::Document) -and $text) {
+    $readOnly = $text.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute)
+    if ($readOnly -isnot [bool] -or $readOnly) { exit 1 }
+  } else { exit 1 }
+}
 # Rows, tabs and buttons can carry a value without being a place to type.
 $never = $types::ListItem, $types::TreeItem, $types::TabItem, $types::MenuItem, $types::Button,
   $types::CheckBox, $types::RadioButton, $types::Hyperlink, $types::Slider, $types::Image
@@ -108,25 +119,36 @@ export function prepareWindowsPaste(): void {
   warm = startHelper();
 }
 
-export function pasteIntoWindowsField(sendPaste: () => void): Promise<boolean> {
+export function pasteIntoWindowsField(sendPaste: (active: () => boolean) => boolean | Promise<boolean>, requireWritable = false): Promise<boolean> {
   const child = warm ?? startHelper();
   warm = undefined;
   if (child.pid === undefined || child.exitCode !== null) return Promise.resolve(false);
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => child.kill(), 6000);
-    child.on('error', () => resolve(false));
+    let closed = false;
+    const timeout = setTimeout(() => {
+      closed = true;
+      child.kill();
+    }, 6000);
+    child.on('error', () => { closed = true; });
     child.on('close', (code) => {
+      closed = true;
       clearTimeout(timeout);
-      resolve(code === 0);
+      void sending.then(() => resolve(code === 0), () => resolve(false));
     });
+    let sending = Promise.resolve();
     child.stdout.once('data', () => {
-      try {
-        sendPaste();
-        child.stdin.write('\n');
-      } catch {
-        child.kill();
-      }
+      sending = (async () => {
+        try {
+          if (closed || !await sendPaste(() => !closed)) {
+            child.kill();
+            return;
+          }
+          if (!closed) child.stdin.write('\n');
+        } catch {
+          child.kill();
+        }
+      })();
     });
-    child.stdin.write('\n');
+    child.stdin.write(requireWritable ? 'require-writable\n' : '\n');
   });
 }
