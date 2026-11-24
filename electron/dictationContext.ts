@@ -261,7 +261,7 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 // The probe treats a focused field as an address bar only in a browser. Other apps can
 // put ordinary text fields, such as a find bar, in a toolbar.
 async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert', browser = false, input?: string): Promise<Record<string, unknown>> {
-  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18, 1500, input);
+  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18, mode === 'insert' ? 4500 : 1500, input);
   try {
     return JSON.parse(output);
   } catch {
@@ -275,10 +275,18 @@ export async function linuxPrimaryStamp(): Promise<number | undefined> {
   return stamp ? Number(stamp) : undefined;
 }
 
+// A second paste must not switch input methods during the first, or reach a later field.
+let insertingWaylandText = false;
 export async function insertWaylandText(text: string): Promise<boolean> {
-  const pid = await linuxForegroundPid();
-  if (!pid) return false;
-  return (await linuxProbe(pid, 'insert', false, text)).inserted === true;
+  if (insertingWaylandText) return false;
+  insertingWaylandText = true;
+  try {
+    const pid = await linuxForegroundPid();
+    if (!pid) return false;
+    return (await linuxProbe(pid, 'insert', false, text)).inserted === true;
+  } finally {
+    insertingWaylandText = false;
+  }
 }
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;

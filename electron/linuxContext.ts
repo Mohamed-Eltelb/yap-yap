@@ -1,5 +1,6 @@
 // AT-SPI exposes Unicode character offsets and stable object paths on the desktop bus.
 // The system Python uses the distro's PyGObject and AT-SPI bindings.
+import { linuxInputMethod } from './linuxInputMethod';
 import { SELECTION_LIMIT } from './selectionLimit';
 
 export const linuxContextProbe = String.raw`
@@ -102,19 +103,29 @@ def selected_text(node, start, end, depth=0):
         length += len(child_text)
     return ''.join(parts).replace('﻿', ''), editable
 
-def insert_text(node, text):
-    # Wayland does not let an unfocused app drive Ctrl+V. Edit only the focused field
-    # and check what arrived: some apps acknowledge an edit they did not apply.
-    if not text or node.get_n_selections() > 1:
-        return False
-    start = end = node.get_caret_offset()
-    if node.get_n_selections():
+def selection_offsets(node):
+    selections = node.get_n_selections()
+    if selections == 0:
+        caret = node.get_caret_offset()
+        return caret, caret
+    if selections == 1:
         span = Atspi.Text.get_selection(node, 0)
-        start, end = sorted((span.start_offset, span.end_offset))
+        return tuple(sorted((span.start_offset, span.end_offset)))
+    return -1, -1
+
+${linuxInputMethod}
+
+def insert_text(node, text):
+    # Check what arrived: some apps acknowledge an edit they did not apply.
+    if not text:
+        return False
+    start, end = selection_offsets(node)
     count = node.get_character_count()
     if not 0 <= start <= end <= count:
         return False
     old = Atspi.Text.get_text(node, start, end) if end > start else ''
+    if not node.get_editable_text_iface():
+        return commit_with_ibus(node, text, start, end, old, count)
     size = len(text)
 
     def matches(offset, expected):
@@ -197,7 +208,7 @@ def read_field(pid, mode, browser):
                 if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE):
                     if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type') == 'password':
                         return
-                    if node.get_editable_text_iface() and node.get_text_iface():
+                    if node.get_text_iface():
                         return dict(inserted=insert_text(node, sys.stdin.read()))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
