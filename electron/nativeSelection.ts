@@ -22,7 +22,8 @@ type ReadSelection = {
   ) => void;
 };
 
-type SendShortcut = (window: bigint, sequence: number, key: number) => number;
+type SendShortcut = (window: bigint, sequence: number, key: number, excelEditor: bigint) => number;
+type ExcelCellEditor = (window: bigint) => number | bigint;
 
 type ReadRewriteField = {
   async: (
@@ -33,6 +34,7 @@ type ReadRewriteField = {
 
 let read: ReadSelection | null | undefined;
 let sendShortcut: SendShortcut | undefined;
+let excelCellEditor: ExcelCellEditor | undefined;
 let readRewriteField: ReadRewriteField | undefined;
 
 // Installed builds keep the DLL beside the app's resources; development uses the fresh build.
@@ -53,7 +55,10 @@ function load(): ReadSelection | null {
   try {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
-    sendShortcut = lib.func('int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key)') as SendShortcut;
+    sendShortcut = lib.func(
+      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, intptr_t excelEditor)',
+    ) as SendShortcut;
+    excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as ExcelCellEditor;
     readRewriteField = lib.func(
       'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
     ) as unknown as ReadRewriteField;
@@ -66,10 +71,17 @@ function load(): ReadSelection | null {
 
 export const nativeSelectionAvailable = () => !!load();
 
-export function sendNativeClipboardShortcut(window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v'): boolean {
+export function nativeExcelCellEditor(window: string): bigint {
+  if (!load() || !excelCellEditor || !/^[0-9]+$/.test(window)) return 0n;
+  return BigInt(excelCellEditor(BigInt(window)));
+}
+
+export function sendNativeClipboardShortcut(
+  window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v', excelEditor = 0n,
+): boolean {
   if (!load() || !sendShortcut || !/^[0-9]+$/.test(window)) return false;
   const virtualKey = { 'ctrl+c': 0x43, 'ctrl+insert': 0x2d, 'ctrl+v': 0x56 }[key];
-  return sendShortcut(BigInt(window), sequence, virtualKey) === 1;
+  return sendShortcut(BigInt(window), sequence, virtualKey, excelEditor) === 1;
 }
 
 /**

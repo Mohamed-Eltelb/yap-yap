@@ -27,10 +27,10 @@ import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { copyPlanFor, copySelection } from './selectionCopy';
+import { copyPlanFor, copySelection, isExcel } from './selectionCopy';
 import { webUrl } from './webUrl';
 import { freshHighlights } from './primarySelection';
-import { readNativeRewriteField, sendNativeClipboardShortcut } from './nativeSelection';
+import { nativeExcelCellEditor, readNativeRewriteField, sendNativeClipboardShortcut } from './nativeSelection';
 import { confirmRewrite, expectedRewrite, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
@@ -505,12 +505,13 @@ async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
 function copyWindowsSelection(
   window: string, processName: string, maxWaitMs?: number,
 ): Promise<string | undefined> {
-  const plan = copyPlanFor(processName);
+  const excelEditor = isExcel(processName) ? nativeExcelCellEditor(window) : 0n;
+  const plan = copyPlanFor(processName, excelEditor !== 0n);
   return plan ? copySelection(window, {
     foregroundWindow,
     modifiersDown,
     clipboardSequence,
-    sendCopy: (keys, sequence) => sendNativeClipboardShortcut(window, sequence, keys),
+    sendCopy: (keys, sequence) => sendNativeClipboardShortcut(window, sequence, keys, excelEditor),
     readCopied: () => clipboard.readText(),
     async saveClipboard() {
       const previous = await snapshotClipboard();

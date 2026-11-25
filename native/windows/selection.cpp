@@ -111,9 +111,30 @@ FieldEditability ReadFieldEditability(IUIAutomationElement* element) {
   return editability;
 }
 
+bool HasWindowClass(HWND window, const wchar_t* expected) {
+  wchar_t name[32];
+  return window && GetClassNameW(window, name, ARRAYSIZE(name)) && wcscmp(name, expected) == 0;
+}
+
+// Inside a cell, Excel focuses EXCEL6. The worksheet grid is EXCEL7 and Copy there
+// would put the active cell on the clipboard even without a text highlight.
+HWND ExcelCellEditor(HWND window) {
+  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
+  if (!HasWindowClass(window, L"XLMAIN") || GetForegroundWindow() != window ||
+      !GetGUIThreadInfo(0, &info) || info.hwndActive != window ||
+      !HasWindowClass(info.hwndFocus, L"EXCEL6") ||
+      !HasWindowClass(GetParent(info.hwndFocus), L"XLDESK") ||
+      GetAncestor(info.hwndFocus, GA_ROOT) != window) return nullptr;
+  return info.hwndFocus;
+}
+
 }  // namespace
 
 extern "C" {
+
+__declspec(dllexport) HWND ys_excel_cell_editor(HWND window) {
+  return ExcelCellEditor(window);
+}
 
 // Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
 // when nothing is selected. `flags` gets 1 when the selection can be typed over, and 2 when the
@@ -274,7 +295,7 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
 
 // Only the known clipboard shortcuts, with the foreground and clipboard checked directly
 // before SendInput. Inserting the four events as a batch keeps key-down and key-up together.
-__declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key) {
+__declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key, HWND excelEditor) {
   if (key != 'C' && key != 'V' && key != VK_INSERT) return 0;
   const int modifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
   for (int modifier : modifiers) {
@@ -287,6 +308,7 @@ __declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence
   if (key == VK_INSERT) inputs[1].ki.dwFlags = inputs[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
   inputs[2].ki.dwFlags |= KEYEVENTF_KEYUP;
   inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+  if (excelEditor && (key != 'C' || ExcelCellEditor(window) != excelEditor)) return 0;
   if (!window || GetForegroundWindow() != window || GetClipboardSequenceNumber() != sequence) return 0;
   return SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT)) == ARRAYSIZE(inputs);
 }

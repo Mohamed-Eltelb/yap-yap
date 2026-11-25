@@ -106,6 +106,12 @@ describe('Copying the selection', () => {
     expect(copyPlanFor('Zed')?.dropLineCopy).toBe(true);
   });
 
+  it('limits Excel Copy to the in-cell text editor', () => {
+    expect(copyPlanFor('EXCEL.EXE')).toBeUndefined();
+    expect(copyPlanFor('EXCEL.EXE', true)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
+    expect(copyPlanFor('powerpnt.exe', true)).toBeUndefined();
+  });
+
   it('ignores the whole line an editor copies when nothing is selected', async () => {
     const plan = copyPlanFor('Zed');
     expect(await copySelection(1, desktop({ selection: 'const x = 1;\n' }).deps, plan)).toBeUndefined();

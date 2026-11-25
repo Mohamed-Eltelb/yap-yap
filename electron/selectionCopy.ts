@@ -42,9 +42,12 @@ export interface CopyPlan {
   dropLineCopy: boolean;
 }
 
+export const isExcel = (processName: string) => /^excel(?:\.exe)?$/i.test(processName);
+
 /** How to copy the selection in this app, or undefined when it must not be copied from. */
-export function copyPlanFor(processName: string): CopyPlan | undefined {
+export function copyPlanFor(processName: string, excelInCellEdit = false): CopyPlan | undefined {
   const name = processName.replace(/\.exe$/i, '');
+  if (excelInCellEdit && isExcel(name)) return { keys: 'ctrl+c', dropLineCopy: false };
   if (!name || NEVER_COPY.test(name)) return undefined;
   return { keys: COPY_WITH_INSERT.test(name) ? 'ctrl+insert' : 'ctrl+c', dropLineCopy: COPIES_LINE.test(name) };
 }
