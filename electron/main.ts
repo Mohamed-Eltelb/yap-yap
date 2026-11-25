@@ -503,9 +503,9 @@ async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
 }
 
 function copyWindowsSelection(
-  window: string, processName: string, maxWaitMs?: number,
+  window: string, processName: string, excelEditor: bigint, maxWaitMs?: number,
 ): Promise<string | undefined> {
-  const excelEditor = isExcel(processName) ? nativeExcelCellEditor(window) : 0n;
+  if (excelEditor && !isExcel(processName)) return Promise.resolve(undefined);
   const plan = copyPlanFor(processName, excelEditor !== 0n);
   return plan ? copySelection(window, {
     foregroundWindow,
@@ -523,16 +523,27 @@ function copyWindowsSelection(
   }, plan, maxWaitMs) : Promise.resolve(undefined);
 }
 
+async function captureWindowsSelection(
+  window: string, allowCopy: boolean, forRewrite = false, excelEditor = nativeExcelCellEditor(window),
+): Promise<SelectedText | undefined> {
+  if (excelEditor && nativeExcelCellEditor(window) !== excelEditor) return;
+  const copy = allowCopy
+    ? (name: string) => copyWindowsSelection(window, name, excelEditor, forRewrite ? 500 : undefined)
+    : undefined;
+  const selection = await captureSelection(copy, forRewrite, excelEditor !== 0n);
+  if (!selection || foregroundWindow() !== window || (excelEditor && nativeExcelCellEditor(window) !== excelEditor)) return;
+  return { ...selection, windowId: window, ...(excelEditor ? { excelCellEditor: String(excelEditor) } : {}) };
+}
+
 async function pasteWindowsRewrite(
   selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean,
 ): Promise<RewritePasteResult> {
   const window = selection.windowId;
   if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return 'not-sent';
 
-  const copy = selection.viaCopy && allowCopy
-    ? (name: string) => copyWindowsSelection(window, name, 500)
-    : undefined;
-  const now = await captureSelection(copy, true);
+  const excelEditor = selection.excelCellEditor ? BigInt(selection.excelCellEditor) : 0n;
+  if (nativeExcelCellEditor(window) !== excelEditor) return 'not-sent';
+  const now = await captureWindowsSelection(window, selection.viaCopy === true && allowCopy, true, excelEditor);
   if (!now || now.truncated || now.text !== selection.text || now.editable !== true
     || foregroundWindow() !== window || modifiersDown()) return 'not-sent';
 
@@ -549,7 +560,7 @@ async function pasteWindowsRewrite(
     await clipboard.writeText(text);
     sequence = clipboardSequence();
     if (await clipboard.readText() !== text) return 'not-sent';
-    sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v');
+    sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v', excelEditor);
   } finally {
     if (sequence !== undefined && (!sent || !keepOnClipboard)) {
       restoreAfterPaste(previous, text, sent ? 600 : 0, sequence);
@@ -789,8 +800,7 @@ app.whenReady().then(() => {
     if (!win32Available()) return captureSelection();
     const windowId = foregroundWindow();
     if (!windowId || windowId === '0') return;
-    const selection = await captureSelection(allowCopy === true ? (name) => copyWindowsSelection(windowId, name) : undefined);
-    if (selection && foregroundWindow() === windowId) return { ...selection, windowId };
+    return captureWindowsSelection(windowId, allowCopy === true);
   });
   // A website the user asked Ask anything to open. Only web addresses: see webUrl.
   ipcMain.handle('ask:open-url', async (event, address: unknown) => {

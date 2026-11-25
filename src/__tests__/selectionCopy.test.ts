@@ -106,7 +106,10 @@ describe('Copying the selection', () => {
     expect(copyPlanFor('Zed')?.dropLineCopy).toBe(true);
   });
 
-  it('limits Excel Copy to the in-cell text editor', () => {
+  it('limits Excel Copy and replacement to the in-cell text editor', () => {
+    expect(canReplaceCopiedSelection('EXCEL.EXE', undefined, true)).toBe(true);
+    expect(canReplaceCopiedSelection('EXCEL.EXE', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('EXCEL.EXE', false, true)).toBe(false);
     expect(copyPlanFor('EXCEL.EXE')).toBeUndefined();
     expect(copyPlanFor('EXCEL.EXE', true)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
     expect(copyPlanFor('powerpnt.exe', true)).toBeUndefined();

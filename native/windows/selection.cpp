@@ -308,7 +308,7 @@ __declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence
   if (key == VK_INSERT) inputs[1].ki.dwFlags = inputs[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
   inputs[2].ki.dwFlags |= KEYEVENTF_KEYUP;
   inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-  if (excelEditor && (key != 'C' || ExcelCellEditor(window) != excelEditor)) return 0;
+  if (excelEditor && ((key != 'C' && key != 'V') || ExcelCellEditor(window) != excelEditor)) return 0;
   if (!window || GetForegroundWindow() != window || GetClipboardSequenceNumber() != sequence) return 0;
   return SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT)) == ARRAYSIZE(inputs);
 }

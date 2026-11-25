@@ -23,6 +23,8 @@ export interface SelectedText {
   editable?: boolean;
   /** Windows foreground window at capture, used to verify a live rewrite. */
   windowId?: string;
+  /** The native in-cell editor must still have focus before an Excel rewrite can paste. */
+  excelCellEditor?: string;
   viaCopy?: boolean;
 }
 
@@ -435,6 +437,7 @@ function parseJson(output: string): unknown {
 export async function captureSelection(
   copy?: (processName: string) => Promise<string | undefined>,
   forRewrite = false,
+  excelInCellEdit = false,
 ): Promise<SelectedText | undefined> {
   if (process.platform === 'win32') {
     // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
@@ -446,7 +449,7 @@ export async function captureSelection(
     const found = parseSelection(data);
     const processName = (data as { process?: unknown } | undefined)?.process;
     if (found || !copy || typeof processName !== 'string') return found;
-    const editable = native ? canReplaceCopiedSelection(processName, native.writableField) : undefined;
+    const editable = native ? canReplaceCopiedSelection(processName, native.writableField, excelInCellEdit) : undefined;
     if (forRewrite && !editable) return;
     const copied = parseSelection({ text: await copy(processName), editable });
     return copied && { ...copied, viaCopy: true };

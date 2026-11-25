@@ -55,7 +55,10 @@ export function copyPlanFor(processName: string, excelInCellEdit = false): CopyP
 export const mayCopySelection = (processName: string) => !!copyPlanFor(processName);
 
 /** Zed's Windows editor exposes a window to UIA even when its selection accepts Paste. */
-export function canReplaceCopiedSelection(processName: string, writableField: boolean | undefined): boolean {
+export function canReplaceCopiedSelection(
+  processName: string, writableField: boolean | undefined, excelInCellEdit = false,
+): boolean {
+  if (isExcel(processName)) return excelInCellEdit && writableField !== false;
   return writableField ?? /^zed(?:\.exe)?$/i.test(processName);
 }
 
