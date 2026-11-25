@@ -4,7 +4,7 @@ import { macProbe, parseMacContext, parseMacField } from './macContext';
 import { linuxContextProbe, linuxPrimaryStampProbe } from './linuxContext';
 import { SELECTION_LIMIT } from './selectionLimit';
 import { readNativeSelection } from './nativeSelection';
-import { canReplaceCopiedSelection } from './selectionCopy';
+import { canReplaceCopiedSelection, type CopiedSelection } from './selectionCopy';
 
 export interface DictationContext {
   application: string;
@@ -23,6 +23,8 @@ export interface SelectedText {
   editable?: boolean;
   /** Windows foreground window at capture, used to verify a live rewrite. */
   windowId?: string;
+  /** Windows control that had focus when the selection was captured. */
+  focusedWindowId?: string;
   /** The native in-cell editor must still have focus before an Excel rewrite can paste. */
   excelCellEditor?: string;
   viaCopy?: boolean;
@@ -435,7 +437,7 @@ function parseJson(output: string): unknown {
  * A Windows rewrite uses the native read to check which targets can be rewritten through Copy.
  */
 export async function captureSelection(
-  copy?: (processName: string) => Promise<string | undefined>,
+  copy?: (processName: string) => Promise<string | CopiedSelection | undefined>,
   forRewrite = false,
   excelInCellEdit = false,
 ): Promise<SelectedText | undefined> {
@@ -451,7 +453,10 @@ export async function captureSelection(
     if (found || !copy || typeof processName !== 'string') return found;
     const editable = native ? canReplaceCopiedSelection(processName, native.writableField, excelInCellEdit) : undefined;
     if (forRewrite && !editable) return;
-    const copied = parseSelection({ text: await copy(processName), editable });
+    const result = await copy(processName);
+    const copied = typeof result === 'object'
+      ? parseSelection({ text: result.text, editable: result.readOnly ? false : editable })
+      : parseSelection({ text: result, editable });
     return copied && { ...copied, viaCopy: true };
   }
   if (process.platform === 'darwin') {
@@ -466,5 +471,6 @@ export async function captureSelection(
   if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
-  return parseSelection({ text: await copy('') });
+  const copied = await copy('');
+  return parseSelection({ text: typeof copied === 'object' ? copied.text : copied });
 }

@@ -22,8 +22,8 @@ type ReadSelection = {
   ) => void;
 };
 
-type SendShortcut = (window: bigint, sequence: number, key: number, excelEditor: bigint) => number;
-type ExcelCellEditor = (window: bigint) => number | bigint;
+type SendShortcut = (window: bigint, sequence: number, key: number, excelEditor: bigint, focusedWindow: bigint) => number;
+type WindowProbe = (window: bigint) => number | bigint;
 
 type ReadRewriteField = {
   async: (
@@ -34,7 +34,8 @@ type ReadRewriteField = {
 
 let read: ReadSelection | null | undefined;
 let sendShortcut: SendShortcut | undefined;
-let excelCellEditor: ExcelCellEditor | undefined;
+let excelCellEditor: WindowProbe | undefined;
+let focusedWindow: WindowProbe | undefined;
 let readRewriteField: ReadRewriteField | undefined;
 
 // Installed builds keep the DLL beside the app's resources; development uses the fresh build.
@@ -56,9 +57,10 @@ function load(): ReadSelection | null {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
     sendShortcut = lib.func(
-      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, intptr_t excelEditor)',
+      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, intptr_t excelEditor, intptr_t focusedWindow)',
     ) as SendShortcut;
-    excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as ExcelCellEditor;
+    excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as WindowProbe;
+    focusedWindow = lib.func('intptr_t ys_focused_window(intptr_t window)') as WindowProbe;
     readRewriteField = lib.func(
       'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
     ) as unknown as ReadRewriteField;
@@ -76,12 +78,17 @@ export function nativeExcelCellEditor(window: string): bigint {
   return BigInt(excelCellEditor(BigInt(window)));
 }
 
+export function nativeFocusedWindow(window: string): bigint {
+  if (!load() || !focusedWindow || !/^[0-9]+$/.test(window)) return 0n;
+  return BigInt(focusedWindow(BigInt(window)));
+}
+
 export function sendNativeClipboardShortcut(
-  window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v', excelEditor = 0n,
+  window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v', excelEditor = 0n, focus = 0n,
 ): boolean {
   if (!load() || !sendShortcut || !/^[0-9]+$/.test(window)) return false;
   const virtualKey = { 'ctrl+c': 0x43, 'ctrl+insert': 0x2d, 'ctrl+v': 0x56 }[key];
-  return sendShortcut(BigInt(window), sequence, virtualKey, excelEditor) === 1;
+  return sendShortcut(BigInt(window), sequence, virtualKey, excelEditor, focus) === 1;
 }
 
 /**

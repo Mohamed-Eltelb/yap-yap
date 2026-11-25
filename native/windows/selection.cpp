@@ -87,8 +87,23 @@ FieldEditability ReadFieldEditability(IUIAutomationElement* element) {
   if (!enabled) return FieldReadOnly;
 
   CONTROLTYPEID type = 0;
-  if (FAILED(element->get_CurrentControlType(&type)) ||
-      (type != UIA_EditControlTypeId && type != UIA_DocumentControlTypeId)) return FieldUnknown;
+  if (FAILED(element->get_CurrentControlType(&type))) return FieldUnknown;
+  // Selecting a row, link or button can provide clipboard text without a place to paste.
+  switch (type) {
+    case UIA_ButtonControlTypeId:
+    case UIA_CheckBoxControlTypeId:
+    case UIA_DataItemControlTypeId:
+    case UIA_HyperlinkControlTypeId:
+    case UIA_ImageControlTypeId:
+    case UIA_ListItemControlTypeId:
+    case UIA_MenuItemControlTypeId:
+    case UIA_RadioButtonControlTypeId:
+    case UIA_SliderControlTypeId:
+    case UIA_TabItemControlTypeId:
+    case UIA_TreeItemControlTypeId:
+      return FieldReadOnly;
+  }
+  if (type != UIA_EditControlTypeId && type != UIA_DocumentControlTypeId) return FieldUnknown;
   IUIAutomationValuePattern* value = nullptr;
   if (type == UIA_EditControlTypeId &&
       SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
@@ -116,21 +131,29 @@ bool HasWindowClass(HWND window, const wchar_t* expected) {
   return window && GetClassNameW(window, name, ARRAYSIZE(name)) && wcscmp(name, expected) == 0;
 }
 
+HWND FocusedWindow(HWND window) {
+  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
+  if (!window || GetForegroundWindow() != window || !GetGUIThreadInfo(0, &info) ||
+      info.hwndActive != window || GetAncestor(info.hwndFocus, GA_ROOT) != window) return nullptr;
+  return info.hwndFocus;
+}
+
 // Inside a cell, Excel focuses EXCEL6. The worksheet grid is EXCEL7 and Copy there
 // would put the active cell on the clipboard even without a text highlight.
 HWND ExcelCellEditor(HWND window) {
-  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
-  if (!HasWindowClass(window, L"XLMAIN") || GetForegroundWindow() != window ||
-      !GetGUIThreadInfo(0, &info) || info.hwndActive != window ||
-      !HasWindowClass(info.hwndFocus, L"EXCEL6") ||
-      !HasWindowClass(GetParent(info.hwndFocus), L"XLDESK") ||
-      GetAncestor(info.hwndFocus, GA_ROOT) != window) return nullptr;
-  return info.hwndFocus;
+  if (!HasWindowClass(window, L"XLMAIN")) return nullptr;
+  HWND focus = FocusedWindow(window);
+  if (!HasWindowClass(focus, L"EXCEL6") || !HasWindowClass(GetParent(focus), L"XLDESK")) return nullptr;
+  return focus;
 }
 
 }  // namespace
 
 extern "C" {
+
+__declspec(dllexport) HWND ys_focused_window(HWND window) {
+  return FocusedWindow(window);
+}
 
 __declspec(dllexport) HWND ys_excel_cell_editor(HWND window) {
   return ExcelCellEditor(window);
@@ -295,7 +318,7 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
 
 // Only the known clipboard shortcuts, with the foreground and clipboard checked directly
 // before SendInput. Inserting the four events as a batch keeps key-down and key-up together.
-__declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key, HWND excelEditor) {
+__declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key, HWND excelEditor, HWND focusedWindow) {
   if (key != 'C' && key != 'V' && key != VK_INSERT) return 0;
   const int modifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
   for (int modifier : modifiers) {
@@ -309,6 +332,7 @@ __declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence
   inputs[2].ki.dwFlags |= KEYEVENTF_KEYUP;
   inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
   if (excelEditor && ((key != 'C' && key != 'V') || ExcelCellEditor(window) != excelEditor)) return 0;
+  if (focusedWindow && FocusedWindow(window) != focusedWindow) return 0;
   if (!window || GetForegroundWindow() != window || GetClipboardSequenceNumber() != sequence) return 0;
   return SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT)) == ARRAYSIZE(inputs);
 }

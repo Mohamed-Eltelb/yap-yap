@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canReplaceCopiedSelection, copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
+import { canReplaceCopiedSelection, classifyZedCopy, copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
 
 /** A fake desktop: the clipboard, the window in front, and keys held for a while. */
 function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo }: { selection?: string; heldFor?: number; window?: number; switchTo?: number } = {}) {
@@ -34,10 +34,14 @@ function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo 
 }
 
 describe('Copying the selection', () => {
-  it('allows a Copied Zed selection when UIA cannot identify the field', () => {
+  it('allows Copy-backed rewrites in opaque editors and preserves the target restrictions', () => {
+    expect(canReplaceCopiedSelection('CustomEditor.exe', undefined)).toBe(true);
     expect(canReplaceCopiedSelection('Zed.exe', undefined)).toBe(true);
-    expect(canReplaceCopiedSelection('Zed.exe', false)).toBe(false);
+    expect(canReplaceCopiedSelection('CustomEditor.exe', false)).toBe(false);
     expect(canReplaceCopiedSelection('WindowsTerminal.exe', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('wt.exe', true)).toBe(false);
+    expect(canReplaceCopiedSelection('explorer.exe', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('mstsc.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('WINWORD.EXE', true)).toBe(true);
   });
 
@@ -113,6 +117,19 @@ describe('Copying the selection', () => {
     expect(copyPlanFor('EXCEL.EXE')).toBeUndefined();
     expect(copyPlanFor('EXCEL.EXE', true)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
     expect(copyPlanFor('powerpnt.exe', true)).toBeUndefined();
+  });
+
+  it('distinguishes Zed highlights with a newline from implicit line copies', async () => {
+    const plan = copyPlanFor('Zed');
+    const fake = desktop({ selection: 'sample text\r\n' });
+    fake.deps.readCopiedKind = async () => classifyZedCopy('[{"is_entire_line":false}]');
+    expect(await copySelection(1, fake.deps, plan)).toBe('sample text\r\n');
+
+    fake.deps.readCopiedKind = async () => classifyZedCopy('[{"is_entire_line":true}]');
+    expect(await copySelection(1, fake.deps, plan)).toBeUndefined();
+
+    fake.deps.readCopiedKind = async () => classifyZedCopy(null);
+    expect(await copySelection(1, fake.deps, plan)).toBe('sample text\r\n');
   });
 
   it('ignores the whole line an editor copies when nothing is selected', async () => {

@@ -22,8 +22,10 @@ const NEVER_COPY = pattern([
  * copies a selection and does nothing without one, where Ctrl+C would stop the running command
  * (Zed's terminal, Windows Terminal, the console). Code editors take it too, since Zed is both.
  */
+const KNOWN_TERMINALS = ['windowsterminal', 'wt', 'openconsole', 'conhost', 'cmd', 'powershell', 'pwsh'];
+const TERMINAL_COPY = pattern(KNOWN_TERMINALS);
 const COPY_WITH_INSERT = pattern([
-  'windowsterminal', 'openconsole', 'conhost', 'cmd', 'powershell', 'pwsh',
+  ...KNOWN_TERMINALS,
   'code', 'code - insiders', 'cursor', 'windsurf', 'antigravity', 'kiro', 'trae', 'void', 'positron',
   '[a-z]+64', 'fleet', 'devenv', 'sublime_text', 'zed',
 ]);
@@ -35,6 +37,22 @@ const COPIES_LINE = pattern([
 ]);
 
 export type CopyKeys = 'ctrl+c' | 'ctrl+insert';
+export type CopiedTextKind = 'selection' | 'implicit-line' | 'plain' | 'unknown';
+export interface CopiedSelection { text: string; readOnly?: boolean }
+
+export function classifyZedCopy(metadata: string | null | undefined): CopiedTextKind {
+  if (metadata === null) return 'plain';
+  if (!metadata) return 'unknown';
+  try {
+    const ranges: unknown = JSON.parse(metadata);
+    if (!Array.isArray(ranges) || !ranges.length || !ranges.every(
+      (range) => range && typeof range.is_entire_line === 'boolean',
+    )) return 'unknown';
+    return ranges.some((range) => range.is_entire_line) ? 'implicit-line' : 'selection';
+  } catch {
+    return 'unknown';
+  }
+}
 
 export interface CopyPlan {
   keys: CopyKeys;
@@ -54,12 +72,13 @@ export function copyPlanFor(processName: string, excelInCellEdit = false): CopyP
 
 export const mayCopySelection = (processName: string) => !!copyPlanFor(processName);
 
-/** Zed's Windows editor exposes a window to UIA even when its selection accepts Paste. */
+/** A Copy-backed rewrite needs an allowed target even when its editor is opaque to UIA. */
 export function canReplaceCopiedSelection(
   processName: string, writableField: boolean | undefined, excelInCellEdit = false,
 ): boolean {
-  if (isExcel(processName)) return excelInCellEdit && writableField !== false;
-  return writableField ?? /^zed(?:\.exe)?$/i.test(processName);
+  return writableField !== false
+    && !TERMINAL_COPY.test(processName.replace(/\.exe$/i, ''))
+    && !!copyPlanFor(processName, excelInCellEdit);
 }
 
 /** One line ending in its line break: what an editor copies when nothing is selected. */
@@ -71,6 +90,7 @@ export interface CopyDeps {
   clipboardSequence: () => number;
   sendCopy: (keys: CopyKeys, sequence: number) => boolean | void;
   readCopied: () => Promise<string>;
+  readCopiedKind?: () => Promise<CopiedTextKind>;
   /** Saves the user's clipboard and returns how to put it back once the copy has been read. */
   saveClipboard: () => Promise<(copied: string) => Promise<void>>;
   wait: (ms: number) => Promise<void>;
@@ -106,8 +126,12 @@ export async function copySelection(
   if (!changed) return undefined;
   // Some apps write the clipboard in steps; let them finish.
   await deps.wait(30);
+  const copiedSequence = deps.clipboardSequence();
   const text = await deps.readCopied();
+  const kind = await deps.readCopiedKind?.();
+  if (deps.clipboardSequence() !== copiedSequence) return undefined;
   await restore(text);
-  if (!text.trim() || (plan.dropLineCopy && isLineCopy(text))) return undefined;
+  if (!text.trim() || kind === 'implicit-line'
+    || (plan.dropLineCopy && (!kind || kind === 'unknown') && isLineCopy(text))) return undefined;
   return text;
 }
