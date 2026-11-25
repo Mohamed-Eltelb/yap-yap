@@ -185,6 +185,15 @@ export function App() {
     }, 3200);
   }, []);
 
+  // The main window owns notice timing and sends the resulting state to the floating HUD.
+  useEffect(() => {
+    if (isHudRoute || hud.status !== 'notice') return;
+    const timer = window.setTimeout(() => {
+      setHud((current) => current === hud ? { ...current, status: 'idle', noticeText: undefined } : current);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [hud, isHudRoute]);
+
   // Load persisted state on boot
   useEffect(() => {
     if (isHudRoute) return;
@@ -879,7 +888,7 @@ export function App() {
           },
         );
 
-        const pasted = delivery === true || delivery === 'confirmed';
+        const pasted = delivery === true || delivery === 'confirmed' || delivery === 'unverified';
         if (dropped()) return;
 
         // Words the user respells in the destination right after the paste join the dictionary.
@@ -918,7 +927,7 @@ export function App() {
           mode,
           levels: Array(20).fill(0.1),
           resultText: finalText,
-          rewritePaste: delivery === 'unverified' || delivery === 'not-sent' ? delivery : undefined,
+          rewritePaste: delivery === 'not-sent' ? delivery : undefined,
           questionText: mode === 'ask' ? rawText : undefined,
           selectionText: mode === 'ask' ? selection?.text : undefined,
           searchedWeb,
@@ -979,9 +988,6 @@ export function App() {
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (run !== processingRunRef.current) return;
         setHud({ status: 'notice', mode: currentMode, levels: Array(20).fill(0.1), noticeText: 'No speech detected' });
-        setTimeout(() => {
-          setHud((current) => current.status === 'notice' ? { status: 'idle', mode: 'dictate', levels: Array(20).fill(0.1) } : current);
-        }, 2000);
         return;
       }
       await processAudioPipeline(blob, durationMs, currentMode, dataUrl, mimeType, undefined, selectedTarget, allowAutoPaste, destinationProbe, selectionProbe);

@@ -158,15 +158,29 @@ describe('Ask anything rewrite', () => {
     expect(lastHud()?.status).toBe('idle');
   });
 
-  it.each(['unverified', 'not-sent'])('keeps the rewrite available when paste is %s', async (status) => {
-    seed({ settings: { askReplaceSelection: true } });
+  it.each(['forever', 'never'] as const)('closes the HUD after an unverified paste with %s history', async (historyRetention) => {
+    seed({ settings: { askReplaceSelection: true, historyRetention } });
     desktop.api.captureSelection.mockResolvedValue({ text: 'Original', truncated: false, editable: true, windowId: '42' });
-    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
-    desktop.api.replaceSelection.mockResolvedValue(status);
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: '**Rewritten**', replaceSelection: true });
+    desktop.api.replaceSelection.mockResolvedValue('unverified');
 
     await dictate('ask');
 
-    expect(lastHud()).toMatchObject({ status: 'result', rewritePaste: status, resultText: 'Rewritten' });
+    expect(lastHud()?.status).toBe('idle');
+    if (historyRetention === 'forever') {
+      expect(lastSaved().history[0]).toMatchObject({ text: '**Rewritten**', rewroteSelection: true });
+    }
+  });
+
+  it('keeps the rewrite card when paste could not be sent', async () => {
+    seed({ settings: { askReplaceSelection: true } });
+    desktop.api.captureSelection.mockResolvedValue({ text: 'Original', truncated: false, editable: true, windowId: '42' });
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
+    desktop.api.replaceSelection.mockResolvedValue('not-sent');
+
+    await dictate('ask');
+
+    expect(lastHud()).toMatchObject({ status: 'result', rewritePaste: 'not-sent', resultText: 'Rewritten' });
     expect(desktop.api.replaceSelection).toHaveBeenCalledTimes(1);
     expect(desktop.api.pasteText).not.toHaveBeenCalled();
   });

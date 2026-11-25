@@ -9,7 +9,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderAnswer(onCopyResult = vi.fn(), rewritePaste?: 'unverified') {
+function renderAnswer(onCopyResult = vi.fn(), rewritePaste?: 'not-sent') {
   const noop = vi.fn();
   return render(
     <DictationHud hud={{ status: 'result', mode: 'ask', levels: [], rewritePaste, questionText: 'What time is it?', resultText: 'It is **noon**.' }}
@@ -38,11 +38,11 @@ it('marks only the copy button that was clicked', () => {
   expect(getByRole('button', { name: 'Copied' })).toBeTruthy();
 });
 
-it('shows unverified paste feedback and copies the rewrite verbatim', () => {
+it('shows failed paste feedback and copies the rewrite verbatim', () => {
   const onCopyResult = vi.fn();
-  const { getByRole } = renderAnswer(onCopyResult, 'unverified');
+  const { getByRole } = renderAnswer(onCopyResult, 'not-sent');
 
-  expect(getByRole('status').textContent).toContain('Paste sent');
+  expect(getByRole('status').textContent).toContain('The rewrite could not be pasted.');
   fireEvent.click(getByRole('button', { name: 'Copy rewrite' }));
   expect(onCopyResult).toHaveBeenCalledWith('It is **noon**.');
 });
