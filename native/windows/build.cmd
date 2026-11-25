@@ -12,6 +12,6 @@ cd /d "%~dp0"
 if not exist build mkdir build
 set FAILED=
 cl /nologo /LD /EHsc /O2 /MT /std:c++17 keyhook.cpp user32.lib /Fo:build\ /Fe:build\yapyap-keys.dll /link /NOIMPLIB /NOEXP || set FAILED=1
-cl /nologo /LD /EHsc /O2 /MT /std:c++17 selection.cpp ole32.lib oleaut32.lib /Fo:build\ /Fe:build\yapyap-text.dll /link /NOIMPLIB /NOEXP || set FAILED=1
+cl /nologo /LD /EHsc /O2 /MT /std:c++17 selection.cpp ole32.lib oleaut32.lib user32.lib /Fo:build\ /Fe:build\yapyap-text.dll /link /NOIMPLIB /NOEXP || set FAILED=1
 del /q build\*.obj 2>nul
 if defined FAILED exit /b 1

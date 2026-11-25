@@ -78,6 +78,36 @@ IUIAutomationTextPattern* TextPatternFor(IUIAutomation* uia, IUIAutomationElemen
   return pattern;
 }
 
+// Copy can also read highlights in terminals and read-only views. Only an explicitly
+// writable focused control can be used when the selection itself is invisible to UIA.
+bool IsWritableField(IUIAutomationElement* element) {
+  CONTROLTYPEID type = 0;
+  BOOL enabled = FALSE;
+  if (FAILED(element->get_CurrentControlType(&type)) ||
+      FAILED(element->get_CurrentIsEnabled(&enabled)) || !enabled ||
+      (type != UIA_EditControlTypeId && type != UIA_DocumentControlTypeId)) return false;
+  IUIAutomationValuePattern* value = nullptr;
+  if (type == UIA_EditControlTypeId &&
+      SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
+    BOOL readOnly = TRUE;
+    bool writable = SUCCEEDED(value->get_CurrentIsReadOnly(&readOnly)) && !readOnly;
+    Release(value);
+    return writable;
+  }
+  IUIAutomationTextPattern* text = nullptr;
+  if (FAILED(element->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&text))) || !text) return false;
+  IUIAutomationTextRange* range = nullptr;
+  VARIANT readOnly;
+  VariantInit(&readOnly);
+  bool writable = SUCCEEDED(text->get_DocumentRange(&range)) && range &&
+      SUCCEEDED(range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly)) &&
+      readOnly.vt == VT_BOOL && readOnly.boolVal == VARIANT_FALSE;
+  VariantClear(&readOnly);
+  Release(range);
+  Release(text);
+  return writable;
+}
+
 }  // namespace
 
 extern "C" {
@@ -85,6 +115,7 @@ extern "C" {
 // Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
 // when nothing is selected. `flags` gets 1 when the selection can be typed over, and 2 when the
 // focused element is a password field (then nothing is read, and nothing may be copied).
+// Flag 4 means an empty selection was read in a writable focused control.
 // `process` gets the focused app's process name, without ".exe". Returns -1 on failure.
 __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* flags, wchar_t* process, int processCapacity) {
   *flags = 0;
@@ -121,7 +152,6 @@ __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* fl
       SysFreeString(framework);
 
       IUIAutomationTextPattern* pattern = TextPatternFor(uia, element);
-      Release(element);
       found.clear();
       editable = true;
       if (pattern) {
@@ -147,7 +177,10 @@ __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* fl
         Release(pattern);
       }
       length = 0;
-      if (!found.empty() || !web) break;
+      const bool done = !found.empty() || !web || attempt == 12;
+      if (done && found.empty() && IsWritableField(element)) *flags = 4;
+      Release(element);
+      if (done) break;
     }
     if (!found.empty()) {
       length = static_cast<int>(found.size() < static_cast<size_t>(capacity) ? found.size() : capacity);
@@ -158,6 +191,25 @@ __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* fl
   // The thread stays in the multithreaded apartment: leaving it could tear the apartment down
   // and with it the shared automation object.
   return length;
+}
+
+// Only the known clipboard shortcuts, with the foreground and clipboard checked directly
+// before SendInput. Inserting the four events as a batch keeps key-down and key-up together.
+__declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key) {
+  if (key != 'C' && key != 'V' && key != VK_INSERT) return 0;
+  const int modifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
+  for (int modifier : modifiers) {
+    if (GetAsyncKeyState(modifier) & 0x8000) return 0;
+  }
+  INPUT inputs[4] = {};
+  for (auto& input : inputs) input.type = INPUT_KEYBOARD;
+  inputs[0].ki.wVk = inputs[3].ki.wVk = VK_CONTROL;
+  inputs[1].ki.wVk = inputs[2].ki.wVk = key;
+  if (key == VK_INSERT) inputs[1].ki.dwFlags = inputs[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+  inputs[2].ki.dwFlags |= KEYEVENTF_KEYUP;
+  inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+  if (!window || GetForegroundWindow() != window || GetClipboardSequenceNumber() != sequence) return 0;
+  return SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT)) == ARRAYSIZE(inputs);
 }
 
 }  // extern "C"

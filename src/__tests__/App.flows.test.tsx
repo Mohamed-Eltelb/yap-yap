@@ -145,7 +145,7 @@ afterEach(() => {
 describe('Ask anything rewrite', () => {
   it('hands a Copy-backed Windows highlight to the desktop for verification and paste', async () => {
     seed({ settings: { askCopySelection: true, askReplaceSelection: true } });
-    const selection = { text: 'Original', truncated: false, viaCopy: true, windowId: '42' };
+    const selection = { text: 'Original', truncated: false, editable: true, viaCopy: true, windowId: '42' };
     desktop.api.captureSelection.mockResolvedValue(selection);
     engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
 

@@ -58,7 +58,7 @@ export interface CopyDeps {
   foregroundWindow: () => unknown;
   modifiersDown: () => boolean;
   clipboardSequence: () => number;
-  sendCopy: (keys: CopyKeys) => void;
+  sendCopy: (keys: CopyKeys, sequence: number) => boolean | void;
   readCopied: () => Promise<string>;
   /** Saves the user's clipboard and returns how to put it back once the copy has been read. */
   saveClipboard: () => Promise<(copied: string) => Promise<void>>;
@@ -85,7 +85,7 @@ export async function copySelection(
   const restore = await deps.saveClipboard();
   if (deps.foregroundWindow() !== window || deps.modifiersDown()) return undefined;
   const before = deps.clipboardSequence();
-  deps.sendCopy(plan.keys);
+  if (deps.sendCopy(plan.keys, before) === false) return undefined;
   // Apps put the copy on the clipboard within a few tens of milliseconds; nothing means no selection.
   let changed = false;
   for (let waited = 0; waited < 500 && !changed; waited += 25) {

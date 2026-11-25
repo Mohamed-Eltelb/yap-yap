@@ -429,18 +429,24 @@ function parseJson(output: string): unknown {
  * On Windows, an app that does not share its selection that way can be copied from instead: `copy`
  * gets the app's process name and decides. Used by Ask anything, and meant for transforms as well.
  * It runs while the user is speaking, so it may take longer than the caret context.
+ * A Windows rewrite requires a native read and a writable target before using simulated Copy.
  */
-export async function captureSelection(copy?: (processName: string) => Promise<string | undefined>): Promise<SelectedText | undefined> {
+export async function captureSelection(
+  copy?: (processName: string) => Promise<string | undefined>,
+  forRewrite = false,
+): Promise<SelectedText | undefined> {
   if (process.platform === 'win32') {
     // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
     const native = await readNativeSelection();
+    if (forRewrite && !native) return;
     const data = native
       ? (native.password ? {} : native.text ? { text: native.text, editable: native.editable } : { process: native.process })
       : parseJson(await askWindowsHelper('selection', 3000));
     const found = parseSelection(data);
     const processName = (data as { process?: unknown } | undefined)?.process;
     if (found || !copy || typeof processName !== 'string') return found;
-    const copied = parseSelection({ text: await copy(processName) });
+    if (forRewrite && !native?.writableField) return;
+    const copied = parseSelection({ text: await copy(processName), editable: native?.writableField });
     return copied && { ...copied, viaCopy: true };
   }
   if (process.platform === 'darwin') {

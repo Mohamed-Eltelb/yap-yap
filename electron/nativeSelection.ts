@@ -10,6 +10,7 @@ export interface NativeSelection {
   text: string;
   editable: boolean;
   password: boolean;
+  writableField: boolean;
   process: string;
 }
 
@@ -20,7 +21,10 @@ type ReadSelection = {
   ) => void;
 };
 
+type SendShortcut = (window: bigint, sequence: number, key: number) => number;
+
 let read: ReadSelection | null | undefined;
+let sendShortcut: SendShortcut | undefined;
 
 // Installed builds keep the DLL beside the app's resources; development uses the fresh build.
 function dllPath(): string | undefined {
@@ -40,6 +44,7 @@ function load(): ReadSelection | null {
   try {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
+    sendShortcut = lib.func('int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key)') as SendShortcut;
     read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity)') as unknown as ReadSelection;
   } catch (error) {
     console.warn('Yap Yap could not load its selection reader; using PowerShell instead', error);
@@ -48,6 +53,12 @@ function load(): ReadSelection | null {
 }
 
 export const nativeSelectionAvailable = () => !!load();
+
+export function sendNativeClipboardShortcut(window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v'): boolean {
+  if (!load() || !sendShortcut || !/^[0-9]+$/.test(window)) return false;
+  const virtualKey = { 'ctrl+c': 0x43, 'ctrl+insert': 0x2d, 'ctrl+v': 0x56 }[key];
+  return sendShortcut(BigInt(window), sequence, virtualKey) === 1;
+}
 
 /**
  * Reads the selection on a worker thread. Undefined when the DLL is missing or failed, so the
@@ -74,6 +85,7 @@ export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection |
           text: text.toString('utf16le', 0, length * 2),
           editable: (flagBits & 1) !== 0,
           password: (flagBits & 2) !== 0,
+          writableField: (flagBits & 4) !== 0,
           process: processName,
         });
       });

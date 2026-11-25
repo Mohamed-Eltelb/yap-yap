@@ -15,7 +15,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, copyWithKeyboard, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
@@ -30,6 +30,7 @@ import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { copyPlanFor, copySelection } from './selectionCopy';
 import { webUrl } from './webUrl';
 import { freshHighlights } from './primarySelection';
+import { sendNativeClipboardShortcut } from './nativeSelection';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -501,14 +502,14 @@ async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
 }
 
 function copyWindowsSelection(
-  window: string, processName: string, active: () => boolean = () => true, maxWaitMs?: number,
+  window: string, processName: string, maxWaitMs?: number,
 ): Promise<string | undefined> {
   const plan = copyPlanFor(processName);
   return plan ? copySelection(window, {
-    foregroundWindow: () => active() ? foregroundWindow() : undefined,
+    foregroundWindow,
     modifiersDown,
     clipboardSequence,
-    sendCopy: copyWithKeyboard,
+    sendCopy: (keys, sequence) => sendNativeClipboardShortcut(window, sequence, keys),
     readCopied: () => clipboard.readText(),
     async saveClipboard() {
       const previous = await snapshotClipboard();
@@ -526,46 +527,44 @@ async function pasteWindowsRewrite(
   const window = selection.windowId;
   if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return false;
 
-  let previous: ClipboardSnapshot | undefined;
-  let wrote = false;
+  const copy = selection.viaCopy && allowCopy
+    ? (name: string) => copyWindowsSelection(window, name, 500)
+    : undefined;
+  const now = await captureSelection(copy, true);
+  if (!now || now.truncated || now.text !== selection.text || now.editable !== true
+    || foregroundWindow() !== window || modifiersDown()) return false;
+
+  const before = clipboardSequence();
+  const previous = await snapshotClipboard();
+  if (foregroundWindow() !== window || modifiersDown() || clipboardSequence() !== before) return false;
+  let sequence: number | undefined;
   let sent = false;
   try {
-    return await pasteIntoWindowsField(async (active) => {
-      if (!active() || foregroundWindow() !== window) return false;
-      previous = await snapshotClipboard();
-      if (!active() || foregroundWindow() !== window) return false;
-      const copy = selection.viaCopy && allowCopy
-        ? (name: string) => copyWindowsSelection(window, name, active, 500)
-        : undefined;
-      const now = await captureSelection(copy);
-      if (!now || now.truncated || now.text !== selection.text || (now.viaCopy !== true && now.editable !== true)
-        || !active() || foregroundWindow() !== window || modifiersDown()) return false;
-      await clipboard.writeText(text);
-      wrote = true;
-      if (!active() || foregroundWindow() !== window || modifiersDown()) return false;
-      pasteWithKeyboard();
-      sent = true;
-      return true;
-    }, selection.viaCopy === true);
+    await clipboard.writeText(text);
+    sequence = clipboardSequence();
+    if (await clipboard.readText() !== text) return false;
+    sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v');
+    return sent;
   } finally {
-    if (wrote && previous && (!sent || !keepOnClipboard)) restoreAfterPaste(previous, text, sent ? 600 : 0);
+    if (sequence !== undefined && (!sent || !keepOnClipboard)) {
+      restoreAfterPaste(previous, text, sent ? 600 : 0, sequence);
+    }
   }
 }
 
-function restoreAfterPaste(previous: ClipboardSnapshot, text: string, delay: number): void {
+function restoreAfterPaste(previous: ClipboardSnapshot, text: string, delay: number, sequence?: number): void {
   setTimeout(() => {
     void clipboard.readText()
-      .then((current) => current === text ? restoreClipboard(previous) : undefined)
+      .then((current) => {
+        if (current === text && (sequence === undefined || clipboardSequence() === sequence)) return restoreClipboard(previous);
+      })
       .catch(console.warn);
   }, delay);
 }
 
 function pasteIntoFocusedField(): Promise<boolean> {
   if (process.platform === 'win32') {
-    return pasteIntoWindowsField(() => {
-      pasteWithKeyboard();
-      return true;
-    });
+    return pasteIntoWindowsField(pasteWithKeyboard);
   }
 
   // These commands can send the shortcut but cannot confirm insertion, so a

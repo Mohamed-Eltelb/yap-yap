@@ -69,6 +69,16 @@ describe('Copying the selection', () => {
     expect(fake.deps.sendCopy).not.toHaveBeenCalled();
   });
 
+  it('stops when the native shortcut rejects the target or clipboard sequence', async () => {
+    const fake = desktop();
+    fake.deps.sendCopy = vi.fn(() => false);
+    const readCopied = vi.spyOn(fake.deps, 'readCopied');
+
+    expect(await copySelection(1, fake.deps)).toBeUndefined();
+    expect(fake.deps.sendCopy).toHaveBeenCalledWith('ctrl+c', 7);
+    expect(readCopied).not.toHaveBeenCalled();
+  });
+
   it('finds nothing when the copy leaves the clipboard unchanged', async () => {
     const fake = desktop({ selection: '' });
     expect(await copySelection(1, fake.deps)).toBeUndefined();
@@ -96,6 +106,6 @@ describe('Copying the selection', () => {
     expect(await copySelection(1, desktop({ selection: 'a\nb\n' }).deps, plan)).toBe('a\nb\n');
     const fake = desktop();
     await copySelection(1, fake.deps, plan);
-    expect(fake.deps.sendCopy).toHaveBeenCalledWith('ctrl+insert');
+    expect(fake.deps.sendCopy).toHaveBeenCalledWith('ctrl+insert', 7);
   });
 });

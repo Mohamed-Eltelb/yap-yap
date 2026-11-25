@@ -553,11 +553,10 @@ export function App() {
         if (dropped()) return;
         // A rewrite replaces the selection only where it can be typed over, and only right after
         // the question, while that selection is still there (never on a retry from History).
-        const copyBackedRewrite = selection?.viaCopy === true && !!selection.windowId && appState.settings.askCopySelection;
-        const canReplaceSelection = (selection?.editable === true || copyBackedRewrite) && !selection?.truncated
+        const canReplaceSelection = selection?.editable === true && !selection.truncated
+          && (!selection.viaCopy || appState.settings.askCopySelection)
           && appState.settings.askReplaceSelection
           && !existingItemId && allowAutoPaste && !!window.yapyap;
-        if (canReplaceSelection) window.yapyap?.preparePaste?.();
         const location = destination && { application: destination.application, domain: destination.domain };
         // Style learning covers dictation only.
         // A retry has no live destination, so it keeps the one the dictation went to.
