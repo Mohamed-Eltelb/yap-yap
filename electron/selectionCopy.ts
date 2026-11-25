@@ -51,6 +51,11 @@ export function copyPlanFor(processName: string): CopyPlan | undefined {
 
 export const mayCopySelection = (processName: string) => !!copyPlanFor(processName);
 
+/** Zed's Windows editor exposes a window to UIA even when its selection accepts Paste. */
+export function canReplaceCopiedSelection(processName: string, writableField: boolean | undefined): boolean {
+  return writableField ?? /^zed(?:\.exe)?$/i.test(processName);
+}
+
 /** One line ending in its line break: what an editor copies when nothing is selected. */
 export const isLineCopy = (text: string) => /^[^\r\n]*\r?\n$/.test(text);
 

@@ -11,7 +11,7 @@ export interface NativeSelection {
   text: string;
   editable: boolean;
   password: boolean;
-  writableField: boolean;
+  writableField?: boolean;
   process: string;
 }
 
@@ -97,7 +97,7 @@ export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection |
           text: text.toString('utf16le', 0, length * 2),
           editable: (flagBits & 1) !== 0,
           password: (flagBits & 2) !== 0,
-          writableField: (flagBits & 4) !== 0,
+          writableField: flagBits & 4 ? true : flagBits & 8 ? false : undefined,
           process: processName,
         });
       });

@@ -78,34 +78,37 @@ IUIAutomationTextPattern* TextPatternFor(IUIAutomation* uia, IUIAutomationElemen
   return pattern;
 }
 
-// Copy can also read highlights in terminals and read-only views. Only an explicitly
-// writable focused control can be used when the selection itself is invisible to UIA.
-bool IsWritableField(IUIAutomationElement* element) {
-  CONTROLTYPEID type = 0;
+enum FieldEditability { FieldUnknown = 0, FieldWritable = 4, FieldReadOnly = 8 };
+
+// Distinguish a control that explicitly rejects editing from an app that exposes no field.
+FieldEditability ReadFieldEditability(IUIAutomationElement* element) {
   BOOL enabled = FALSE;
+  if (FAILED(element->get_CurrentIsEnabled(&enabled))) return FieldUnknown;
+  if (!enabled) return FieldReadOnly;
+
+  CONTROLTYPEID type = 0;
   if (FAILED(element->get_CurrentControlType(&type)) ||
-      FAILED(element->get_CurrentIsEnabled(&enabled)) || !enabled ||
-      (type != UIA_EditControlTypeId && type != UIA_DocumentControlTypeId)) return false;
+      (type != UIA_EditControlTypeId && type != UIA_DocumentControlTypeId)) return FieldUnknown;
   IUIAutomationValuePattern* value = nullptr;
   if (type == UIA_EditControlTypeId &&
       SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
-    BOOL readOnly = TRUE;
-    bool writable = SUCCEEDED(value->get_CurrentIsReadOnly(&readOnly)) && !readOnly;
+    BOOL readOnly = FALSE;
+    const HRESULT result = value->get_CurrentIsReadOnly(&readOnly);
     Release(value);
-    return writable;
+    if (SUCCEEDED(result)) return readOnly ? FieldReadOnly : FieldWritable;
   }
   IUIAutomationTextPattern* text = nullptr;
-  if (FAILED(element->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&text))) || !text) return false;
+  if (FAILED(element->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&text))) || !text) return FieldUnknown;
   IUIAutomationTextRange* range = nullptr;
   VARIANT readOnly;
   VariantInit(&readOnly);
-  bool writable = SUCCEEDED(text->get_DocumentRange(&range)) && range &&
-      SUCCEEDED(range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly)) &&
-      readOnly.vt == VT_BOOL && readOnly.boolVal == VARIANT_FALSE;
+  const bool known = SUCCEEDED(text->get_DocumentRange(&range)) && range &&
+      SUCCEEDED(range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly)) && readOnly.vt == VT_BOOL;
+  const auto editability = known ? (readOnly.boolVal == VARIANT_FALSE ? FieldWritable : FieldReadOnly) : FieldUnknown;
   VariantClear(&readOnly);
   Release(range);
   Release(text);
-  return writable;
+  return editability;
 }
 
 }  // namespace
@@ -115,7 +118,7 @@ extern "C" {
 // Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
 // when nothing is selected. `flags` gets 1 when the selection can be typed over, and 2 when the
 // focused element is a password field (then nothing is read, and nothing may be copied).
-// Flag 4 means an empty selection was read in a writable focused control.
+// Flags 4 and 8 identify a writable or read-only focused control when no selection was read.
 // `process` gets the focused app's process name, without ".exe". Returns -1 on failure.
 __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* flags, wchar_t* process, int processCapacity) {
   *flags = 0;
@@ -178,7 +181,7 @@ __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* fl
       }
       length = 0;
       const bool done = !found.empty() || !web || attempt == 12;
-      if (done && found.empty() && IsWritableField(element)) *flags = 4;
+      if (done && found.empty()) *flags = ReadFieldEditability(element);
       Release(element);
       if (done) break;
     }

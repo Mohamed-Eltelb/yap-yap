@@ -4,6 +4,7 @@ import { macProbe, parseMacContext, parseMacField } from './macContext';
 import { linuxContextProbe, linuxPrimaryStampProbe } from './linuxContext';
 import { SELECTION_LIMIT } from './selectionLimit';
 import { readNativeSelection } from './nativeSelection';
+import { canReplaceCopiedSelection } from './selectionCopy';
 
 export interface DictationContext {
   application: string;
@@ -429,7 +430,7 @@ function parseJson(output: string): unknown {
  * On Windows, an app that does not share its selection that way can be copied from instead: `copy`
  * gets the app's process name and decides. Used by Ask anything, and meant for transforms as well.
  * It runs while the user is speaking, so it may take longer than the caret context.
- * A Windows rewrite requires a native read and a writable target before using simulated Copy.
+ * A Windows rewrite uses the native read to check which targets can be rewritten through Copy.
  */
 export async function captureSelection(
   copy?: (processName: string) => Promise<string | undefined>,
@@ -445,8 +446,9 @@ export async function captureSelection(
     const found = parseSelection(data);
     const processName = (data as { process?: unknown } | undefined)?.process;
     if (found || !copy || typeof processName !== 'string') return found;
-    if (forRewrite && !native?.writableField) return;
-    const copied = parseSelection({ text: await copy(processName), editable: native?.writableField });
+    const editable = native ? canReplaceCopiedSelection(processName, native.writableField) : undefined;
+    if (forRewrite && !editable) return;
+    const copied = parseSelection({ text: await copy(processName), editable });
     return copied && { ...copied, viaCopy: true };
   }
   if (process.platform === 'darwin') {

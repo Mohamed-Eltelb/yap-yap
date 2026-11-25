@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
+import { canReplaceCopiedSelection, copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
 
 /** A fake desktop: the clipboard, the window in front, and keys held for a while. */
 function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo }: { selection?: string; heldFor?: number; window?: number; switchTo?: number } = {}) {
@@ -34,6 +34,13 @@ function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo 
 }
 
 describe('Copying the selection', () => {
+  it('allows a Copied Zed selection when UIA cannot identify the field', () => {
+    expect(canReplaceCopiedSelection('Zed.exe', undefined)).toBe(true);
+    expect(canReplaceCopiedSelection('Zed.exe', false)).toBe(false);
+    expect(canReplaceCopiedSelection('WindowsTerminal.exe', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('WINWORD.EXE', true)).toBe(true);
+  });
+
   it('copies the selection and puts the user\'s clipboard back', async () => {
     const fake = desktop();
     expect(await copySelection(1, fake.deps)).toBe('Picked text');
