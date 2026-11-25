@@ -9,10 +9,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderAnswer(onCopyResult = vi.fn()) {
+function renderAnswer(onCopyResult = vi.fn(), rewritePaste?: 'unverified') {
   const noop = vi.fn();
   return render(
-    <DictationHud hud={{ status: 'result', mode: 'ask', levels: [], questionText: 'What time is it?', resultText: 'It is **noon**.' }}
+    <DictationHud hud={{ status: 'result', mode: 'ask', levels: [], rewritePaste, questionText: 'What time is it?', resultText: 'It is **noon**.' }}
       onStop={noop} onCancel={noop} onPause={noop} onResume={noop} onUndo={noop} onRetry={noop}
       onSelectTarget={noop} onEditTargets={noop} onCopyResult={onCopyResult} onDismissResult={noop} />,
   );
@@ -36,4 +36,13 @@ it('marks only the copy button that was clicked', () => {
   fireEvent.click(getByRole('button', { name: 'Copy question' }));
   expect(getByRole('button', { name: 'Copy answer' })).toBeTruthy();
   expect(getByRole('button', { name: 'Copied' })).toBeTruthy();
+});
+
+it('shows unverified paste feedback and copies the rewrite verbatim', () => {
+  const onCopyResult = vi.fn();
+  const { getByRole } = renderAnswer(onCopyResult, 'unverified');
+
+  expect(getByRole('status').textContent).toContain('Paste sent');
+  fireEvent.click(getByRole('button', { name: 'Copy rewrite' }));
+  expect(onCopyResult).toHaveBeenCalledWith('It is **noon**.');
 });

@@ -2,6 +2,7 @@ import type { UpdateState } from '../../../electron/updateController';
 import { speechLanguages } from '../../data/spokenLanguages';
 import type { HudAction } from '../../../electron/hudActions';
 import type { DictationContext, SelectedText } from '../../../electron/dictationContext';
+import type { RewritePasteResult } from '../../../electron/rewriteVerification';
 import type { OtherAppData } from '../../../electron/otherApps';
 import { webUrl } from '../../../electron/webUrl';
 import { CleanupLevel, DictationMode, ProviderConfig, ProviderModels, StyleCorrections, WritingSample } from '../../types/app';
@@ -51,7 +52,8 @@ declare global {
       watchPasteCorrections: (text: string) => Promise<{ words: string[]; edited?: string }>;
       /** What Wispr Flow and Typeless on this computer hold that Yap Yap can bring over. */
       readOtherApps?: () => Promise<OtherAppData[]>;
-      pasteText: (text: string, keepOnClipboard?: boolean, selection?: SelectedText, allowCopy?: boolean) => Promise<boolean>;
+      pasteText: (text: string, keepOnClipboard?: boolean) => Promise<boolean>;
+      replaceSelection: (selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean) => Promise<RewritePasteResult>;
       copyText: (text: string) => Promise<void>;
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;

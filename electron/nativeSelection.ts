@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { SELECTION_LIMIT } from './selectionLimit';
+import type { RewriteField } from './rewriteVerification';
 
 // koffi ships CommonJS, but its types are marked as an ES module.
 type Koffi = typeof import('koffi', { with: { 'resolution-mode': 'import' } });
@@ -23,8 +24,16 @@ type ReadSelection = {
 
 type SendShortcut = (window: bigint, sequence: number, key: number) => number;
 
+type ReadRewriteField = {
+  async: (
+    window: bigint, text: Buffer, capacity: number, id: Buffer, idCapacity: number, info: Buffer,
+    includeSelection: number, done: (error: unknown, length: number) => void,
+  ) => void;
+};
+
 let read: ReadSelection | null | undefined;
 let sendShortcut: SendShortcut | undefined;
+let readRewriteField: ReadRewriteField | undefined;
 
 // Installed builds keep the DLL beside the app's resources; development uses the fresh build.
 function dllPath(): string | undefined {
@@ -45,6 +54,9 @@ function load(): ReadSelection | null {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
     sendShortcut = lib.func('int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key)') as SendShortcut;
+    readRewriteField = lib.func(
+      'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
+    ) as unknown as ReadRewriteField;
     read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity)') as unknown as ReadSelection;
   } catch (error) {
     console.warn('Yap Yap could not load its selection reader; using PowerShell instead', error);
@@ -87,6 +99,36 @@ export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection |
           password: (flagBits & 2) !== 0,
           writableField: (flagBits & 4) !== 0,
           process: processName,
+        });
+      });
+    } catch {
+      clearTimeout(timer);
+      resolve(undefined);
+    }
+  });
+}
+
+/** A bounded UI Automation read of the foreground field. Used only to confirm a rewrite. */
+export function readNativeRewriteField(window: string, includeSelection: boolean, timeoutMs: number): Promise<RewriteField | undefined> {
+  if (!load() || !readRewriteField || !/^[0-9]+$/.test(window)) return Promise.resolve(undefined);
+  const fn = readRewriteField;
+  const capacity = 64 * 1024 + 1;
+  const idCapacity = 64;
+  const text = Buffer.alloc(capacity * 2);
+  const id = Buffer.alloc(idCapacity * 4);
+  const info = Buffer.alloc(8);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), timeoutMs);
+    try {
+      fn.async(BigInt(window), text, capacity, id, idCapacity, info, Number(includeSelection), (error, length) => {
+        clearTimeout(timer);
+        if (error || length < 0 || length >= capacity) return resolve(undefined);
+        const idLength = info.readInt32LE(0);
+        if (idLength < 1 || idLength > idCapacity) return resolve(undefined);
+        resolve({
+          id: id.toString('hex', 0, idLength * 4),
+          text: text.toString('utf16le', 0, length * 2),
+          selectionStart: info.readInt32LE(4),
         });
       });
     } catch {

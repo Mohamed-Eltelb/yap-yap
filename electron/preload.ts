@@ -36,8 +36,9 @@ contextBridge.exposeInMainWorld('yapyap', {
   openAskUrl: (url: string) => ipcRenderer.invoke('ask:open-url', url),
   watchPasteCorrections: (text: string) => ipcRenderer.invoke('dictation:watch-corrections', text),
   readOtherApps: () => ipcRenderer.invoke('import:other-apps'),
-  pasteText: (text: string, keepOnClipboard?: boolean, selection?: SelectedText, allowCopy?: boolean) =>
-    ipcRenderer.invoke('clipboard:paste', text, keepOnClipboard === true, selection, allowCopy === true),
+  pasteText: (text: string, keepOnClipboard?: boolean) => ipcRenderer.invoke('clipboard:paste', text, keepOnClipboard === true),
+  replaceSelection: (selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean) =>
+    ipcRenderer.invoke('selection:replace', selection, text, keepOnClipboard, allowCopy),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   toggleHud: (show: boolean, state?: unknown) =>
     ipcRenderer.send('hud:toggle', { show, state }),

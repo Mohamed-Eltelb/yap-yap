@@ -193,6 +193,82 @@ __declspec(dllexport) int ys_read_selection(wchar_t* text, int capacity, int* fl
   return length;
 }
 
+// Reads the focused control and its UIA identity. The selection offset is optional because
+// controls that expose ValuePattern alone have no UIA selection range.
+__declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int capacity,
+    int* runtimeId, int idCapacity, int* info, int includeSelection) {
+  if (!window || GetForegroundWindow() != window) return -1;
+  HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (FAILED(init) && init != RPC_E_CHANGED_MODE) return -1;
+  IUIAutomation* uia = Automation();
+  IUIAutomationElement* element = nullptr;
+  if (!uia || FAILED(uia->GetFocusedElement(&element)) || !element) return -1;
+
+  BOOL password = TRUE;
+  SAFEARRAY* id = nullptr;
+  LONG low = 0;
+  LONG high = -1;
+  LONG* values = nullptr;
+  bool identified = SUCCEEDED(element->get_CurrentIsPassword(&password)) && !password &&
+      SUCCEEDED(element->GetRuntimeId(&id)) && id && SafeArrayGetDim(id) == 1 &&
+      SUCCEEDED(SafeArrayGetLBound(id, 1, &low)) && SUCCEEDED(SafeArrayGetUBound(id, 1, &high)) &&
+      high >= low && high - low < idCapacity && SUCCEEDED(SafeArrayAccessData(id, reinterpret_cast<void**>(&values)));
+  if (identified) {
+    info[0] = high - low + 1;
+    for (int i = 0; i < info[0]; i++) runtimeId[i] = values[i];
+    SafeArrayUnaccessData(id);
+  }
+  if (id) SafeArrayDestroy(id);
+  if (!identified) {
+    Release(element);
+    return -1;
+  }
+
+  info[1] = -1;
+  IUIAutomationTextPattern* pattern = nullptr;
+  IUIAutomationTextRange* document = nullptr;
+  BSTR contents = nullptr;
+  bool read = SUCCEEDED(element->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&pattern))) && pattern &&
+      SUCCEEDED(pattern->get_DocumentRange(&document)) && document &&
+      SUCCEEDED(document->GetText(capacity, &contents));
+  if (read && includeSelection && SysStringLen(contents) < static_cast<UINT>(capacity)) {
+    IUIAutomationTextRangeArray* ranges = nullptr;
+    IUIAutomationTextRange* selected = nullptr;
+    int count = 0;
+    int span = 0;
+    BSTR prefix = nullptr;
+    if (SUCCEEDED(pattern->GetSelection(&ranges)) && ranges &&
+        SUCCEEDED(ranges->get_Length(&count)) && count == 1 &&
+        SUCCEEDED(ranges->GetElement(0, &selected)) && selected &&
+        SUCCEEDED(selected->CompareEndpoints(TextPatternRangeEndpoint_Start, selected, TextPatternRangeEndpoint_End, &span)) &&
+        span < 0 && SUCCEEDED(document->MoveEndpointByRange(TextPatternRangeEndpoint_End, selected, TextPatternRangeEndpoint_Start)) &&
+        SUCCEEDED(document->GetText(capacity, &prefix))) {
+      info[1] = SysStringLen(prefix);
+    }
+    SysFreeString(prefix);
+    Release(selected);
+    Release(ranges);
+  }
+  Release(document);
+  Release(pattern);
+  if (!read) {
+    SysFreeString(contents);
+    contents = nullptr;
+    IUIAutomationValuePattern* value = nullptr;
+    read = SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value &&
+        SUCCEEDED(value->get_CurrentValue(&contents));
+    Release(value);
+  }
+  Release(element);
+  int length = -1;
+  if (read && SysStringLen(contents) < static_cast<UINT>(capacity) && GetForegroundWindow() == window) {
+    length = SysStringLen(contents);
+    if (length) wmemcpy(text, contents, length);
+  }
+  SysFreeString(contents);
+  return length;
+}
+
 // Only the known clipboard shortcuts, with the foreground and clipboard checked directly
 // before SendInput. Inserting the four events as a batch keeps key-down and key-up together.
 __declspec(dllexport) int ys_send_clipboard_shortcut(HWND window, DWORD sequence, WORD key) {

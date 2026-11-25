@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pauseHoldCombo } from '../electron/shortcutBindings';
 import type { DictationContext, SelectedText } from '../electron/dictationContext';
+import type { RewritePasteResult } from '../electron/rewriteVerification';
 import { DictionaryView, type ImportedWord } from './components/DictionaryView';
 import { SnippetsView } from './components/SnippetsView';
 import { Onboarding } from './components/Onboarding';
@@ -110,9 +111,9 @@ async function replaceSelectedText(
   desktop: NonNullable<typeof window.yapyap>,
   keepOnClipboard: boolean,
   allowCopy: boolean,
-): Promise<boolean> {
+): Promise<boolean | RewritePasteResult> {
   try {
-    if (desktop.platform === 'win32') return await desktop.pasteText(text, keepOnClipboard, selection, allowCopy);
+    if (desktop.platform === 'win32') return await desktop.replaceSelection(selection, text, keepOnClipboard, allowCopy);
     const now = await desktop.captureSelection?.(false);
     if (now?.text !== selection.text) return false;
     return await desktop.pasteText(text, keepOnClipboard);
@@ -864,7 +865,7 @@ export function App() {
           : mode === 'ask' && !replaceSelection ? answerAsPlainText(finalText) : finalText;
         if (dropped()) return;
         ownDeliveriesRef.current = [delivered, ...ownDeliveriesRef.current].slice(0, 30);
-        const pasted = replaceSelection && selection && desktop
+        const delivery = replaceSelection && selection && desktop
           ? await replaceSelectedText(selection, delivered, desktop, keepOnClipboard, appState.settings.askCopySelection)
           : await deliverDictationResult(
           mode,
@@ -877,6 +878,9 @@ export function App() {
             else await navigator.clipboard?.writeText(text);
           },
         );
+
+        const pasted = delivery === true || delivery === 'confirmed';
+        if (dropped()) return;
 
         // Words the user respells in the destination right after the paste join the dictionary.
         if (pasted && mode === 'dictate' && appState.settings.personalizationEnabled && appState.settings.learnFromEdits) {
@@ -914,6 +918,7 @@ export function App() {
           mode,
           levels: Array(20).fill(0.1),
           resultText: finalText,
+          rewritePaste: delivery === 'unverified' || delivery === 'not-sent' ? delivery : undefined,
           questionText: mode === 'ask' ? rawText : undefined,
           selectionText: mode === 'ask' ? selection?.text : undefined,
           searchedWeb,

@@ -30,7 +30,8 @@ import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { copyPlanFor, copySelection } from './selectionCopy';
 import { webUrl } from './webUrl';
 import { freshHighlights } from './primarySelection';
-import { sendNativeClipboardShortcut } from './nativeSelection';
+import { readNativeRewriteField, sendNativeClipboardShortcut } from './nativeSelection';
+import { confirmRewrite, expectedRewrite, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
@@ -523,33 +524,40 @@ function copyWindowsSelection(
 
 async function pasteWindowsRewrite(
   selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean,
-): Promise<boolean> {
+): Promise<RewritePasteResult> {
   const window = selection.windowId;
-  if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return false;
+  if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return 'not-sent';
 
   const copy = selection.viaCopy && allowCopy
     ? (name: string) => copyWindowsSelection(window, name, 500)
     : undefined;
   const now = await captureSelection(copy, true);
   if (!now || now.truncated || now.text !== selection.text || now.editable !== true
-    || foregroundWindow() !== window || modifiersDown()) return false;
+    || foregroundWindow() !== window || modifiersDown()) return 'not-sent';
 
   const before = clipboardSequence();
-  const previous = await snapshotClipboard();
-  if (foregroundWindow() !== window || modifiersDown() || clipboardSequence() !== before) return false;
+  const [previous, field] = await Promise.all([
+    snapshotClipboard(),
+    readNativeRewriteField(window, true, 180),
+  ]);
+  if (foregroundWindow() !== window || modifiersDown() || clipboardSequence() !== before) return 'not-sent';
+  const expected = field && expectedRewrite(field, now.text, text);
   let sequence: number | undefined;
   let sent = false;
   try {
     await clipboard.writeText(text);
     sequence = clipboardSequence();
-    if (await clipboard.readText() !== text) return false;
+    if (await clipboard.readText() !== text) return 'not-sent';
     sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v');
-    return sent;
   } finally {
     if (sequence !== undefined && (!sent || !keepOnClipboard)) {
       restoreAfterPaste(previous, text, sent ? 600 : 0, sequence);
     }
   }
+  if (!sent) return 'not-sent';
+  if (field && expected !== undefined && await confirmRewrite(field, expected, (timeoutMs) =>
+    readNativeRewriteField(window, false, timeoutMs))) return 'confirmed';
+  return 'unverified';
 }
 
 function restoreAfterPaste(previous: ClipboardSnapshot, text: string, delay: number, sequence?: number): void {
@@ -737,14 +745,15 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  ipcMain.handle('clipboard:paste', async (
-    event, text: string, keepOnClipboard?: boolean, selection?: SelectedText, allowCopy?: boolean,
-  ) => {
+  ipcMain.handle('selection:replace', async (
+    event, selection: SelectedText, text: string, keepOnClipboard?: boolean, allowCopy?: boolean,
+  ): Promise<RewritePasteResult> => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32' || mainWindow.isFocused()
+      || !selection || typeof text !== 'string' || !text) return 'not-sent';
+    return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
+  });
+  ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
-    if (selection) {
-      return process.platform === 'win32' && !mainWindow.isFocused()
-        && pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
-    }
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,

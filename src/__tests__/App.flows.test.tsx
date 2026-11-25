@@ -57,6 +57,7 @@ function installDesktop() {
     captureSelection: vi.fn(),
     preparePaste: vi.fn(),
     pasteText: vi.fn(async () => true),
+    replaceSelection: vi.fn(async () => 'confirmed'),
     copyText: vi.fn(async () => undefined),
     watchPasteCorrections: vi.fn(async () => desktop.edits),
     setSystemMute: vi.fn(async () => undefined),
@@ -101,7 +102,7 @@ async function dictate(mode = 'dictate') {
   await act(async () => { desktop.trigger!(mode); });
   await waitFor(() => expect(desktop.api.onHudAction).toHaveBeenCalled());
   await act(async () => { desktop.action!({ type: 'stop' }); });
-  await waitFor(() => expect(desktop.api.pasteText).toHaveBeenCalled());
+  await waitFor(() => expect(mode === 'ask' ? desktop.api.replaceSelection : desktop.api.pasteText).toHaveBeenCalled());
   // Learning and the paste watch run after delivery.
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 }
@@ -153,7 +154,21 @@ describe('Ask anything rewrite', () => {
 
     expect(desktop.api.captureSelection).toHaveBeenCalledExactlyOnceWith(true);
     expect(cleanupOptions()).toMatchObject({ canReplaceSelection: true });
-    expect(desktop.api.pasteText).toHaveBeenCalledWith('Rewritten', false, selection, true);
+    expect(desktop.api.replaceSelection).toHaveBeenCalledExactlyOnceWith(selection, 'Rewritten', false, true);
+    expect(lastHud()?.status).toBe('idle');
+  });
+
+  it.each(['unverified', 'not-sent'])('keeps the rewrite available when paste is %s', async (status) => {
+    seed({ settings: { askReplaceSelection: true } });
+    desktop.api.captureSelection.mockResolvedValue({ text: 'Original', truncated: false, editable: true, windowId: '42' });
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
+    desktop.api.replaceSelection.mockResolvedValue(status);
+
+    await dictate('ask');
+
+    expect(lastHud()).toMatchObject({ status: 'result', rewritePaste: status, resultText: 'Rewritten' });
+    expect(desktop.api.replaceSelection).toHaveBeenCalledTimes(1);
+    expect(desktop.api.pasteText).not.toHaveBeenCalled();
   });
 });
 

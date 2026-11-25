@@ -11,6 +11,8 @@ export interface HudState {
   mode: DictationMode;
   levels: number[];
   resultText?: string;
+  /** Windows rewrite result when the answer card stays open. */
+  rewritePaste?: 'unverified' | 'not-sent';
   questionText?: string;
   /** Ask anything: the selected text the question was about. */
   selectionText?: string;
@@ -392,10 +394,14 @@ export function DictationHud({
           )}
           {hud.selectionText && <SelectionQuote text={hud.selectionText} className="yy-hud-selection" />}
           <div className="yy-hud-answer-card">
-            <header><Sparkles size={16} aria-hidden="true" /><h2>Answer</h2>
+            <header><Sparkles size={16} aria-hidden="true" /><h2>{hud.rewritePaste ? 'Rewrite' : 'Answer'}</h2>
               {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}
-              {resultText && <CopyButton label="Copy answer" onCopy={() => onCopyResult(answerAsPlainText(resultText))} />}
+              {resultText && <CopyButton label={hud.rewritePaste ? 'Copy rewrite' : 'Copy answer'}
+                onCopy={() => onCopyResult(hud.rewritePaste ? resultText : answerAsPlainText(resultText))} />}
             </header>
+            {hud.rewritePaste && <p className="yy-hud-rewrite-status" role="status">
+              {hud.rewritePaste === 'unverified' ? 'Paste sent. Check that your text was replaced.' : 'The rewrite couldn’t be pasted.'}
+            </p>}
             <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
           </div>
         </section>

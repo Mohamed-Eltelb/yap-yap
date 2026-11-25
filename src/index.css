@@ -2416,6 +2416,13 @@ html.dark .yy-personalization-options > div {
   white-space: pre-wrap;
 }
 
+.yy-hud-rewrite-status {
+  margin: 0;
+  padding: 8px 13px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .yy-hud-answer-content {
   min-height: 0;
   overflow: auto;
