@@ -40,10 +40,15 @@ IUIAutomation* Automation() {
   }
   // An app that stops answering would otherwise hold the worker thread for good.
   IUIAutomation2* withTimeouts = nullptr;
-  if (SUCCEEDED(created->QueryInterface(IID_PPV_ARGS(&withTimeouts)))) {
+  if (SUCCEEDED(created->QueryInterface(IID_PPV_ARGS(&withTimeouts))) && withTimeouts) {
     withTimeouts->put_ConnectionTimeout(800);
     withTimeouts->put_TransactionTimeout(1200);
     withTimeouts->Release();
+  }
+  IUIAutomation6* uia6 = nullptr;
+  if (SUCCEEDED(created->QueryInterface(IID_PPV_ARGS(&uia6))) && uia6) {
+    uia6->put_ConnectionRecoveryBehavior(ConnectionRecoveryBehaviorOptions_Enabled);
+    uia6->Release();
   }
   automation = created;
   return automation;
@@ -116,13 +121,31 @@ bool IsWebHostWindow(HWND hwnd) {
       || _wcsicmp(cls.c_str(), L"ApplicationFrameWindow") == 0;
 }
 
+bool QueryGuiThreadInfoForWindow(HWND window, GUITHREADINFO& info, bool needCaret) {
+  info = { sizeof(GUITHREADINFO) };
+  DWORD tid = GetWindowThreadProcessId(window, nullptr);
+  if (tid && GetGUIThreadInfo(tid, &info)) {
+    if (needCaret ? info.hwndCaret != nullptr : info.hwndFocus != nullptr) return true;
+  }
+  // UWP (ApplicationFrameWindow) and cross-thread hosted controls (e.g. WebView2) keep focus and
+  // caret on a child thread; tid=0 queries the active foreground input thread.
+  info = { sizeof(GUITHREADINFO) };
+  return GetGUIThreadInfo(0, &info) != FALSE;
+}
+
+bool WindowBelongsToRoot(HWND child, HWND root) {
+  if (!child || !root) return false;
+  if (child == root) return true;
+  if (GetAncestor(child, GA_ROOT) == root) return true;
+  if (GetAncestor(child, GA_ROOTOWNER) == root) return true;
+  return false;
+}
+
 HWND FocusedWindow(HWND window) {
   if (!window || GetForegroundWindow() != window) return nullptr;
-  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
-  DWORD tid = GetWindowThreadProcessId(window, nullptr);
-  if (!((tid && GetGUIThreadInfo(tid, &info)) || GetGUIThreadInfo(0, &info))) return nullptr;
-  if (!info.hwndFocus) return nullptr;
-  if (info.hwndFocus != window && GetAncestor(info.hwndFocus, GA_ROOT) != window) return nullptr;
+  GUITHREADINFO info;
+  if (!QueryGuiThreadInfoForWindow(window, info, false)) return nullptr;
+  if (!WindowBelongsToRoot(info.hwndFocus, window)) return nullptr;
   return info.hwndFocus;
 }
 
@@ -259,101 +282,94 @@ bool LooksLikeTerminalElement(IUIAutomation* uia, IUIAutomationElement* element)
   return found;
 }
 
-bool IsRangeEditable(
-    IUIAutomationTextRange* range,
-    IUIAutomationElement* element,
-    IUIAutomationTextPattern* pattern) {
-  VARIANT readOnly;
-  VariantInit(&readOnly);
-  const HRESULT hr = range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly);
-  if (SUCCEEDED(hr) && readOnly.vt == VT_BOOL) {
-    const bool editable = (readOnly.boolVal == VARIANT_FALSE);
-    VariantClear(&readOnly);
-    return editable;
-  }
-  VariantClear(&readOnly);
-
-  BOOL enabled = TRUE;
-  if (SUCCEEDED(element->get_CurrentIsEnabled(&enabled)) && !enabled) return false;
-
-  IUIAutomationValuePattern* value = nullptr;
-  if (SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
-    BOOL ro = FALSE;
-    const HRESULT vhr = value->get_CurrentIsReadOnly(&ro);
-    Release(value);
-    if (SUCCEEDED(vhr)) return !ro;
-  }
-  Release(value);
-
-  CONTROLTYPEID type = 0;
-  if (FAILED(element->get_CurrentControlType(&type))) return false;
-  if (type == UIA_EditControlTypeId) return true;
-  switch (type) {
-    case UIA_ButtonControlTypeId:
-    case UIA_CheckBoxControlTypeId:
-    case UIA_HyperlinkControlTypeId:
-    case UIA_ImageControlTypeId:
-    case UIA_MenuItemControlTypeId:
-    case UIA_RadioButtonControlTypeId:
-    case UIA_SliderControlTypeId:
-    case UIA_TabItemControlTypeId:
-    case UIA_TextControlTypeId:
-      return false;
-    case UIA_DocumentControlTypeId:
-    case UIA_PaneControlTypeId:
-    case UIA_CustomControlTypeId:
-    case UIA_GroupControlTypeId: {
-      if (pattern) {
-        IUIAutomationTextRange* doc = nullptr;
-        VARIANT docRo;
-        VariantInit(&docRo);
-        const bool known = SUCCEEDED(pattern->get_DocumentRange(&doc)) && doc
-            && SUCCEEDED(doc->GetAttributeValue(UIA_IsReadOnlyAttributeId, &docRo))
-            && docRo.vt == VT_BOOL;
-        const bool docEditable = known && (docRo.boolVal == VARIANT_FALSE);
-        VariantClear(&docRo);
-        Release(doc);
-        if (known) return docEditable;
-      }
-      // Unknown editability is not taken as writable: a paste there could land nowhere useful.
-      return false;
-    }
-    default:
-      return false;
-  }
-}
-
 bool HasActiveWin32Caret(HWND window) {
   if (!window || GetForegroundWindow() != window) return false;
-  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
-  DWORD tid = GetWindowThreadProcessId(window, nullptr);
-  if (!((tid && GetGUIThreadInfo(tid, &info)) || GetGUIThreadInfo(0, &info))) return false;
-  if (!info.hwndCaret) return false;
-  return info.hwndCaret == window || GetAncestor(info.hwndCaret, GA_ROOT) == window;
+  GUITHREADINFO info;
+  if (!QueryGuiThreadInfoForWindow(window, info, true)) return false;
+  return WindowBelongsToRoot(info.hwndCaret, window);
 }
 
-bool HasWritableAriaRole(IUIAutomationElement* element) {
+// Walks up through inline/container nodes (e.g. Text/Group/Pane inside a contenteditable
+// role="textbox" editor) while stopping at non-editable chrome or Document/Window boundaries.
+bool HasWritableAriaRole(IUIAutomation* uia, IUIAutomationElement* element) {
   if (!element) return false;
-  BSTR role = nullptr;
-  if (FAILED(element->get_CurrentAriaRole(&role)) || !role) {
-    SysFreeString(role);
-    return false;
-  }
-  const bool inputRole = _wcsicmp(role, L"textbox") == 0
-      || _wcsicmp(role, L"searchbox") == 0
-      || _wcsicmp(role, L"combobox") == 0
-      || _wcsicmp(role, L"spinbutton") == 0;
-  SysFreeString(role);
-  if (!inputRole) return false;
+  IUIAutomationTreeWalker* walker = nullptr;
+  if (uia) uia->get_ControlViewWalker(&walker);
 
-  BSTR props = nullptr;
-  bool readOnly = false;
-  if (SUCCEEDED(element->get_CurrentAriaProperties(&props)) && props) {
-    const std::wstring sProps(props, SysStringLen(props));
-    readOnly = ContainsInsensitive(sProps, L"readonly=true");
+  IUIAutomationElement* node = element;
+  node->AddRef();
+  bool found = false;
+
+  for (int depth = 0; node && depth < 5; depth++) {
+    BOOL enabled = TRUE;
+    if (SUCCEEDED(node->get_CurrentIsEnabled(&enabled)) && !enabled) break;
+
+    IUIAutomationValuePattern* value = nullptr;
+    if (SUCCEEDED(node->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
+      BOOL ro = FALSE;
+      const HRESULT vhr = value->get_CurrentIsReadOnly(&ro);
+      Release(value);
+      if (SUCCEEDED(vhr) && ro) break;
+    }
+    Release(value);
+
+    CONTROLTYPEID type = 0;
+    const bool hasType = SUCCEEDED(node->get_CurrentControlType(&type));
+    if (hasType) {
+      switch (type) {
+        case UIA_ButtonControlTypeId:
+        case UIA_CheckBoxControlTypeId:
+        case UIA_DataItemControlTypeId:
+        case UIA_HyperlinkControlTypeId:
+        case UIA_ImageControlTypeId:
+        case UIA_ListItemControlTypeId:
+        case UIA_MenuItemControlTypeId:
+        case UIA_RadioButtonControlTypeId:
+        case UIA_SliderControlTypeId:
+        case UIA_TabItemControlTypeId:
+        case UIA_TreeItemControlTypeId:
+        case UIA_WindowControlTypeId:
+          Release(node);
+          Release(walker);
+          return false;
+        default:
+          break;
+      }
+    }
+
+    BSTR role = nullptr;
+    if (SUCCEEDED(node->get_CurrentAriaRole(&role)) && role) {
+      const bool inputRole = _wcsicmp(role, L"textbox") == 0
+          || _wcsicmp(role, L"searchbox") == 0
+          || _wcsicmp(role, L"combobox") == 0
+          || _wcsicmp(role, L"spinbutton") == 0;
+      SysFreeString(role);
+      if (inputRole) {
+        BSTR props = nullptr;
+        bool readOnly = false;
+        if (SUCCEEDED(node->get_CurrentAriaProperties(&props)) && props) {
+          const std::wstring sProps(props, SysStringLen(props));
+          readOnly = ContainsInsensitive(sProps, L"readonly=true");
+        }
+        SysFreeString(props);
+        found = !readOnly;
+        break;
+      }
+    } else {
+      SysFreeString(role);
+    }
+
+    if (hasType && type == UIA_DocumentControlTypeId) break;
+    if (!walker) break;
+    IUIAutomationElement* parent = nullptr;
+    if (FAILED(walker->GetParentElement(node, &parent)) || !parent) break;
+    Release(node);
+    node = parent;
   }
-  SysFreeString(props);
-  return !readOnly;
+
+  Release(node);
+  Release(walker);
+  return found;
 }
 
 bool HasWritableTextCaret(IUIAutomationElement* element) {
@@ -381,9 +397,108 @@ bool HasWritableTextCaret(IUIAutomationElement* element) {
   return writable;
 }
 
+// Returns 1 if explicitly writable, -1 if explicitly read-only, 0 if undetermined.
+int CheckElementDirectEditability(IUIAutomationElement* element) {
+  if (!element) return 0;
+  BOOL enabled = TRUE;
+  if (SUCCEEDED(element->get_CurrentIsEnabled(&enabled)) && !enabled) return -1;
+
+  IUIAutomationValuePattern* value = nullptr;
+  if (SUCCEEDED(element->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value))) && value) {
+    BOOL ro = FALSE;
+    const HRESULT vhr = value->get_CurrentIsReadOnly(&ro);
+    Release(value);
+    if (SUCCEEDED(vhr)) return ro ? -1 : 1;
+  }
+  Release(value);
+
+  CONTROLTYPEID type = 0;
+  if (FAILED(element->get_CurrentControlType(&type))) return 0;
+  if (type == UIA_EditControlTypeId) return 1;
+  switch (type) {
+    case UIA_ButtonControlTypeId:
+    case UIA_CheckBoxControlTypeId:
+    case UIA_DataItemControlTypeId:
+    case UIA_HyperlinkControlTypeId:
+    case UIA_ImageControlTypeId:
+    case UIA_ListItemControlTypeId:
+    case UIA_MenuItemControlTypeId:
+    case UIA_RadioButtonControlTypeId:
+    case UIA_SliderControlTypeId:
+    case UIA_TabItemControlTypeId:
+    case UIA_TreeItemControlTypeId:
+      return -1;
+    default:
+      return 0;
+  }
+}
+
+bool IsContainerControlType(IUIAutomationElement* element) {
+  if (!element) return false;
+  CONTROLTYPEID type = 0;
+  if (FAILED(element->get_CurrentControlType(&type))) return false;
+  return type == UIA_DocumentControlTypeId
+      || type == UIA_PaneControlTypeId
+      || type == UIA_CustomControlTypeId
+      || type == UIA_GroupControlTypeId;
+}
+
+bool IsRangeEditable(
+    IUIAutomation* uia,
+    IUIAutomationTextRange* range,
+    IUIAutomationElement* focusedElement,
+    IUIAutomationElement* patternHost,
+    IUIAutomationTextPattern* pattern,
+    HWND fg) {
+  VARIANT readOnly;
+  VariantInit(&readOnly);
+  const HRESULT hr = range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly);
+  if (SUCCEEDED(hr) && readOnly.vt == VT_BOOL) {
+    const bool editable = (readOnly.boolVal == VARIANT_FALSE);
+    VariantClear(&readOnly);
+    return editable;
+  }
+  VariantClear(&readOnly);
+
+  // When the range's IsReadOnly attribute is mixed or unsupported, inspect the actual focused
+  // element first so an outer Document pattern host doesn't mask a focused Edit/textbox.
+  const int focusedState = CheckElementDirectEditability(focusedElement);
+  if (focusedState != 0) return focusedState > 0;
+  if (HasWritableAriaRole(uia, focusedElement)) return true;
+  if (HasWritableTextCaret(focusedElement)) return true;
+
+  if (patternHost && patternHost != focusedElement) {
+    const int hostState = CheckElementDirectEditability(patternHost);
+    if (hostState != 0) return hostState > 0;
+    if (HasWritableAriaRole(uia, patternHost)) return true;
+    if (HasWritableTextCaret(patternHost)) return true;
+  }
+
+  if (pattern) {
+    IUIAutomationTextRange* doc = nullptr;
+    VARIANT docRo;
+    VariantInit(&docRo);
+    const bool known = SUCCEEDED(pattern->get_DocumentRange(&doc)) && doc
+        && SUCCEEDED(doc->GetAttributeValue(UIA_IsReadOnlyAttributeId, &docRo))
+        && docRo.vt == VT_BOOL;
+    const bool docEditable = known && (docRo.boolVal == VARIANT_FALSE);
+    VariantClear(&docRo);
+    Release(doc);
+    if (known) return docEditable;
+  }
+
+  // Tie-breaker when both range and DocumentRange reported mixed/unsupported: a live Win32 caret
+  // inside a container control indicates active editing; otherwise fail closed.
+  if ((IsContainerControlType(focusedElement) || IsContainerControlType(patternHost))
+      && HasActiveWin32Caret(fg)) {
+    return true;
+  }
+  return false;
+}
+
 // Distinguish a control that explicitly rejects editing from a writable control or an opaque
 // surface whose editability UIA does not expose.
-int ReadFieldEditability(IUIAutomationElement* element, HWND fg) {
+int ReadFieldEditability(IUIAutomation* uia, IUIAutomationElement* element, HWND fg) {
   BOOL enabled = FALSE;
   if (FAILED(element->get_CurrentIsEnabled(&enabled))) return 0;
   if (!enabled) return kFlagFieldReadOnly;
@@ -418,8 +533,9 @@ int ReadFieldEditability(IUIAutomationElement* element, HWND fg) {
       break;
   }
 
-  // ARIA input roles mark editable web/Electron widgets even inside a read-only Document wrapper.
-  if (HasWritableAriaRole(element)) return kFlagFieldWritable;
+  // ARIA input roles mark editable web/Electron widgets even when focus is on a child node or
+  // inside a read-only Document wrapper.
+  if (HasWritableAriaRole(uia, element)) return kFlagFieldWritable;
 
   IUIAutomationTextPattern* text = GetTextPattern(element);
   if (text) {
@@ -766,7 +882,6 @@ __declspec(dllexport) int ys_read_selection(
     found.clear();
     editable = true;
     if (pattern) {
-      IUIAutomationElement* editCheckEl = patternHost ? patternHost : element;
       IUIAutomationTextRangeArray* ranges = nullptr;
       int count = 0;
       if (SUCCEEDED(pattern->GetSelection(&ranges)) && ranges) ranges->get_Length(&count);
@@ -777,7 +892,7 @@ __declspec(dllexport) int ys_read_selection(
         if (SUCCEEDED(range->GetText(capacity - static_cast<int>(found.size()), &piece)) && piece && SysStringLen(piece)) {
           if (!found.empty()) found += L"\r\n";
           found.append(piece, SysStringLen(piece));
-          if (!IsRangeEditable(range, editCheckEl, pattern)) editable = false;
+          if (!IsRangeEditable(uia, range, element, patternHost, pattern, fg)) editable = false;
         }
         SysFreeString(piece);
         Release(range);
@@ -798,7 +913,7 @@ __declspec(dllexport) int ys_read_selection(
           break;
         }
       } else {
-        int f = ReadFieldEditability(element, fg);
+        int f = ReadFieldEditability(uia, element, fg);
         if (LooksLikeTerminalElement(uia, element)) f |= kFlagInTerminal;
         if (IsElementUiaOpaque(element)) f |= kFlagUiaOpaque;
         *flags = f;
@@ -969,7 +1084,8 @@ __declspec(dllexport) uint64_t ys_clipboard_save() {
   return token;
 }
 
-__declspec(dllexport) uint32_t ys_clipboard_write_text(const wchar_t* text, int length, int excludeFromHistory) {
+uint32_t WriteClipboardPayload(
+    const wchar_t* text, int length, const char* cfHtml, int cfHtmlBytes, int excludeFromHistory) {
   if (!text || length < 0) return 0;
   if (!OpenClipboardWithRetry(6, 15)) return 0;
   if (!EmptyClipboard()) {
@@ -997,11 +1113,39 @@ __declspec(dllexport) uint32_t ys_clipboard_write_text(const wchar_t* text, int 
     CloseClipboard();
     return 0;
   }
+
+  if (cfHtml && cfHtmlBytes > 0) {
+    const UINT fmtHtml = RegisterClipboardFormatW(L"HTML Format");
+    if (fmtHtml) {
+      HGLOBAL hHtml = GlobalAlloc(GMEM_MOVEABLE, static_cast<SIZE_T>(cfHtmlBytes) + 1);
+      if (hHtml) {
+        char* htmlDst = static_cast<char*>(GlobalLock(hHtml));
+        if (htmlDst) {
+          std::memcpy(htmlDst, cfHtml, static_cast<size_t>(cfHtmlBytes));
+          htmlDst[cfHtmlBytes] = '\0';
+          GlobalUnlock(hHtml);
+          if (!SetClipboardData(fmtHtml, hHtml)) GlobalFree(hHtml);
+        } else {
+          GlobalFree(hHtml);
+        }
+      }
+    }
+  }
+
   if (excludeFromHistory) {
     SuppressClipboardHistory();
   }
   CloseClipboard();
   return GetClipboardSequenceNumber();
+}
+
+__declspec(dllexport) uint32_t ys_clipboard_write_text(const wchar_t* text, int length, int excludeFromHistory) {
+  return WriteClipboardPayload(text, length, nullptr, 0, excludeFromHistory);
+}
+
+__declspec(dllexport) uint32_t ys_clipboard_write_rich_text(
+    const wchar_t* text, int length, const char* cfHtml, int cfHtmlBytes, int excludeFromHistory) {
+  return WriteClipboardPayload(text, length, cfHtml, cfHtmlBytes, excludeFromHistory);
 }
 
 __declspec(dllexport) int ys_clipboard_restore(uint64_t token, uint32_t expectedSequence) {

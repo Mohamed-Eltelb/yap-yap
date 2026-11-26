@@ -38,10 +38,12 @@ import {
   nativeRestoreClipboard,
   nativeSaveClipboard,
   nativeSelectionAvailable,
+  nativeWriteClipboardRichText,
   nativeWriteClipboardText,
   readNativeRewriteField,
   sendNativeClipboardShortcut,
 } from './nativeSelection';
+import { markdownToClipboardHtml } from './richClipboard';
 import { confirmRewrite, expectedRewrite, normalizeSelectionText, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
 import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
@@ -673,14 +675,24 @@ async function pasteWindowsRewrite(
   const expected = field && expectedRewrite(field, now.text, text);
   let sequence: number | undefined;
   let sent = false;
+  const rich = markdownToClipboardHtml(text);
   try {
     const writtenSeq = nativeSelectionAvailable()
-      ? nativeWriteClipboardText(text, !keepOnClipboard)
+      ? (rich
+          ? nativeWriteClipboardRichText(text, rich.cfHtml, !keepOnClipboard)
+          : nativeWriteClipboardText(text, !keepOnClipboard))
       : 0;
     if (writtenSeq) {
       sequence = writtenSeq;
     } else {
-      await clipboard.writeText(text);
+      if (rich) {
+        await clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([rich.html], { type: 'text/html' }),
+        })]);
+      } else {
+        await clipboard.writeText(text);
+      }
       sequence = clipboardSequence();
     }
     if (await clipboard.readText() !== text) return 'not-sent';

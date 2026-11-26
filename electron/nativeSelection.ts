@@ -32,6 +32,9 @@ type WindowProbe = (window: bigint) => number | bigint;
 type InspectCopyMetadata = () => number;
 type ClipboardSave = () => number | bigint;
 type ClipboardWriteText = (text: Buffer, length: number, excludeFromHistory: number) => number;
+type ClipboardWriteRichText = (
+  text: Buffer, length: number, cfHtml: Buffer, cfHtmlBytes: number, excludeFromHistory: number,
+) => number;
 type ClipboardRestore = (token: bigint, expectedSequence: number) => number;
 type ClipboardDiscard = (token: bigint) => void;
 
@@ -49,6 +52,7 @@ let focusedWindow: WindowProbe | undefined;
 let inspectCopyMetadata: InspectCopyMetadata | undefined;
 let clipboardSave: ClipboardSave | undefined;
 let clipboardWriteText: ClipboardWriteText | undefined;
+let clipboardWriteRichText: ClipboardWriteRichText | undefined;
 let clipboardRestore: ClipboardRestore | undefined;
 let clipboardDiscard: ClipboardDiscard | undefined;
 let readRewriteField: ReadRewriteField | undefined;
@@ -79,6 +83,9 @@ function load(): ReadSelection | null {
     inspectCopyMetadata = lib.func('int ys_inspect_copy_metadata()') as InspectCopyMetadata;
     clipboardSave = lib.func('uint64_t ys_clipboard_save()') as ClipboardSave;
     clipboardWriteText = lib.func('uint32_t ys_clipboard_write_text(void *text, int length, int excludeFromHistory)') as ClipboardWriteText;
+    clipboardWriteRichText = lib.func(
+      'uint32_t ys_clipboard_write_rich_text(void *text, int length, void *cfHtml, int cfHtmlBytes, int excludeFromHistory)',
+    ) as ClipboardWriteRichText;
     clipboardRestore = lib.func('int ys_clipboard_restore(uint64_t token, uint32_t expectedSequence)') as ClipboardRestore;
     clipboardDiscard = lib.func('void ys_clipboard_discard(uint64_t token)') as ClipboardDiscard;
     readRewriteField = lib.func(
@@ -126,6 +133,15 @@ export function nativeWriteClipboardText(text: string, excludeFromHistory: boole
   if (!load() || !clipboardWriteText) return 0;
   const buf = Buffer.from(`${text}\0`, 'utf16le');
   return clipboardWriteText(buf, text.length, excludeFromHistory ? 1 : 0);
+}
+
+export function nativeWriteClipboardRichText(
+  text: string, cfHtml: string, excludeFromHistory: boolean,
+): number {
+  if (!load() || !clipboardWriteRichText) return 0;
+  const textBuf = Buffer.from(`${text}\0`, 'utf16le');
+  const htmlBuf = Buffer.from(`${cfHtml}\0`, 'utf8');
+  return clipboardWriteRichText(textBuf, text.length, htmlBuf, htmlBuf.length - 1, excludeFromHistory ? 1 : 0);
 }
 
 export function nativeRestoreClipboard(token: bigint, expectedSequence: number): boolean {
