@@ -46,7 +46,7 @@ import {
 import { markdownToClipboardHtml } from './richClipboard';
 import { confirmRewrite, expectedRewrite, normalizeSelectionText, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
-import { captureDictationContext, captureSelection, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
+import { captureDictationContext, captureSelection, insertWaylandText, isWayland, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -337,8 +337,22 @@ function clearHudTimer() {
 
 const hudPlacer = new HudPlacer();
 
+// Mapping the HUD can take keyboard focus on Wayland, even with showInactive().
+let readingWaylandTarget = 0;
+async function withWaylandTarget<T>(read: () => Promise<T>): Promise<T> {
+  if (!isWayland) return read();
+  readingWaylandTarget++;
+  try {
+    if (hudWindow?.isVisible()) hudWindow.hide();
+    return await read();
+  } finally {
+    readingWaylandTarget--;
+    updateHudWindow();
+  }
+}
+
 function updateHudWindow(): void {
-  if (!hudWindow || !hudReady) return;
+  if (!hudWindow || !hudReady || readingWaylandTarget) return;
   if (!hudPayload.show) {
     if (hudHideTimer) return;
     // Linux has no forwarded mouse events. Unmap its idle overlay so the editor gets clicks.
@@ -923,6 +937,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
+    if (isWayland) {
+      const inserted = await withWaylandTarget(() => insertWaylandText(text));
+      if (keepOnClipboard === true) await clipboard.writeText(text).catch(console.warn);
+      return inserted;
+    }
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
@@ -947,7 +966,7 @@ app.whenReady().then(() => {
     if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();
   });
   ipcMain.handle('dictation:capture-context', (event) => {
-    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return captureDictationContext();
+    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return withWaylandTarget(captureDictationContext);
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
   const freshHighlight = freshHighlights();
@@ -957,6 +976,7 @@ app.whenReady().then(() => {
       selectionLog().info('capture skipped: mainWindow is focused');
       return;
     }
+    if (isWayland) return withWaylandTarget(() => captureSelection());
     if (process.platform === 'linux' && allowCopy === true) {
       // Read at every Ask, even when accessibility finds the selection, so it is never reused later.
       const highlight = Promise.all([clipboard.selection?.readText(), linuxPrimaryStamp()])
