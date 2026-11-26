@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstring>
 #include <cwctype>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -25,15 +26,11 @@ constexpr ULONG_PTR kYapYapExtraInfo = 0x59415059;  // "YAPY"
 
 constexpr size_t kMaxFormatBytes = 8 * 1024 * 1024;
 constexpr size_t kMaxTotalSnapshotBytes = 24 * 1024 * 1024;
+constexpr int kMaxAbandonedWorkers = 6;
 
-std::mutex automationLock;
-IUIAutomation* automation = nullptr;
-
-// One automation object for the whole process, in the multithreaded apartment, so every
-// worker thread can use it.
-IUIAutomation* Automation() {
-  std::lock_guard<std::mutex> lock(automationLock);
-  if (automation) return automation;
+// Creates a dedicated UI Automation instance for one MTA worker thread. If a frozen app ever
+// wedges a worker, detaching the worker lets the next call spin up a clean instance.
+IUIAutomation* CreateAutomation() {
   IUIAutomation* created = nullptr;
   if (FAILED(CoCreateInstance(__uuidof(CUIAutomation8), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&created)))) {
     if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&created)))) return nullptr;
@@ -50,8 +47,7 @@ IUIAutomation* Automation() {
     uia6->put_ConnectionRecoveryBehavior(ConnectionRecoveryBehaviorOptions_Enabled);
     uia6->Release();
   }
-  automation = created;
-  return automation;
+  return created;
 }
 
 template <typename T> void Release(T*& object) {
@@ -792,46 +788,44 @@ int ClassifyVsCodeEmptySelectionFlag(const std::wstring& text) {
   return 0;
 }
 
-}  // namespace
+struct UiaJob {
+  enum class Kind { ReadSelection, ReadRewriteField };
+  Kind kind = Kind::ReadSelection;
+  int capacity = 0;
+  int fast = 0;
+  HWND window = nullptr;
+  int idCapacity = 0;
+  int includeSelection = 0;
 
-extern "C" {
+  int result = -1;
+  std::wstring text;
+  int flags = 0;
+  std::wstring process;
+  std::vector<int> runtimeId;
+  int selectionStart = -1;
 
-__declspec(dllexport) HWND ys_focused_window(HWND window) {
-  return FocusedWindow(window);
-}
+  HANDLE done = nullptr;
 
-__declspec(dllexport) HWND ys_excel_cell_editor(HWND window) {
-  return ExcelCellEditor(window);
-}
+  UiaJob() : done(CreateEventW(nullptr, TRUE, FALSE, nullptr)) {}
+  ~UiaJob() {
+    if (done) CloseHandle(done);
+  }
+  UiaJob(const UiaJob&) = delete;
+  UiaJob& operator=(const UiaJob&) = delete;
+};
 
-// Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
-// when nothing is selected. Flags:
-//   1  = selection can be typed over
-//   2  = password field (nothing read, nothing copied)
-//   4  = focused field is writable (when no selection was read)
-//   8  = focused field is explicitly read-only (when no selection was read)
-//   16 = focused element looks like an integrated terminal
-//   32 = focused element is UIA-opaque (bare Window/Pane)
-// `process` gets the focused app's process name, without ".exe". Returns -1 on COM/UIA init failure.
-__declspec(dllexport) int ys_read_selection(
-    wchar_t* text, int capacity, int* flags, wchar_t* process, int processCapacity, int fast) {
-  *flags = 0;
-  if (processCapacity > 0) process[0] = 0;
+int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
+  job.flags = 0;
+  job.text.clear();
+  job.process.clear();
 
   HWND fg = GetForegroundWindow();
   DWORD fgPid = 0;
   if (fg) GetWindowThreadProcessId(fg, &fgPid);
   std::wstring fgProcess = fgPid ? ProcessName(static_cast<int>(fgPid)) : L"";
-  if (!fgProcess.empty() && processCapacity > 0) {
-    wcsncpy_s(process, processCapacity, fgProcess.c_str(), _TRUNCATE);
-  }
+  job.process = fgProcess;
 
-  HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  if (FAILED(init) && init != RPC_E_CHANGED_MODE) return -1;
-  IUIAutomation* uia = Automation();
-  if (!uia) return -1;
-
-  if (!fast && fg) {
+  if (!job.fast && fg) {
     WakeAccessibility(fg);
     if (IsWebHostWindow(fg) || IsWebHostWindow(FocusedWindow(fg))) {
       Sleep(30);
@@ -841,14 +835,14 @@ __declspec(dllexport) int ys_read_selection(
   std::wstring found;
   bool editable = true;
   int length = 0;
-  const int maxAttempts = fast ? 1 : 8;
+  const int maxAttempts = job.fast ? 1 : 8;
 
   for (int attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt) Sleep(65);
     IUIAutomationElement* element = nullptr;
     if (FAILED(uia->GetFocusedElement(&element)) || !element) {
-      if (!fast && IsWebHostWindow(fg) && attempt + 1 < maxAttempts) continue;
-      *flags = kFlagUiaOpaque;
+      if (!job.fast && IsWebHostWindow(fg) && attempt + 1 < maxAttempts) continue;
+      job.flags = kFlagUiaOpaque;
       length = 0;
       break;
     }
@@ -857,14 +851,12 @@ __declspec(dllexport) int ys_read_selection(
     element->get_CurrentProcessId(&pid);
     std::wstring currentProcess = pid ? ProcessName(pid) : fgProcess;
     if (currentProcess.empty()) currentProcess = fgProcess;
-    if (!currentProcess.empty() && processCapacity > 0) {
-      wcsncpy_s(process, processCapacity, currentProcess.c_str(), _TRUNCATE);
-    }
+    if (!currentProcess.empty()) job.process = currentProcess;
 
     BOOL password = FALSE;
     element->get_CurrentIsPassword(&password);
     if (password) {
-      *flags = kFlagPassword;
+      job.flags = kFlagPassword;
       Release(element);
       length = 0;
       found.clear();
@@ -885,11 +877,11 @@ __declspec(dllexport) int ys_read_selection(
       IUIAutomationTextRangeArray* ranges = nullptr;
       int count = 0;
       if (SUCCEEDED(pattern->GetSelection(&ranges)) && ranges) ranges->get_Length(&count);
-      for (int i = 0; i < count && static_cast<int>(found.size()) < capacity; i++) {
+      for (int i = 0; i < count && static_cast<int>(found.size()) < job.capacity; i++) {
         IUIAutomationTextRange* range = nullptr;
         if (FAILED(ranges->GetElement(i, &range)) || !range) continue;
         BSTR piece = nullptr;
-        if (SUCCEEDED(range->GetText(capacity - static_cast<int>(found.size()), &piece)) && piece && SysStringLen(piece)) {
+        if (SUCCEEDED(range->GetText(job.capacity - static_cast<int>(found.size()), &piece)) && piece && SysStringLen(piece)) {
           if (!found.empty()) found += L"\r\n";
           found.append(piece, SysStringLen(piece));
           if (!IsRangeEditable(uia, range, element, patternHost, pattern, fg)) editable = false;
@@ -905,9 +897,9 @@ __declspec(dllexport) int ys_read_selection(
     const bool done = !found.empty() || !web || attempt + 1 >= maxAttempts;
     if (done && found.empty()) {
       bool classicPassword = false;
-      if (ReadClassicEditSelection(fg, found, editable, classicPassword, capacity)) {
+      if (ReadClassicEditSelection(fg, found, editable, classicPassword, job.capacity)) {
         if (classicPassword) {
-          *flags = kFlagPassword;
+          job.flags = kFlagPassword;
           found.clear();
           Release(element);
           break;
@@ -916,7 +908,7 @@ __declspec(dllexport) int ys_read_selection(
         int f = ReadFieldEditability(uia, element, fg);
         if (LooksLikeTerminalElement(uia, element)) f |= kFlagInTerminal;
         if (IsElementUiaOpaque(element)) f |= kFlagUiaOpaque;
-        *flags = f;
+        job.flags = f;
       }
     }
     Release(element);
@@ -924,26 +916,17 @@ __declspec(dllexport) int ys_read_selection(
   }
 
   if (!found.empty()) {
-    length = static_cast<int>(found.size() < static_cast<size_t>(capacity) ? found.size() : capacity);
-    wmemcpy(text, found.c_str(), length);
-    *flags = editable ? kFlagEditable : 0;
+    length = static_cast<int>(found.size() < static_cast<size_t>(job.capacity) ? found.size() : job.capacity);
+    job.text.assign(found.c_str(), static_cast<size_t>(length));
+    job.flags = editable ? kFlagEditable : 0;
   }
-
-  // The thread stays in the multithreaded apartment: leaving it could tear the apartment down
-  // and with it the shared automation object.
   return length;
 }
 
-// Reads the focused control and its UIA identity. The selection offset is optional because
-// controls that expose ValuePattern alone have no UIA selection range.
-__declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int capacity,
-    int* runtimeId, int idCapacity, int* info, int includeSelection) {
-  if (!window || GetForegroundWindow() != window) return -1;
-  HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  if (FAILED(init) && init != RPC_E_CHANGED_MODE) return -1;
-  IUIAutomation* uia = Automation();
+int ReadRewriteFieldOnWorker(IUIAutomation* uia, UiaJob& job) {
+  if (!job.window || GetForegroundWindow() != job.window) return -1;
   IUIAutomationElement* element = nullptr;
-  if (!uia || FAILED(uia->GetFocusedElement(&element)) || !element) return -1;
+  if (FAILED(uia->GetFocusedElement(&element)) || !element) return -1;
 
   BOOL password = TRUE;
   SAFEARRAY* id = nullptr;
@@ -953,10 +936,10 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
   bool identified = SUCCEEDED(element->get_CurrentIsPassword(&password)) && !password &&
       SUCCEEDED(element->GetRuntimeId(&id)) && id && SafeArrayGetDim(id) == 1 &&
       SUCCEEDED(SafeArrayGetLBound(id, 1, &low)) && SUCCEEDED(SafeArrayGetUBound(id, 1, &high)) &&
-      high >= low && high - low < idCapacity && SUCCEEDED(SafeArrayAccessData(id, reinterpret_cast<void**>(&values)));
+      high >= low && high - low < job.idCapacity && SUCCEEDED(SafeArrayAccessData(id, reinterpret_cast<void**>(&values)));
   if (identified) {
-    info[0] = high - low + 1;
-    for (int i = 0; i < info[0]; i++) runtimeId[i] = values[i];
+    const int idLen = static_cast<int>(high - low + 1);
+    job.runtimeId.assign(values, values + idLen);
     SafeArrayUnaccessData(id);
   }
   if (id) SafeArrayDestroy(id);
@@ -965,14 +948,14 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
     return -1;
   }
 
-  info[1] = -1;
+  job.selectionStart = -1;
   IUIAutomationTextPattern* pattern = GetTextPattern(element);
   IUIAutomationTextRange* document = nullptr;
   BSTR contents = nullptr;
   bool read = pattern &&
       SUCCEEDED(pattern->get_DocumentRange(&document)) && document &&
-      SUCCEEDED(document->GetText(capacity, &contents));
-  if (read && includeSelection && SysStringLen(contents) < static_cast<UINT>(capacity)) {
+      SUCCEEDED(document->GetText(job.capacity, &contents));
+  if (read && job.includeSelection && SysStringLen(contents) < static_cast<UINT>(job.capacity)) {
     IUIAutomationTextRangeArray* ranges = nullptr;
     IUIAutomationTextRange* selected = nullptr;
     int count = 0;
@@ -983,8 +966,8 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
         SUCCEEDED(ranges->GetElement(0, &selected)) && selected &&
         SUCCEEDED(selected->CompareEndpoints(TextPatternRangeEndpoint_Start, selected, TextPatternRangeEndpoint_End, &span)) &&
         span < 0 && SUCCEEDED(document->MoveEndpointByRange(TextPatternRangeEndpoint_End, selected, TextPatternRangeEndpoint_Start)) &&
-        SUCCEEDED(document->GetText(capacity, &prefix))) {
-      info[1] = SysStringLen(prefix);
+        SUCCEEDED(document->GetText(job.capacity, &prefix))) {
+      job.selectionStart = static_cast<int>(SysStringLen(prefix));
     }
     SysFreeString(prefix);
     Release(selected);
@@ -1002,12 +985,193 @@ __declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int 
   }
   Release(element);
   int length = -1;
-  if (read && SysStringLen(contents) < static_cast<UINT>(capacity) && GetForegroundWindow() == window) {
-    length = SysStringLen(contents);
-    if (length) wmemcpy(text, contents, length);
+  if (read && SysStringLen(contents) < static_cast<UINT>(job.capacity) && GetForegroundWindow() == job.window) {
+    length = static_cast<int>(SysStringLen(contents));
+    if (length > 0) job.text.assign(contents, static_cast<size_t>(length));
   }
   SysFreeString(contents);
   return length;
+}
+
+// Separate SEH wrapper with no unwindable local C++ objects so a buggy third-party UIA provider
+// throwing an access violation returns -1 instead of crashing the host process.
+int RunJobGuarded(IUIAutomation* uia, UiaJob* job) {
+  __try {
+    return job->kind == UiaJob::Kind::ReadSelection
+        ? ReadSelectionOnWorker(uia, *job)
+        : ReadRewriteFieldOnWorker(uia, *job);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return -1;
+  }
+}
+
+struct UiaWorker {
+  std::mutex lock;
+  std::shared_ptr<UiaJob> currentJob;
+  HANDLE wake = nullptr;
+  HANDLE thread = nullptr;
+  bool stop = false;
+  bool countedAbandoned = false;
+
+  ~UiaWorker() {
+    if (wake) CloseHandle(wake);
+    if (thread) CloseHandle(thread);
+  }
+};
+
+std::mutex uiaDispatchLock;
+std::shared_ptr<UiaWorker> activeWorker;
+std::atomic<int> abandonedWorkers{0};
+
+DWORD WINAPI UiaWorkerProc(LPVOID param) {
+  std::unique_ptr<std::shared_ptr<UiaWorker>> holder(
+      static_cast<std::shared_ptr<UiaWorker>*>(param));
+  std::shared_ptr<UiaWorker> self = std::move(*holder);
+  holder.reset();
+
+  const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  IUIAutomation* uia = (SUCCEEDED(init) || init == RPC_E_CHANGED_MODE) ? CreateAutomation() : nullptr;
+
+  bool counted = false;
+  while (true) {
+    WaitForSingleObject(self->wake, INFINITE);
+    std::shared_ptr<UiaJob> job;
+    bool shouldStop = false;
+    {
+      std::lock_guard<std::mutex> guard(self->lock);
+      job = std::move(self->currentJob);
+      shouldStop = self->stop;
+    }
+    if (job) {
+      job->result = uia ? RunJobGuarded(uia, job.get()) : -1;
+      if (job->done) SetEvent(job->done);
+      job.reset();
+    }
+    {
+      std::lock_guard<std::mutex> guard(self->lock);
+      if (self->stop || shouldStop) {
+        counted = self->countedAbandoned;
+        break;
+      }
+    }
+  }
+
+  Release(uia);
+  if (SUCCEEDED(init)) CoUninitialize();
+  if (counted) abandonedWorkers.fetch_sub(1);
+  return 0;
+}
+
+bool DispatchUiaJob(const std::shared_ptr<UiaJob>& job, int timeoutMs) {
+  if (!job || !job->done) return false;
+  std::lock_guard<std::mutex> dispatch(uiaDispatchLock);
+  if (!activeWorker) {
+    if (abandonedWorkers.load() >= kMaxAbandonedWorkers) return false;
+    auto worker = std::make_shared<UiaWorker>();
+    worker->wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!worker->wake) return false;
+    auto* threadParam = new std::shared_ptr<UiaWorker>(worker);
+    worker->thread = CreateThread(nullptr, 0, UiaWorkerProc, threadParam, 0, nullptr);
+    if (!worker->thread) {
+      delete threadParam;
+      return false;
+    }
+    activeWorker = std::move(worker);
+  }
+  {
+    std::lock_guard<std::mutex> guard(activeWorker->lock);
+    activeWorker->currentJob = job;
+  }
+  SetEvent(activeWorker->wake);
+
+  const DWORD waitMs = static_cast<DWORD>(timeoutMs < 50 ? 50 : timeoutMs);
+  if (WaitForSingleObject(job->done, waitMs) == WAIT_OBJECT_0) return true;
+
+  // Worker wedged in a hung COM/UIA call: detach it so libuv's thread returns immediately and the
+  // next request spins up a fresh worker + fresh IUIAutomation instance.
+  {
+    std::lock_guard<std::mutex> guard(activeWorker->lock);
+    activeWorker->stop = true;
+    activeWorker->countedAbandoned = true;
+    abandonedWorkers.fetch_add(1);
+  }
+  SetEvent(activeWorker->wake);
+  activeWorker.reset();
+  return false;
+}
+
+}  // namespace
+
+extern "C" {
+
+__declspec(dllexport) HWND ys_focused_window(HWND window) {
+  return FocusedWindow(window);
+}
+
+__declspec(dllexport) HWND ys_excel_cell_editor(HWND window) {
+  return ExcelCellEditor(window);
+}
+
+// Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
+// when nothing is selected. Flags:
+//   1  = selection can be typed over
+//   2  = password field (nothing read, nothing copied)
+//   4  = focused field is writable (when no selection was read)
+//   8  = focused field is explicitly read-only (when no selection was read)
+//   16 = focused element looks like an integrated terminal
+//   32 = focused element is UIA-opaque (bare Window/Pane)
+// `process` gets the focused app's process name, without ".exe". Returns -1 on failure or timeout.
+__declspec(dllexport) int ys_read_selection(
+    wchar_t* text, int capacity, int* flags, wchar_t* process, int processCapacity, int fast, int timeoutMs) {
+  if (flags) *flags = 0;
+  if (process && processCapacity > 0) process[0] = 0;
+  if (!text || capacity <= 0 || !flags) return -1;
+
+  auto job = std::make_shared<UiaJob>();
+  job->kind = UiaJob::Kind::ReadSelection;
+  job->capacity = capacity;
+  job->fast = fast;
+
+  if (!DispatchUiaJob(job, timeoutMs > 0 ? timeoutMs : 3500)) return -1;
+
+  *flags = job->flags;
+  if (process && processCapacity > 0 && !job->process.empty()) {
+    wcsncpy_s(process, processCapacity, job->process.c_str(), _TRUNCATE);
+  }
+  if (job->result > 0) {
+    const int n = (std::min)(job->result, capacity);
+    wmemcpy(text, job->text.c_str(), static_cast<size_t>(n));
+    return n;
+  }
+  return job->result;
+}
+
+// Reads the focused control and its UIA identity. The selection offset is optional because
+// controls that expose ValuePattern alone have no UIA selection range.
+__declspec(dllexport) int ys_read_rewrite_field(HWND window, wchar_t* text, int capacity,
+    int* runtimeId, int idCapacity, int* info, int includeSelection, int timeoutMs) {
+  if (!window || !text || capacity <= 0 || !runtimeId || idCapacity <= 0 || !info) return -1;
+
+  auto job = std::make_shared<UiaJob>();
+  job->kind = UiaJob::Kind::ReadRewriteField;
+  job->window = window;
+  job->capacity = capacity;
+  job->idCapacity = idCapacity;
+  job->includeSelection = includeSelection;
+
+  if (!DispatchUiaJob(job, timeoutMs > 0 ? timeoutMs : 1000)) return -1;
+  if (job->result < 0 || job->runtimeId.empty()) return -1;
+
+  const int idLen = (std::min)(static_cast<int>(job->runtimeId.size()), idCapacity);
+  info[0] = idLen;
+  info[1] = job->selectionStart;
+  for (int i = 0; i < idLen; i++) runtimeId[i] = job->runtimeId[static_cast<size_t>(i)];
+  if (job->result > 0) {
+    const int n = (std::min)(job->result, capacity);
+    wmemcpy(text, job->text.c_str(), static_cast<size_t>(n));
+    return n;
+  }
+  return job->result;
 }
 
 // Only the known clipboard shortcuts, with hardware scan codes and foreground/clipboard checks

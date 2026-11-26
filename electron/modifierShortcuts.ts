@@ -123,12 +123,16 @@ export function registerModifierShortcuts(
   syncSwallowedKeys();
 }
 
-/** Ctrl+Alt+Del, UAC and the lock screen take the keyboard without sending key-ups. */
-function forgetPressedKeys() {
+/** Ctrl+Alt+Del, UAC, sleep/resume, and the lock screen can drop key-ups. */
+export function resetModifierShortcuts() {
   pressed.clear();
   pending = undefined;
   menuHeld = false;
   flow.reset();
+}
+
+function forgetPressedKeys() {
+  resetModifierShortcuts();
 }
 
 let nativeHook = false;

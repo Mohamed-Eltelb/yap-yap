@@ -21,7 +21,7 @@ export interface NativeSelection {
 type ReadSelection = {
   async: (
     text: Buffer, capacity: number, flags: Buffer, process: Buffer, processCapacity: number,
-    fast: number, done: (error: unknown, length: number) => void,
+    fast: number, timeoutMs: number, done: (error: unknown, length: number) => void,
   ) => void;
 };
 
@@ -41,7 +41,7 @@ type ClipboardDiscard = (token: bigint) => void;
 type ReadRewriteField = {
   async: (
     window: bigint, text: Buffer, capacity: number, id: Buffer, idCapacity: number, info: Buffer,
-    includeSelection: number, done: (error: unknown, length: number) => void,
+    includeSelection: number, timeoutMs: number, done: (error: unknown, length: number) => void,
   ) => void;
 };
 
@@ -89,7 +89,9 @@ function load(): ReadSelection | null {
   try {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
-    read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity, int fast)') as unknown as ReadSelection;
+    read = lib.func(
+      'int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity, int fast, int timeoutMs)',
+    ) as unknown as ReadSelection;
     sendShortcut = bindOptional<SendShortcut>(
       lib,
       'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, int withShift, intptr_t excelEditor, intptr_t focusedWindow)',
@@ -109,7 +111,7 @@ function load(): ReadSelection | null {
     );
     clipboardDiscard = bindOptional<ClipboardDiscard>(lib, 'void ys_clipboard_discard(uint64_t token)');
     readRewriteField = bindOptional<ReadRewriteField>(
-      lib, 'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
+      lib, 'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection, int timeoutMs)',
     );
   } catch (error) {
     console.warn('Yap Yap could not load its selection reader; using PowerShell instead', error);
@@ -200,9 +202,9 @@ export function readNativeSelection(timeoutMs = 4000, fast = false): Promise<Nat
   const flags = Buffer.alloc(4);
   const name = Buffer.alloc(260 * 2);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(undefined), timeoutMs);
+    const timer = setTimeout(() => resolve(undefined), timeoutMs + 500);
     try {
-      fn.async(text, capacity, flags, name, 260, fast ? 1 : 0, (error, length) => {
+      fn.async(text, capacity, flags, name, 260, fast ? 1 : 0, timeoutMs, (error, length) => {
         clearTimeout(timer);
         if (error || length < 0) return resolve(undefined);
         const flagBits = flags.readInt32LE(0);
@@ -234,9 +236,9 @@ export function readNativeRewriteField(window: string, includeSelection: boolean
   const id = Buffer.alloc(idCapacity * 4);
   const info = Buffer.alloc(8);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(undefined), timeoutMs);
+    const timer = setTimeout(() => resolve(undefined), timeoutMs + 500);
     try {
-      fn.async(BigInt(window), text, capacity, id, idCapacity, info, Number(includeSelection), (error, length) => {
+      fn.async(BigInt(window), text, capacity, id, idCapacity, info, Number(includeSelection), timeoutMs, (error, length) => {
         clearTimeout(timer);
         if (error || length < 0 || length >= capacity) return resolve(undefined);
         const idLength = info.readInt32LE(0);

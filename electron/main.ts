@@ -15,7 +15,7 @@ import {
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
+import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, resetModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
 import { setRecordingMute } from './systemAudio';
@@ -1020,8 +1020,14 @@ app.whenReady().then(() => {
     hudLog().info(`HUD: ${reason}`);
     hudRefresher.request(reason);
   };
-  powerMonitor.on('resume', refreshHudOn('resume'));
-  powerMonitor.on('unlock-screen', refreshHudOn('unlock-screen'));
+  powerMonitor.on('resume', () => {
+    resetModifierShortcuts();
+    refreshHudOn('resume')();
+  });
+  powerMonitor.on('unlock-screen', () => {
+    resetModifierShortcuts();
+    refreshHudOn('unlock-screen')();
+  });
   screen.on('display-added', refreshHudOn('display-added'));
   screen.on('display-removed', refreshHudOn('display-removed'));
   screen.on('display-metrics-changed', (_event, _display, changed) => {
