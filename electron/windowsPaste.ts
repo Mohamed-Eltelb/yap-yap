@@ -16,10 +16,23 @@ if ($null -eq [Console]::ReadLine()) { exit 1 }
 
 # A Chromium placeholder is retried in case the early query came too late.
 $read = $null
+$isPassword = $false
 for ($attempt = 0; $attempt -lt 12 -and !$read; $attempt++) {
   if ($attempt) { Start-Sleep -Milliseconds 80 }
   $element = $automation::FocusedElement
-  if (!$element -or !$element.Current.IsEnabled -or $element.Current.IsPassword) { exit 1 }
+  if (!$element -or !$element.Current.IsEnabled) { exit 1 }
+  if ($element.Current.IsPassword) {
+    # Allow pasting into enabled, writable password fields without ever reading their value.
+    $value = $null
+    if ($element.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$value) -and $value.Current.IsReadOnly) { exit 1 }
+    $text = $null
+    if ($element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$text)) {
+      $readOnly = $text.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute)
+      if ($readOnly -is [bool] -and $readOnly) { exit 1 }
+    }
+    $isPassword = $true
+    break
+  }
   $value = $null
   $text = $null
   if ($element.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
@@ -58,14 +71,14 @@ if ($web -and $read) {
     !$element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$text)
   if ($isList) { exit 1 }
   $read = $null
-} elseif (!$read -and $shells -contains $type) {
+} elseif (!$read -and !$isPassword -and $shells -contains $type) {
   # Terminals, some native text boxes, apps that draw their own UI (Zed, games)
   # and Electron apps with accessibility switched off take a paste but show up
   # as a bare pane or window. It is treated as a text field unless something
   # inside it can take focus, which makes it a container instead.
   $focusable = New-Object Windows.Automation.PropertyCondition($automation::IsKeyboardFocusableProperty, $true)
   if ($element.FindFirst([Windows.Automation.TreeScope]::Descendants, $focusable)) { exit 1 }
-} elseif (!$read -and $fields -notcontains $type) {
+} elseif (!$read -and !$isPassword -and $fields -notcontains $type) {
   exit 1
 }
 
