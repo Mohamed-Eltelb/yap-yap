@@ -774,6 +774,63 @@ bool ReadHGlobalBytesUtf8AsWide(HGLOBAL handle, size_t maxBytes, std::wstring& o
   return needed > 0;
 }
 
+bool ReadChromiumCustomDataEntry(
+    HGLOBAL handle,
+    size_t maxBytes,
+    const wchar_t* targetMime,
+    std::wstring& out) {
+  if (!handle || !targetMime) return false;
+  SIZE_T rawSize = GlobalSize(handle);
+  if (rawSize < 8) return false;
+  if (rawSize > maxBytes) rawSize = maxBytes;
+  const BYTE* ptr = static_cast<const BYTE*>(GlobalLock(handle));
+  if (!ptr) return false;
+
+  size_t limit = static_cast<size_t>(rawSize);
+  auto readU32 = [&](size_t& offset, uint32_t& value) -> bool {
+    if (offset > limit || limit - offset < 4) return false;
+    std::memcpy(&value, ptr + offset, 4);
+    offset += 4;
+    return true;
+  };
+  auto readStr16 = [&](size_t& offset, std::wstring& dst) -> bool {
+    uint32_t charCount = 0;
+    if (!readU32(offset, charCount)) return false;
+    if (charCount > maxBytes / sizeof(wchar_t)) return false;
+    const size_t byteLen = static_cast<size_t>(charCount) * sizeof(wchar_t);
+    if (offset > limit || limit - offset < byteLen) return false;
+    dst.assign(reinterpret_cast<const wchar_t*>(ptr + offset), charCount);
+    const size_t paddedLen = (byteLen + 3u) & ~static_cast<size_t>(3u);
+    offset += (paddedLen <= limit - offset) ? paddedLen : byteLen;
+    return true;
+  };
+
+  size_t offset = 0;
+  uint32_t payloadSize = 0;
+  uint32_t count = 0;
+  bool found = false;
+  if (readU32(offset, payloadSize)) {
+    const size_t declaredEnd = static_cast<size_t>(payloadSize) + 4u;
+    if (declaredEnd >= 8 && declaredEnd < limit) limit = declaredEnd;
+    if (readU32(offset, count)) {
+      if (count > 64) count = 64;
+      for (uint32_t i = 0; i < count && offset < limit; i++) {
+        std::wstring mime;
+        std::wstring value;
+        if (!readStr16(offset, mime) || !readStr16(offset, value)) break;
+        if (_wcsicmp(mime.c_str(), targetMime) == 0) {
+          out = std::move(value);
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+
+  GlobalUnlock(handle);
+  return found;
+}
+
 int ClassifyVsCodeEmptySelectionFlag(const std::wstring& text) {
   const size_t pos = text.find(L"isFromEmptySelection");
   if (pos == std::wstring::npos) return 0;
@@ -834,6 +891,7 @@ int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
 
   std::wstring found;
   bool editable = true;
+  bool inTerminal = false;
   int length = 0;
   const int maxAttempts = job.fast ? 1 : 8;
 
@@ -842,7 +900,15 @@ int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
     IUIAutomationElement* element = nullptr;
     if (FAILED(uia->GetFocusedElement(&element)) || !element) {
       if (!job.fast && IsWebHostWindow(fg) && attempt + 1 < maxAttempts) continue;
-      job.flags = kFlagUiaOpaque;
+      bool classicPassword = false;
+      if (ReadClassicEditSelection(fg, found, editable, classicPassword, job.capacity)) {
+        if (classicPassword) {
+          job.flags = kFlagPassword;
+          found.clear();
+        }
+      } else {
+        job.flags = kFlagUiaOpaque;
+      }
       length = 0;
       break;
     }
@@ -895,6 +961,10 @@ int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
     Release(patternHost);
 
     const bool done = !found.empty() || !web || attempt + 1 >= maxAttempts;
+    if (done) {
+      inTerminal = LooksLikeTerminalElement(uia, element);
+      if (inTerminal) editable = false;
+    }
     if (done && found.empty()) {
       bool classicPassword = false;
       if (ReadClassicEditSelection(fg, found, editable, classicPassword, job.capacity)) {
@@ -904,9 +974,10 @@ int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
           Release(element);
           break;
         }
+        if (inTerminal) editable = false;
       } else {
         int f = ReadFieldEditability(uia, element, fg);
-        if (LooksLikeTerminalElement(uia, element)) f |= kFlagInTerminal;
+        if (inTerminal) f |= kFlagInTerminal;
         if (IsElementUiaOpaque(element)) f |= kFlagUiaOpaque;
         job.flags = f;
       }
@@ -918,7 +989,7 @@ int ReadSelectionOnWorker(IUIAutomation* uia, UiaJob& job) {
   if (!found.empty()) {
     length = static_cast<int>(found.size() < static_cast<size_t>(job.capacity) ? found.size() : job.capacity);
     job.text.assign(found.c_str(), static_cast<size_t>(length));
-    job.flags = editable ? kFlagEditable : 0;
+    job.flags = (editable ? kFlagEditable : 0) | (inTerminal ? kFlagInTerminal : 0);
   }
   return length;
 }
@@ -1393,10 +1464,10 @@ __declspec(dllexport) int ys_inspect_copy_metadata() {
     const UINT fmtVscode = RegisterClipboardFormatW(L"vscode-editor-data");
     if (fmtChromiumCustom && IsClipboardFormatAvailable(fmtChromiumCustom)) {
       std::wstring customMeta;
-      if (ReadHGlobalTextUtf16(static_cast<HGLOBAL>(GetClipboardData(fmtChromiumCustom)), 64 * 1024, customMeta)) {
-        if (customMeta.find(L"vscode-editor-data") != std::wstring::npos) {
-          result = ClassifyVsCodeEmptySelectionFlag(customMeta);
-        }
+      if (ReadChromiumCustomDataEntry(
+              static_cast<HGLOBAL>(GetClipboardData(fmtChromiumCustom)),
+              64 * 1024, L"vscode-editor-data", customMeta)) {
+        result = ClassifyVsCodeEmptySelectionFlag(customMeta);
       }
     }
     if (result == 0 && fmtVscode && IsClipboardFormatAvailable(fmtVscode)) {

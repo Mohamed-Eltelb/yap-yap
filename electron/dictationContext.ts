@@ -477,8 +477,9 @@ export async function captureSelection(
     // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
     const native = await readNativeSelection(forRewrite ? 1200 : 4000, forRewrite);
     if (forRewrite && !native) return;
+    if (native?.password) return undefined;
     const data = native
-      ? (native.password ? {} : native.text ? { text: native.text, editable: native.editable } : { process: native.process })
+      ? (native.text ? { text: native.text, editable: native.editable } : { process: native.process })
       : parseJson(await askWindowsHelper('selection', 3000));
     const found = parseSelection(data);
     const processName = native?.process || (data as { process?: unknown } | undefined)?.process;
