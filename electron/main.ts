@@ -27,17 +27,17 @@ import type { HudAction } from './hudActions';
 import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
-import { classifyZedCopy, copyPlanFor, copySelection, isExcel, type CopiedSelection } from './selectionCopy';
+import { classifyZedCopy, copyPlanFor, copySelection, isExcel, isPowerPoint, type CopiedSelection } from './selectionCopy';
 import { webUrl } from './webUrl';
 import { freshHighlights } from './primarySelection';
 import {
   nativeDiscardClipboard,
   nativeExcelCellEditor,
+  nativeFocusedWindow,
   nativeInspectCopyMetadata,
   nativeRestoreClipboard,
   nativeSaveClipboard,
   nativeSelectionAvailable,
-  nativeWindowTitle,
   nativeWriteClipboardText,
   readNativeRewriteField,
   sendNativeClipboardShortcut,
@@ -544,15 +544,15 @@ async function saveClipboardBackup(): Promise<ClipboardBackup> {
 async function restoreClipboardBackup(
   backup: ClipboardBackup, expectedText: string, expectedSequence?: number,
 ): Promise<void> {
+  // Only put the user's clipboard back while it still holds what Yap Yap put there.
+  const untouched = await clipboard.readText() === expectedText
+    && (expectedSequence === undefined || clipboardSequence() === expectedSequence);
   if (backup.nativeToken !== undefined) {
-    nativeRestoreClipboard(backup.nativeToken, expectedSequence ?? 0);
+    if (untouched) nativeRestoreClipboard(backup.nativeToken, expectedSequence ?? 0);
+    else nativeDiscardClipboard(backup.nativeToken);
     return;
   }
-  if (backup.snapshot
-    && await clipboard.readText() === expectedText
-    && (expectedSequence === undefined || clipboardSequence() === expectedSequence)) {
-    await restoreClipboard(backup.snapshot);
-  }
+  if (backup.snapshot && untouched) await restoreClipboard(backup.snapshot);
 }
 
 function discardClipboardBackup(backup: ClipboardBackup): void {
@@ -563,11 +563,14 @@ async function copyWindowsSelection(
   window: string,
   processName: string,
   excelEditor: bigint,
-  allowCtrlCFallback: boolean,
+  focus: bigint,
+  options: { allowCtrlCFallback?: boolean; inTerminal?: boolean } = {},
   maxWaitMs?: number,
 ): Promise<CopiedSelection | undefined> {
   if (excelEditor && !isExcel(processName)) return;
-  const plan = copyPlanFor(processName, excelEditor !== 0n, allowCtrlCFallback);
+  // A PowerPoint Copy of a slide or shape is told apart from a text highlight only by the DLL.
+  if (isPowerPoint(processName) && !nativeSelectionAvailable()) return;
+  const plan = copyPlanFor(processName, excelEditor !== 0n, options.allowCtrlCFallback, options.inTerminal);
   if (!plan) return;
 
   const zed = /^zed(?:\.exe)?$/i.test(processName);
@@ -577,11 +580,11 @@ async function copyWindowsSelection(
     foregroundWindow,
     modifiersDown,
     clipboardSequence,
-    sendCopy: (keys, sequence) => sendNativeClipboardShortcut(window, sequence, keys, excelEditor, 0n),
+    sendCopy: (keys, sequence) => sendNativeClipboardShortcut(window, sequence, keys, excelEditor, focus),
     readCopied: () => clipboard.readText(),
     readCopiedKind: async () => {
+      const nativeKind = nativeInspectCopyMetadata();
       if (zed) {
-        const nativeKind = nativeSelectionAvailable() ? nativeInspectCopyMetadata() : 'plain';
         const kind = nativeKind === 'selection' || nativeKind === 'implicit-line'
           ? nativeKind
           : classifyZedCopy(await readZedCopyMetadata());
@@ -589,14 +592,14 @@ async function copyWindowsSelection(
         readOnly = kind !== 'selection';
         return kind;
       }
-      return nativeSelectionAvailable() ? nativeInspectCopyMetadata() : 'plain';
+      return nativeKind ?? 'unknown';
     },
     async saveClipboard() {
       const backup = await saveClipboardBackup();
       unusedBackup = backup;
-      return async (copied) => {
+      return async (copied, copiedSequence) => {
         unusedBackup = undefined;
-        await restoreClipboardBackup(backup, copied, clipboardSequence());
+        await restoreClipboardBackup(backup, copied, copiedSequence);
       };
     },
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -609,19 +612,27 @@ async function captureWindowsSelection(
   window: string, allowCopy: boolean, original?: SelectedText,
 ): Promise<SelectedText | undefined> {
   const excelEditor = nativeExcelCellEditor(window);
+  const focus = nativeFocusedWindow(window);
   const excelCellEditor = excelEditor ? String(excelEditor) : undefined;
-  if (original && original.excelCellEditor !== excelCellEditor) return;
+  const focusedWindowId = focus ? String(focus) : undefined;
+  // The rewrite must land in the same control the text was read from.
+  if (original && (original.excelCellEditor !== excelCellEditor
+    || (original.focusedWindowId && original.focusedWindowId !== focusedWindowId)
+    || (original.viaCopy && !focus))) return;
 
-  const windowTitle = nativeWindowTitle(window);
   const copy = allowCopy
-    ? (name: string, allowCtrlCFallback: boolean) =>
-        copyWindowsSelection(window, name, excelEditor, allowCtrlCFallback, original ? 500 : undefined)
+    ? (name: string, options?: { allowCtrlCFallback?: boolean; inTerminal?: boolean }) =>
+        copyWindowsSelection(window, name, excelEditor, focus, options, original ? 500 : undefined)
     : undefined;
-  const selection = await captureSelection(copy, !!original, excelEditor !== 0n, windowTitle);
-  if (!selection || foregroundWindow() !== window || nativeExcelCellEditor(window) !== excelEditor) return;
+  const selection = await captureSelection(copy, !!original, excelEditor !== 0n);
+  if (!selection || foregroundWindow() !== window || nativeExcelCellEditor(window) !== excelEditor
+    || (focus && nativeFocusedWindow(window) !== focus)) return;
   return {
     ...selection,
+    // Without a focused control to check before pasting, a copied selection is never typed over.
+    ...(selection.viaCopy && !focus ? { editable: false } : {}),
     windowId: window,
+    focusedWindowId,
     excelCellEditor,
   };
 }
@@ -640,17 +651,16 @@ async function pasteWindowsRewrite(
   const window = selection.windowId;
   if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return 'not-sent';
 
-  const excelEditor = nativeExcelCellEditor(window);
-  const excelCellEditor = excelEditor ? String(excelEditor) : undefined;
-  if (selection.excelCellEditor !== excelCellEditor) return 'not-sent';
-
   if (!await waitForModifiersRelease(window, 600)) return 'not-sent';
 
+  // Re-reads the selection, and checks the Excel cell editor and focused control are unchanged.
   const now = await captureWindowsSelection(window, selection.viaCopy === true && allowCopy, selection);
   if (!now || now.truncated
     || normalizeSelectionText(now.text) !== normalizeSelectionText(selection.text)
     || now.editable !== true
     || foregroundWindow() !== window) return 'not-sent';
+  const excelEditor = now.excelCellEditor ? BigInt(now.excelCellEditor) : 0n;
+  const focus = now.focusedWindowId ? BigInt(now.focusedWindowId) : 0n;
 
   const [backup, field] = await Promise.all([
     saveClipboardBackup(),
@@ -674,10 +684,10 @@ async function pasteWindowsRewrite(
       sequence = clipboardSequence();
     }
     if (await clipboard.readText() !== text) return 'not-sent';
-    sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v', excelEditor, 0n);
+    sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v', excelEditor, focus);
     if (!sent && foregroundWindow() === window && !modifiersDown() && await clipboard.readText() === text) {
       sequence = clipboardSequence();
-      sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v', excelEditor, 0n);
+      sent = sendNativeClipboardShortcut(window, sequence, 'ctrl+v', excelEditor, focus);
     }
   } finally {
     if (sequence !== undefined && (!sent || !keepOnClipboard)) {

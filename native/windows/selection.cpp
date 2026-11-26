@@ -21,7 +21,6 @@ constexpr int kFlagFieldWritable = 4;
 constexpr int kFlagFieldReadOnly = 8;
 constexpr int kFlagInTerminal = 16;
 constexpr int kFlagUiaOpaque = 32;
-constexpr int kFlagReadOnlyDocument = 64;
 constexpr ULONG_PTR kYapYapExtraInfo = 0x59415059;  // "YAPY"
 
 constexpr size_t kMaxFormatBytes = 8 * 1024 * 1024;
@@ -115,17 +114,6 @@ bool IsWebHostWindow(HWND hwnd) {
       || _wcsicmp(cls.c_str(), L"MozillaWindowClass") == 0
       || _wcsicmp(cls.c_str(), L"Intermediate D3D Window") == 0
       || _wcsicmp(cls.c_str(), L"ApplicationFrameWindow") == 0;
-}
-
-bool IsBrowserProcess(const std::wstring& process) {
-  if (process.empty()) return false;
-  const wchar_t* browsers[] = {
-      L"chrome", L"msedge", L"firefox", L"brave", L"vivaldi", L"opera", L"arc", L"comet", L"zen",
-  };
-  for (const wchar_t* b : browsers) {
-    if (_wcsicmp(process.c_str(), b) == 0) return true;
-  }
-  return false;
 }
 
 HWND FocusedWindow(HWND window) {
@@ -253,7 +241,9 @@ bool LooksLikeTerminalElement(IUIAutomation* uia, IUIAutomationElement* element)
     SysFreeString(autoId);
     SysFreeString(cls);
 
-    if (ContainsInsensitive(sName, L"terminal") || ContainsInsensitive(sName, L"xterm") || ContainsInsensitive(sName, L"console")
+    // A name can be a web page's title ("AWS Management Console"), so only the terminal words are
+    // matched there; "console" counts only in automation IDs and class names.
+    if (ContainsInsensitive(sName, L"terminal") || ContainsInsensitive(sName, L"xterm")
         || ContainsInsensitive(sId, L"terminal") || ContainsInsensitive(sId, L"xterm") || ContainsInsensitive(sId, L"console")
         || ContainsInsensitive(sCls, L"terminal") || ContainsInsensitive(sCls, L"xterm") || ContainsInsensitive(sCls, L"console")) {
       found = true;
@@ -272,8 +262,7 @@ bool LooksLikeTerminalElement(IUIAutomation* uia, IUIAutomationElement* element)
 bool IsRangeEditable(
     IUIAutomationTextRange* range,
     IUIAutomationElement* element,
-    IUIAutomationTextPattern* pattern,
-    const std::wstring& processName) {
+    IUIAutomationTextPattern* pattern) {
   VARIANT readOnly;
   VariantInit(&readOnly);
   const HRESULT hr = range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly);
@@ -326,16 +315,75 @@ bool IsRangeEditable(
         Release(doc);
         if (known) return docEditable;
       }
-      return !IsBrowserProcess(processName);
+      // Unknown editability is not taken as writable: a paste there could land nowhere useful.
+      return false;
     }
     default:
       return false;
   }
 }
 
-// Distinguish a control that explicitly rejects editing from an app that exposes no field
-// or only exposes a read-only document wrapper.
-int ReadFieldEditability(IUIAutomationElement* element) {
+bool HasActiveWin32Caret(HWND window) {
+  if (!window || GetForegroundWindow() != window) return false;
+  GUITHREADINFO info = { sizeof(GUITHREADINFO) };
+  DWORD tid = GetWindowThreadProcessId(window, nullptr);
+  if (!((tid && GetGUIThreadInfo(tid, &info)) || GetGUIThreadInfo(0, &info))) return false;
+  if (!info.hwndCaret) return false;
+  return info.hwndCaret == window || GetAncestor(info.hwndCaret, GA_ROOT) == window;
+}
+
+bool HasWritableAriaRole(IUIAutomationElement* element) {
+  if (!element) return false;
+  BSTR role = nullptr;
+  if (FAILED(element->get_CurrentAriaRole(&role)) || !role) {
+    SysFreeString(role);
+    return false;
+  }
+  const bool inputRole = _wcsicmp(role, L"textbox") == 0
+      || _wcsicmp(role, L"searchbox") == 0
+      || _wcsicmp(role, L"combobox") == 0
+      || _wcsicmp(role, L"spinbutton") == 0;
+  SysFreeString(role);
+  if (!inputRole) return false;
+
+  BSTR props = nullptr;
+  bool readOnly = false;
+  if (SUCCEEDED(element->get_CurrentAriaProperties(&props)) && props) {
+    const std::wstring sProps(props, SysStringLen(props));
+    readOnly = ContainsInsensitive(sProps, L"readonly=true");
+  }
+  SysFreeString(props);
+  return !readOnly;
+}
+
+bool HasWritableTextCaret(IUIAutomationElement* element) {
+  if (!element) return false;
+  IUIAutomationTextPattern2* pattern2 = nullptr;
+  if (FAILED(element->GetCurrentPatternAs(UIA_TextPattern2Id, IID_PPV_ARGS(&pattern2))) || !pattern2) {
+    Release(pattern2);
+    return false;
+  }
+  BOOL isActive = FALSE;
+  IUIAutomationTextRange* caret = nullptr;
+  bool writable = false;
+  if (SUCCEEDED(pattern2->GetCaretRange(&isActive, &caret)) && isActive && caret) {
+    VARIANT ro;
+    VariantInit(&ro);
+    if (SUCCEEDED(caret->GetAttributeValue(UIA_IsReadOnlyAttributeId, &ro))
+        && ro.vt == VT_BOOL
+        && ro.boolVal == VARIANT_FALSE) {
+      writable = true;
+    }
+    VariantClear(&ro);
+  }
+  Release(caret);
+  Release(pattern2);
+  return writable;
+}
+
+// Distinguish a control that explicitly rejects editing from a writable control or an opaque
+// surface whose editability UIA does not expose.
+int ReadFieldEditability(IUIAutomationElement* element, HWND fg) {
   BOOL enabled = FALSE;
   if (FAILED(element->get_CurrentIsEnabled(&enabled))) return 0;
   if (!enabled) return kFlagFieldReadOnly;
@@ -352,24 +400,6 @@ int ReadFieldEditability(IUIAutomationElement* element) {
   CONTROLTYPEID type = 0;
   if (FAILED(element->get_CurrentControlType(&type))) return 0;
 
-  IUIAutomationTextPattern* text = GetTextPattern(element);
-  if (text) {
-    IUIAutomationTextRange* range = nullptr;
-    VARIANT readOnly;
-    VariantInit(&readOnly);
-    const bool known = SUCCEEDED(text->get_DocumentRange(&range)) && range
-        && SUCCEEDED(range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly))
-        && readOnly.vt == VT_BOOL;
-    const bool isReadOnly = known && (readOnly.boolVal != VARIANT_FALSE);
-    VariantClear(&readOnly);
-    Release(range);
-    Release(text);
-    if (known) {
-      if (!isReadOnly) return kFlagFieldWritable;
-      return type == UIA_DocumentControlTypeId ? kFlagReadOnlyDocument : kFlagFieldReadOnly;
-    }
-  }
-
   // Selecting a row, link or button can provide clipboard text without a place to paste.
   switch (type) {
     case UIA_ButtonControlTypeId:
@@ -384,13 +414,53 @@ int ReadFieldEditability(IUIAutomationElement* element) {
     case UIA_TabItemControlTypeId:
     case UIA_TreeItemControlTypeId:
       return kFlagFieldReadOnly;
-    case UIA_EditControlTypeId:
-      return kFlagFieldWritable;
-    case UIA_DocumentControlTypeId:
-      return 0;
     default:
-      return 0;
+      break;
   }
+
+  // ARIA input roles mark editable web/Electron widgets even inside a read-only Document wrapper.
+  if (HasWritableAriaRole(element)) return kFlagFieldWritable;
+
+  IUIAutomationTextPattern* text = GetTextPattern(element);
+  if (text) {
+    // An active writable caret proves the focused area is editable even if other parts of the
+    // document are read-only.
+    if (HasWritableTextCaret(element)) {
+      Release(text);
+      return kFlagFieldWritable;
+    }
+
+    IUIAutomationTextRange* range = nullptr;
+    VARIANT readOnly;
+    VariantInit(&readOnly);
+    const bool known = SUCCEEDED(text->get_DocumentRange(&range)) && range
+        && SUCCEEDED(range->GetAttributeValue(UIA_IsReadOnlyAttributeId, &readOnly))
+        && readOnly.vt == VT_BOOL;
+    const bool isReadOnly = known && (readOnly.boolVal != VARIANT_FALSE);
+    bool emptyDocument = false;
+    if (known && isReadOnly && type == UIA_DocumentControlTypeId) {
+      BSTR sample = nullptr;
+      if (SUCCEEDED(range->GetText(1, &sample))) {
+        emptyDocument = !sample || SysStringLen(sample) == 0;
+      }
+      SysFreeString(sample);
+    }
+    VariantClear(&readOnly);
+    Release(range);
+    Release(text);
+    if (known) {
+      if (!isReadOnly) return kFlagFieldWritable;
+      // An empty Document exposes no text to UIA (opaque canvas/wrapper); treat it as unknown
+      // unless a Win32 caret confirms active text editing.
+      if (emptyDocument) return HasActiveWin32Caret(fg) ? kFlagFieldWritable : 0;
+      // A live Win32 caret in a Document control (e.g. rich/Office canvases) indicates editing.
+      if (type == UIA_DocumentControlTypeId && HasActiveWin32Caret(fg)) return kFlagFieldWritable;
+      return kFlagFieldReadOnly;
+    }
+  }
+
+  if (type == UIA_EditControlTypeId) return kFlagFieldWritable;
+  return 0;
 }
 
 bool IsElementUiaOpaque(IUIAutomationElement* element) {
@@ -499,16 +569,23 @@ void SuppressClipboardHistory() {
   SetDwordClipboardFormat(L"CanUploadToCloudClipboard", 0);
 }
 
-bool IsSafeBackupFormat(UINT fmt, UINT fmtExclude, UINT fmtCanHist, UINT fmtCanCloud) {
-  if (fmt == 0) return false;
-  if (fmt == fmtExclude || fmt == fmtCanHist || fmt == fmtCanCloud) return false;
-  if (fmt == CF_BITMAP || fmt == CF_METAFILEPICT || fmt == CF_PALETTE || fmt == CF_ENHMETAFILE || fmt == CF_OWNERDISPLAY) {
-    return false;
+enum class BackupFormat { Skip, Copy, Lost };
+
+// Whether a clipboard format can be saved as bytes. Lost means the snapshot would be incomplete,
+// and the caller should fall back to a saver that may keep it.
+BackupFormat ClassifyBackupFormat(UINT fmt) {
+  if (fmt == 0) return BackupFormat::Skip;
+  // Windows rebuilds these from CF_DIB when that comes back.
+  if (fmt == CF_BITMAP || fmt == CF_PALETTE) {
+    return IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_DIBV5)
+        ? BackupFormat::Skip : BackupFormat::Lost;
   }
-  if (fmt >= CF_DSPBITMAP && fmt <= CF_DSPENHMETAFILE) return false;
-  if (fmt >= CF_PRIVATEFIRST && fmt <= CF_PRIVATELAST) return false;
-  if (fmt >= CF_GDIOBJFIRST && fmt <= CF_GDIOBJLAST) return false;
-  return true;
+  // GDI handles and owner-drawn or private data aren't plain memory.
+  if (fmt == CF_METAFILEPICT || fmt == CF_ENHMETAFILE || fmt == CF_OWNERDISPLAY) return BackupFormat::Lost;
+  if (fmt >= CF_DSPBITMAP && fmt <= CF_DSPENHMETAFILE) return BackupFormat::Lost;
+  if (fmt >= CF_PRIVATEFIRST && fmt <= CF_PRIVATELAST) return BackupFormat::Lost;
+  if (fmt >= CF_GDIOBJFIRST && fmt <= CF_GDIOBJLAST) return BackupFormat::Lost;
+  return BackupFormat::Copy;
 }
 
 struct SavedClipboard {
@@ -519,32 +596,35 @@ std::mutex clipboardStoreLock;
 std::unordered_map<uint64_t, SavedClipboard> clipboardStore;
 std::atomic<uint64_t> nextClipboardToken{1};
 
-void CopyFormatIntoSnapshot(
+// Copies one format into the snapshot. Returns false when its data couldn't be kept. The
+// clipboard-history flags an app set (a password manager's, say) are kept like any other format.
+bool CopyFormatIntoSnapshot(
     UINT fmt,
     std::vector<UINT>& seen,
     SavedClipboard& snapshot,
-    size_t& totalBytes,
-    UINT fmtExclude,
-    UINT fmtCanHist,
-    UINT fmtCanCloud) {
-  if (!IsSafeBackupFormat(fmt, fmtExclude, fmtCanHist, fmtCanCloud)) return;
-  if (std::find(seen.begin(), seen.end(), fmt) != seen.end()) return;
+    size_t& totalBytes) {
+  if (std::find(seen.begin(), seen.end(), fmt) != seen.end()) return true;
   seen.push_back(fmt);
-  if (!IsClipboardFormatAvailable(fmt)) return;
+  const BackupFormat kind = ClassifyBackupFormat(fmt);
+  if (kind == BackupFormat::Skip) return true;
+  if (!IsClipboardFormatAvailable(fmt)) return true;
+  if (kind == BackupFormat::Lost) return false;
 
   HANDLE handle = GetClipboardData(fmt);
-  if (!handle) return;
+  if (!handle) return true;
   const SIZE_T size = GlobalSize(handle);
-  if (size == 0 || size > kMaxFormatBytes || totalBytes + size > kMaxTotalSnapshotBytes) return;
+  if (size == 0) return true;
+  if (size > kMaxFormatBytes || totalBytes + size > kMaxTotalSnapshotBytes) return false;
 
   const void* locked = GlobalLock(handle);
-  if (!locked) return;
+  if (!locked) return false;
   std::vector<BYTE> data(static_cast<size_t>(size));
   std::memcpy(data.data(), locked, static_cast<size_t>(size));
   GlobalUnlock(handle);
 
   totalBytes += data.size();
   snapshot.formats.emplace_back(fmt, std::move(data));
+  return true;
 }
 
 bool ReadHGlobalTextUtf16(HGLOBAL handle, size_t maxBytes, std::wstring& out) {
@@ -608,12 +688,6 @@ __declspec(dllexport) HWND ys_excel_cell_editor(HWND window) {
   return ExcelCellEditor(window);
 }
 
-__declspec(dllexport) int ys_window_title(HWND window, wchar_t* title, int capacity) {
-  if (!window || !title || capacity <= 0) return 0;
-  title[0] = 0;
-  return GetWindowTextW(window, title, capacity);
-}
-
 // Writes the selected text (at most `capacity` characters) to `text` and returns its length, or 0
 // when nothing is selected. Flags:
 //   1  = selection can be typed over
@@ -622,7 +696,6 @@ __declspec(dllexport) int ys_window_title(HWND window, wchar_t* title, int capac
 //   8  = focused field is explicitly read-only (when no selection was read)
 //   16 = focused element looks like an integrated terminal
 //   32 = focused element is UIA-opaque (bare Window/Pane)
-//   64 = focused Document reports IsReadOnly=true (wrapper Document in Word/Google Docs/etc.)
 // `process` gets the focused app's process name, without ".exe". Returns -1 on COM/UIA init failure.
 __declspec(dllexport) int ys_read_selection(
     wchar_t* text, int capacity, int* flags, wchar_t* process, int processCapacity, int fast) {
@@ -704,7 +777,7 @@ __declspec(dllexport) int ys_read_selection(
         if (SUCCEEDED(range->GetText(capacity - static_cast<int>(found.size()), &piece)) && piece && SysStringLen(piece)) {
           if (!found.empty()) found += L"\r\n";
           found.append(piece, SysStringLen(piece));
-          if (!IsRangeEditable(range, editCheckEl, pattern, currentProcess)) editable = false;
+          if (!IsRangeEditable(range, editCheckEl, pattern)) editable = false;
         }
         SysFreeString(piece);
         Release(range);
@@ -725,7 +798,7 @@ __declspec(dllexport) int ys_read_selection(
           break;
         }
       } else {
-        int f = ReadFieldEditability(element);
+        int f = ReadFieldEditability(element, fg);
         if (LooksLikeTerminalElement(uia, element)) f |= kFlagInTerminal;
         if (IsElementUiaOpaque(element)) f |= kFlagUiaOpaque;
         *flags = f;
@@ -855,8 +928,7 @@ __declspec(dllexport) int ys_send_clipboard_shortcut(
 
   if (excelEditor && ((key != 'C' && key != 'V') || ExcelCellEditor(window) != excelEditor)) return 0;
   if (focusedWindow && FocusedWindow(window) != focusedWindow) return 0;
-  if (!window || GetForegroundWindow() != window) return 0;
-  if (sequence != 0 && GetClipboardSequenceNumber() != sequence) return 0;
+  if (!window || GetForegroundWindow() != window || GetClipboardSequenceNumber() != sequence) return 0;
 
   return SendInput(static_cast<UINT>(count), inputs, sizeof(INPUT)) == static_cast<UINT>(count) ? 1 : 0;
 }
@@ -864,9 +936,6 @@ __declspec(dllexport) int ys_send_clipboard_shortcut(
 __declspec(dllexport) uint64_t ys_clipboard_save() {
   if (!OpenClipboardWithRetry(5, 15)) return 0;
 
-  const UINT fmtExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
-  const UINT fmtCanHist = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
-  const UINT fmtCanCloud = RegisterClipboardFormatW(L"CanUploadToCloudClipboard");
   const UINT fmtHtml = RegisterClipboardFormatW(L"HTML Format");
   const UINT fmtRtf = RegisterClipboardFormatW(L"Rich Text Format");
   const UINT fmtPng = RegisterClipboardFormatW(L"PNG");
@@ -874,16 +943,18 @@ __declspec(dllexport) uint64_t ys_clipboard_save() {
   SavedClipboard snapshot;
   std::vector<UINT> seen;
   size_t totalBytes = 0;
+  bool complete = true;
 
   const UINT priority[] = {CF_UNICODETEXT, CF_HDROP, fmtHtml, fmtRtf, fmtPng, CF_DIBV5, CF_DIB};
   for (UINT fmt : priority) {
-    CopyFormatIntoSnapshot(fmt, seen, snapshot, totalBytes, fmtExclude, fmtCanHist, fmtCanCloud);
+    if (!CopyFormatIntoSnapshot(fmt, seen, snapshot, totalBytes)) complete = false;
   }
-  for (UINT fmt = EnumClipboardFormats(0); fmt != 0; fmt = EnumClipboardFormats(fmt)) {
-    CopyFormatIntoSnapshot(fmt, seen, snapshot, totalBytes, fmtExclude, fmtCanHist, fmtCanCloud);
+  for (UINT fmt = EnumClipboardFormats(0); complete && fmt != 0; fmt = EnumClipboardFormats(fmt)) {
+    if (!CopyFormatIntoSnapshot(fmt, seen, snapshot, totalBytes)) complete = false;
   }
 
   CloseClipboard();
+  if (!complete) return 0;
 
   const uint64_t token = nextClipboardToken.fetch_add(1);
   std::lock_guard<std::mutex> guard(clipboardStoreLock);
@@ -967,7 +1038,6 @@ __declspec(dllexport) int ys_clipboard_restore(uint64_t token, uint32_t expected
       GlobalFree(hMem);
     }
   }
-  SuppressClipboardHistory();
   CloseClipboard();
   return 1;
 }

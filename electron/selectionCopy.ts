@@ -13,8 +13,9 @@ const NEVER_COPY = pattern([
   'vncviewer', 'rustdesk',
   // Python's IDLE stops the running code on Ctrl+C.
   'pythonw',
-  // Something is always selected here: the active cell in Excel, files in File Explorer and on the desktop.
-  'excel', 'explorer',
+  // Something is always selected here: the active cell in Excel and WPS Spreadsheets (et), files in
+  // File Explorer and on the desktop.
+  'excel', 'et', 'explorer',
 ]);
 
 /** Terminals that safely copy with Ctrl+Insert (never sending Ctrl+C / SIGINT). */
@@ -39,23 +40,6 @@ const COPY_WITH_INSERT = pattern([...INSERT_TERMINALS, ...CODE_EDITORS]);
 /** Code editors copy the whole line under the caret when nothing is selected. */
 const COPIES_LINE = pattern(CODE_EDITORS);
 
-/**
- * Apps whose editing surface is reliably writable even when UIA exposes a read-only wrapper
- * Document or omits editability metadata (custom canvases, Office, rich chat/note apps, IDEs).
- */
-const KNOWN_WRITABLE_EDITORS = pattern([
-  ...CODE_EDITORS,
-  'notepad++', 'winword', 'powerpnt', 'onenote', 'wps', 'et', 'wpp', 'soffice',
-  'whatsapp', 'whatsapp.root', 'weixin', 'wechat', 'dingtalk', 'telegram', 'slack', 'discord',
-  'notion', 'obsidian', 'teams', 'ms-teams', 'olk', 'outlook', 'figma', 'emeditor', 'typora', 'logseq',
-]);
-
-const BROWSERS = pattern(['chrome', 'msedge', 'firefox', 'brave', 'vivaldi', 'opera', 'arc', 'comet', 'zen']);
-
-const CANVAS_WEB_EDITOR_TITLE = /(?:google docs|google sheets|google slides|figma|canva|overleaf|notion|miro|excalidraw|腾讯文档|microsoft word|word online|powerpoint online|excel online|office online|onenote)/i;
-
-export const isCanvasWebEditorTitle = (title: string) => CANVAS_WEB_EDITOR_TITLE.test(title);
-
 export type CopyKeys = 'ctrl+c' | 'ctrl+insert' | 'ctrl+shift+c';
 export type CopiedTextKind = 'selection' | 'implicit-line' | 'object' | 'plain' | 'unknown';
 export interface CopiedSelection { text: string; readOnly?: boolean }
@@ -74,20 +58,6 @@ export function classifyZedCopy(metadata: string | null | undefined): CopiedText
   }
 }
 
-export function classifyVsCodeCopy(metadata: string | null | undefined): CopiedTextKind {
-  if (metadata === null) return 'plain';
-  if (!metadata) return 'unknown';
-  const match = metadata.match(/isFromEmptySelection["']?\s*:\s*(true|false)/i);
-  if (!match) return 'unknown';
-  return match[1].toLowerCase() === 'true' ? 'implicit-line' : 'selection';
-}
-
-export function classifyPowerPointCopy(formats: readonly string[]): CopiedTextKind {
-  return formats.some(
-    (fmt) => fmt === 'PowerPoint 12.0 Internal Slides' || fmt === 'PowerPoint 12.0 Internal Shapes',
-  ) ? 'object' : 'plain';
-}
-
 export interface CopyPlan {
   keys: CopyKeys;
   /** Optional second shortcut when UIA confirms focus is outside a terminal (e.g. IDE chat webview). */
@@ -97,17 +67,21 @@ export interface CopyPlan {
 }
 
 export const isExcel = (processName: string) => /^excel(?:\.exe)?$/i.test(processName);
+export const isPowerPoint = (processName: string) => /^powerpnt(?:\.exe)?$/i.test(processName);
 
 /** How to copy the selection in this app, or undefined when it must not be copied from. */
 export function copyPlanFor(
   processName: string,
   excelInCellEdit = false,
   allowCtrlCFallback = false,
+  inTerminal = false,
 ): CopyPlan | undefined {
   const name = processName.replace(/\.exe$/i, '');
   if (excelInCellEdit && isExcel(name)) return { keys: 'ctrl+c', dropLineCopy: false };
   if (!name || NEVER_COPY.test(name)) return undefined;
   if (SHIFT_C_TERMINAL_COPY.test(name)) return { keys: 'ctrl+shift+c', dropLineCopy: false };
+  // Never send Ctrl+C into a terminal (dedicated or embedded in any app): it sends SIGINT.
+  if (inTerminal) return { keys: 'ctrl+insert', dropLineCopy: false };
   if (COPY_WITH_INSERT.test(name)) {
     const fallbackKeys = allowCtrlCFallback && COPIES_LINE.test(name) && !/^zed$/i.test(name)
       ? 'ctrl+c'
@@ -128,17 +102,11 @@ export function canReplaceCopiedSelection(
   processName: string,
   writableField: boolean | undefined,
   excelInCellEdit = false,
-  readOnlyDocument = false,
-  windowTitle = '',
+  inTerminal = false,
 ): boolean {
   const name = processName.replace(/\.exe$/i, '');
-  if (!name || TERMINAL_COPY.test(name) || !copyPlanFor(name, excelInCellEdit)) return false;
-  if (writableField === false) return false;
-  if (readOnlyDocument) {
-    return KNOWN_WRITABLE_EDITORS.test(name)
-      || (BROWSERS.test(name) && isCanvasWebEditorTitle(windowTitle));
-  }
-  return true;
+  if (!name || inTerminal || TERMINAL_COPY.test(name) || !copyPlanFor(name, excelInCellEdit)) return false;
+  return writableField !== false;
 }
 
 /** One line ending in its line break: what an editor copies when nothing is selected. */
@@ -151,8 +119,12 @@ export interface CopyDeps {
   sendCopy: (keys: CopyKeys, sequence: number) => boolean | void;
   readCopied: () => Promise<string>;
   readCopiedKind?: () => Promise<CopiedTextKind>;
-  /** Saves the user's clipboard and returns how to put it back once the copy has been read. */
-  saveClipboard: () => Promise<(copied: string) => Promise<void>>;
+  /**
+   * Saves the user's clipboard and returns how to put it back once the copy has been read. The
+   * restore gets the copied text and the clipboard sequence it was read at, and must leave the
+   * clipboard alone if either has changed since.
+   */
+  saveClipboard: () => Promise<(copied: string, copiedSequence: number) => Promise<void>>;
   wait: (ms: number) => Promise<void>;
 }
 
@@ -204,11 +176,12 @@ export async function copySelection(
   const text = await deps.readCopied();
   const kind = await deps.readCopiedKind?.();
   if (deps.clipboardSequence() !== copiedSequence) return undefined;
-  await restore(text);
+  await restore(text, copiedSequence);
   if (
     !text.trim()
     || kind === 'implicit-line'
     || kind === 'object'
+    // Without editor metadata, a single line with its line break is taken for the editor's line copy.
     || (plan.dropLineCopy && (!kind || kind === 'unknown') && isLineCopy(text))
   ) {
     return undefined;

@@ -441,10 +441,12 @@ function parseJson(output: string): unknown {
  * A Windows rewrite uses the native read to check which targets can be rewritten through Copy.
  */
 export async function captureSelection(
-  copy?: (processName: string, allowCtrlCFallback: boolean) => Promise<string | CopiedSelection | undefined>,
+  copy?: (
+    processName: string,
+    options?: { allowCtrlCFallback?: boolean; inTerminal?: boolean },
+  ) => Promise<string | CopiedSelection | undefined>,
   forRewrite = false,
   excelInCellEdit = false,
-  windowTitle = '',
 ): Promise<SelectedText | undefined> {
   if (process.platform === 'win32') {
     // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
@@ -459,14 +461,13 @@ export async function captureSelection(
       return typeof processName === 'string' && processName ? { ...found, process: processName } : found;
     }
     if (!copy || typeof processName !== 'string') return undefined;
+    const inTerminal = native?.inTerminal === true;
     const editable = native
-      ? canReplaceCopiedSelection(
-          processName, native.writableField, excelInCellEdit, native.readOnlyDocument === true, windowTitle,
-        )
+      ? canReplaceCopiedSelection(processName, native.writableField, excelInCellEdit, inTerminal)
       : undefined;
     if (forRewrite && !editable) return;
-    const allowCtrlCFallback = !!native && !native.inTerminal && !native.uiaOpaque;
-    const result = await copy(processName, allowCtrlCFallback);
+    const allowCtrlCFallback = !!native && !inTerminal && !native.uiaOpaque;
+    const result = await copy(processName, { allowCtrlCFallback, inTerminal });
     const copied = typeof result === 'object'
       ? parseSelection({ text: result.text, editable: result.readOnly ? false : editable })
       : parseSelection({ text: result, editable });
@@ -488,6 +489,6 @@ export async function captureSelection(
   if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
-  const copied = await copy('', false);
+  const copied = await copy('');
   return parseSelection({ text: typeof copied === 'object' ? copied.text : copied });
 }

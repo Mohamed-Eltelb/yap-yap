@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   canReplaceCopiedSelection,
-  classifyPowerPointCopy,
-  classifyVsCodeCopy,
   classifyZedCopy,
   copyPlanFor,
   copySelection,
-  isCanvasWebEditorTitle,
   mayCopySelection,
   type CopyDeps,
 } from '../../electron/selectionCopy';
@@ -29,8 +26,8 @@ function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo 
     readCopied: async () => clipboard,
     saveClipboard: async () => {
       const saved = clipboard;
-      return async (copied) => {
-        if (clipboard === copied) {
+      return async (copied, copiedSequence) => {
+        if (clipboard === copied && sequence === copiedSequence) {
           clipboard = saved;
           restored.push(saved);
         }
@@ -54,22 +51,16 @@ describe('Copying the selection', () => {
     expect(canReplaceCopiedSelection('warp.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('mintty.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('explorer.exe', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('et.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('mstsc.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('WINWORD.EXE', true)).toBe(true);
   });
 
-  it('allows replacement in known writable editors and canvas web apps even when UIA reports a read-only document', () => {
-    for (const editor of ['WINWORD.EXE', 'POWERPNT.EXE', 'ONENOTE.EXE', 'notepad++.exe', 'Notion.exe', 'Slack.exe', 'WhatsApp.exe', 'Zed.exe', 'Code.exe']) {
-      expect(canReplaceCopiedSelection(editor, undefined, false, true)).toBe(true);
-    }
-    expect(canReplaceCopiedSelection('chrome.exe', undefined, false, true, 'Project Plan - Google Docs - Google Chrome')).toBe(true);
-    expect(canReplaceCopiedSelection('msedge.exe', undefined, false, true, 'Design System – Figma')).toBe(true);
-    expect(canReplaceCopiedSelection('firefox.exe', undefined, false, true, 'Poster - Canva — Mozilla Firefox')).toBe(true);
-    expect(canReplaceCopiedSelection('brave.exe', undefined, false, true, 'Paper - Overleaf, Online LaTeX Editor')).toBe(true);
-    expect(canReplaceCopiedSelection('chrome.exe', undefined, false, true, 'Wikipedia, the free encyclopedia - Google Chrome')).toBe(false);
-    expect(canReplaceCopiedSelection('WINWORD.EXE', false, false, true)).toBe(false);
-    expect(isCanvasWebEditorTitle('Meeting Notes - Notion')).toBe(true);
-    expect(isCanvasWebEditorTitle('GitHub Pull Request')).toBe(false);
+  it('treats any UIA-detected embedded terminal as non-replaceable and avoids Ctrl+C', () => {
+    expect(canReplaceCopiedSelection('AnyUnknownApp.exe', true, false, true)).toBe(false);
+    expect(canReplaceCopiedSelection('AnyUnknownApp.exe', undefined, false, true)).toBe(false);
+    expect(copyPlanFor('AnyUnknownApp.exe', false, true, true)).toEqual({ keys: 'ctrl+insert', dropLineCopy: false });
+    expect(copyPlanFor('Code.exe', false, true, true)).toEqual({ keys: 'ctrl+insert', dropLineCopy: false });
   });
 
   it('copies the selection and puts the user\'s clipboard back', async () => {
@@ -133,7 +124,7 @@ describe('Copying the selection', () => {
     for (const app of ['firefox', 'chrome', 'Discord', 'WINWORD', 'powerpnt', 'Notepad', 'obs64', 'totalcmd64']) {
       expect(copyPlanFor(app)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
     }
-    for (const app of ['mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer', 'putty', '']) {
+    for (const app of ['mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'et', 'explorer', 'putty', '']) {
       expect(mayCopySelection(app)).toBe(false);
     }
     expect(copyPlanFor('powershell')?.dropLineCopy).toBe(false);
@@ -192,27 +183,31 @@ describe('Copying the selection', () => {
     expect(await copySelection(1, fake.deps, plan)).toBe('sample text\r\n');
   });
 
-  it('distinguishes VS Code empty-selection line copies and PowerPoint slide/shape objects', async () => {
-    expect(classifyVsCodeCopy('{"version":1,"isFromEmptySelection":true}')).toBe('implicit-line');
-    expect(classifyVsCodeCopy('{"version":1,"isFromEmptySelection":false}')).toBe('selection');
-    expect(classifyVsCodeCopy(null)).toBe('plain');
-
-    expect(classifyPowerPointCopy(['PowerPoint 12.0 Internal Slides', 'UnicodeText'])).toBe('object');
-    expect(classifyPowerPointCopy(['PowerPoint 12.0 Internal Shapes'])).toBe('object');
-    expect(classifyPowerPointCopy(['UnicodeText'])).toBe('plain');
-
+  it('drops implicit line copies when metadata is unknown, and honors explicit metadata kinds', async () => {
     const codePlan = copyPlanFor('Code');
+    const unknownLine = desktop({ selection: 'const a = 1;\r\n' });
+    unknownLine.deps.readCopiedKind = async () => 'unknown';
+    expect(await copySelection(1, unknownLine.deps, codePlan)).toBeUndefined();
+
     const lineFake = desktop({ selection: 'const a = 1;\r\n' });
-    lineFake.deps.readCopiedKind = async () => classifyVsCodeCopy('{"isFromEmptySelection":true}');
+    lineFake.deps.readCopiedKind = async () => 'implicit-line';
     expect(await copySelection(1, lineFake.deps, codePlan)).toBeUndefined();
 
     const selFake = desktop({ selection: 'const a = 1;\r\n' });
-    selFake.deps.readCopiedKind = async () => classifyVsCodeCopy('{"isFromEmptySelection":false}');
+    selFake.deps.readCopiedKind = async () => 'selection';
     expect(await copySelection(1, selFake.deps, codePlan)).toBe('const a = 1;\r\n');
 
     const pptFake = desktop({ selection: 'Slide Title' });
-    pptFake.deps.readCopiedKind = async () => classifyPowerPointCopy(['PowerPoint 12.0 Internal Shapes']);
+    pptFake.deps.readCopiedKind = async () => 'object';
     expect(await copySelection(1, pptFake.deps, copyPlanFor('powerpnt'))).toBeUndefined();
+  });
+
+  it('passes the captured clipboard sequence to the restore callback', async () => {
+    const fake = desktop({ selection: 'Picked text' });
+    const restoreSpy = vi.fn(async () => undefined);
+    fake.deps.saveClipboard = async () => restoreSpy;
+    expect(await copySelection(1, fake.deps)).toBe('Picked text');
+    expect(restoreSpy).toHaveBeenCalledWith('Picked text', 8);
   });
 
   it('ignores the whole line an editor copies when nothing is selected', async () => {

@@ -13,7 +13,6 @@ export interface NativeSelection {
   editable: boolean;
   password: boolean;
   writableField?: boolean;
-  readOnlyDocument?: boolean;
   inTerminal?: boolean;
   uiaOpaque?: boolean;
   process: string;
@@ -30,7 +29,6 @@ type SendShortcut = (
   window: bigint, sequence: number, key: number, withShift: number, excelEditor: bigint, focusedWindow: bigint,
 ) => number;
 type WindowProbe = (window: bigint) => number | bigint;
-type WindowTitle = (window: bigint, title: Buffer, capacity: number) => number;
 type InspectCopyMetadata = () => number;
 type ClipboardSave = () => number | bigint;
 type ClipboardWriteText = (text: Buffer, length: number, excludeFromHistory: number) => number;
@@ -48,7 +46,6 @@ let read: ReadSelection | null | undefined;
 let sendShortcut: SendShortcut | undefined;
 let excelCellEditor: WindowProbe | undefined;
 let focusedWindow: WindowProbe | undefined;
-let windowTitle: WindowTitle | undefined;
 let inspectCopyMetadata: InspectCopyMetadata | undefined;
 let clipboardSave: ClipboardSave | undefined;
 let clipboardWriteText: ClipboardWriteText | undefined;
@@ -79,7 +76,6 @@ function load(): ReadSelection | null {
     ) as SendShortcut;
     excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as WindowProbe;
     focusedWindow = lib.func('intptr_t ys_focused_window(intptr_t window)') as WindowProbe;
-    windowTitle = lib.func('int ys_window_title(intptr_t window, void *title, int capacity)') as WindowTitle;
     inspectCopyMetadata = lib.func('int ys_inspect_copy_metadata()') as InspectCopyMetadata;
     clipboardSave = lib.func('uint64_t ys_clipboard_save()') as ClipboardSave;
     clipboardWriteText = lib.func('uint32_t ys_clipboard_write_text(void *text, int length, int excludeFromHistory)') as ClipboardWriteText;
@@ -107,20 +103,18 @@ export function nativeFocusedWindow(window: string): bigint {
   return BigInt(focusedWindow(BigInt(window)));
 }
 
-export function nativeWindowTitle(window: string): string {
-  if (!load() || !windowTitle || !/^[0-9]+$/.test(window)) return '';
-  const buf = Buffer.alloc(512 * 2);
-  const length = windowTitle(BigInt(window), buf, 512);
-  return length > 0 ? buf.toString('utf16le', 0, Math.min(length, 511) * 2) : '';
-}
-
-export function nativeInspectCopyMetadata(): CopiedTextKind {
-  if (!load() || !inspectCopyMetadata) return 'unknown';
+/**
+ * What the last Copy put on the clipboard, from the formats apps add beside the text. 'unknown'
+ * when no marker was found (or the clipboard was busy), so callers keep their own heuristics;
+ * undefined when the DLL isn't loaded.
+ */
+export function nativeInspectCopyMetadata(): CopiedTextKind | undefined {
+  if (!load() || !inspectCopyMetadata) return undefined;
   const code = inspectCopyMetadata();
   if (code === 1) return 'selection';
   if (code === 2) return 'implicit-line';
   if (code === 3) return 'object';
-  return 'plain';
+  return 'unknown';
 }
 
 export function nativeSaveClipboard(): bigint {
@@ -185,7 +179,6 @@ export function readNativeSelection(timeoutMs = 4000, fast = false): Promise<Nat
           writableField: flagBits & 4 ? true : flagBits & 8 ? false : undefined,
           inTerminal: (flagBits & 16) !== 0,
           uiaOpaque: (flagBits & 32) !== 0,
-          readOnlyDocument: (flagBits & 64) !== 0,
           process: processName,
         });
       });
