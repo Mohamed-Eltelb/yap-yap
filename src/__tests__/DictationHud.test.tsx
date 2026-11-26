@@ -149,3 +149,46 @@ it('quotes the selected text an Ask question was about', () => {
   expect(about).toContain('aria-label="Selected text">Microsoft Windows [Version 10.0]</p>');
   expect(plain).not.toContain('Selected text');
 });
+
+it('shows raw HTML answers as literal escaped text instead of an empty card', () => {
+  const html = renderHud({
+    status: 'result',
+    mode: 'ask',
+    levels: [],
+    selectionText: '<html lang="en">',
+    resultText: '<html lang="ar">',
+  });
+
+  expect(html).toContain('<p>&lt;html lang=&quot;ar&quot;&gt;</p>');
+  expect(html).not.toContain('<html lang="ar">');
+});
+
+it('keeps inline HTML tags and type generics visible alongside Markdown formatting', () => {
+  const html = renderHud({
+    status: 'result',
+    mode: 'ask',
+    levels: [],
+    resultText: 'Use **UTF-8** via <meta charset="UTF-8" /> or Array<string>.',
+  });
+
+  expect(html).toContain('<strong>UTF-8</strong>');
+  expect(html).toContain('&lt;meta charset=&quot;UTF-8&quot; /&gt;');
+  expect(html).toContain('Array&lt;string&gt;');
+});
+
+it('renders multi-line raw HTML and script tags safely as literal text, while unwrapping Markdown links', () => {
+  const html = renderHud({
+    status: 'result',
+    mode: 'ask',
+    levels: [],
+    resultText: '<html lang="ar">\n<head>\n<title>Articles</title>\n</head>\n\n<script>alert(1)</script>\n<img src="x" onerror="alert(1)">\n\nSee [Docs](https://example.com) ![pic](https://example.com/a.png).',
+  });
+
+  expect(html).not.toContain('<script>');
+  expect(html).not.toContain('<img');
+  expect(html).not.toContain('<a ');
+  expect(html).toContain('<p>&lt;html lang=&quot;ar&quot;&gt;\n&lt;head&gt;\n&lt;title&gt;Articles&lt;/title&gt;\n&lt;/head&gt;</p>');
+  expect(html).toContain('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
+  expect(html).toContain('<p>&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;</p>');
+  expect(html).toContain('<p>See Docs .</p>');
+});
