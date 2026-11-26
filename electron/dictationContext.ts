@@ -27,6 +27,8 @@ export interface SelectedText {
   focusedWindowId?: string;
   /** The native in-cell editor must still have focus before an Excel rewrite can paste. */
   excelCellEditor?: string;
+  /** Windows foreground process name (without .exe). */
+  process?: string;
   viaCopy?: boolean;
 }
 
@@ -175,7 +177,9 @@ function Get-Selection {
         if (!$piece) { continue }
         $parts += $piece
         $length += $piece.Length
-        if ($range.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute) -ne $false) { $editable = $false }
+        $ro = $range.GetAttributeValue([Windows.Automation.TextPattern]::IsReadOnlyAttribute)
+        if ($ro -is [bool]) { if ($ro) { $editable = $false } }
+        elseif ($element.Current.ControlType -ne [Windows.Automation.ControlType]::Edit) { $editable = $false }
       }
     }
     if ($parts.Count -or !$web) { break }
@@ -437,27 +441,40 @@ function parseJson(output: string): unknown {
  * A Windows rewrite uses the native read to check which targets can be rewritten through Copy.
  */
 export async function captureSelection(
-  copy?: (processName: string) => Promise<string | CopiedSelection | undefined>,
+  copy?: (processName: string, allowCtrlCFallback: boolean) => Promise<string | CopiedSelection | undefined>,
   forRewrite = false,
   excelInCellEdit = false,
+  windowTitle = '',
 ): Promise<SelectedText | undefined> {
   if (process.platform === 'win32') {
     // yapyap-text.dll reads it inside Yap Yap; the PowerShell helper stands in when it can't load.
-    const native = await readNativeSelection();
+    const native = await readNativeSelection(forRewrite ? 1200 : 4000, forRewrite);
     if (forRewrite && !native) return;
     const data = native
       ? (native.password ? {} : native.text ? { text: native.text, editable: native.editable } : { process: native.process })
       : parseJson(await askWindowsHelper('selection', 3000));
     const found = parseSelection(data);
-    const processName = (data as { process?: unknown } | undefined)?.process;
-    if (found || !copy || typeof processName !== 'string') return found;
-    const editable = native ? canReplaceCopiedSelection(processName, native.writableField, excelInCellEdit) : undefined;
+    const processName = native?.process || (data as { process?: unknown } | undefined)?.process;
+    if (found) {
+      return typeof processName === 'string' && processName ? { ...found, process: processName } : found;
+    }
+    if (!copy || typeof processName !== 'string') return undefined;
+    const editable = native
+      ? canReplaceCopiedSelection(
+          processName, native.writableField, excelInCellEdit, native.readOnlyDocument === true, windowTitle,
+        )
+      : undefined;
     if (forRewrite && !editable) return;
-    const result = await copy(processName);
+    const allowCtrlCFallback = !!native && !native.inTerminal && !native.uiaOpaque;
+    const result = await copy(processName, allowCtrlCFallback);
     const copied = typeof result === 'object'
       ? parseSelection({ text: result.text, editable: result.readOnly ? false : editable })
       : parseSelection({ text: result, editable });
-    return copied && { ...copied, viaCopy: true };
+    return copied && {
+      ...copied,
+      viaCopy: true,
+      ...(processName ? { process: processName } : {}),
+    };
   }
   if (process.platform === 'darwin') {
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
@@ -471,6 +488,6 @@ export async function captureSelection(
   if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
-  const copied = await copy('');
+  const copied = await copy('', false);
   return parseSelection({ text: typeof copied === 'object' ? copied.text : copied });
 }

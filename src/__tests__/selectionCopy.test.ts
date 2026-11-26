@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canReplaceCopiedSelection, classifyZedCopy, copyPlanFor, copySelection, mayCopySelection, type CopyDeps } from '../../electron/selectionCopy';
+import {
+  canReplaceCopiedSelection,
+  classifyPowerPointCopy,
+  classifyVsCodeCopy,
+  classifyZedCopy,
+  copyPlanFor,
+  copySelection,
+  isCanvasWebEditorTitle,
+  mayCopySelection,
+  type CopyDeps,
+} from '../../electron/selectionCopy';
 
 /** A fake desktop: the clipboard, the window in front, and keys held for a while. */
 function desktop({ selection = 'Picked text', heldFor = 0, window = 1, switchTo }: { selection?: string; heldFor?: number; window?: number; switchTo?: number } = {}) {
@@ -37,12 +47,29 @@ describe('Copying the selection', () => {
   it('allows Copy-backed rewrites in opaque editors and preserves the target restrictions', () => {
     expect(canReplaceCopiedSelection('CustomEditor.exe', undefined)).toBe(true);
     expect(canReplaceCopiedSelection('Zed.exe', undefined)).toBe(true);
+    expect(canReplaceCopiedSelection('powerpnt.exe', undefined)).toBe(true);
     expect(canReplaceCopiedSelection('CustomEditor.exe', false)).toBe(false);
     expect(canReplaceCopiedSelection('WindowsTerminal.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('wt.exe', true)).toBe(false);
+    expect(canReplaceCopiedSelection('warp.exe', undefined)).toBe(false);
+    expect(canReplaceCopiedSelection('mintty.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('explorer.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('mstsc.exe', undefined)).toBe(false);
     expect(canReplaceCopiedSelection('WINWORD.EXE', true)).toBe(true);
+  });
+
+  it('allows replacement in known writable editors and canvas web apps even when UIA reports a read-only document', () => {
+    for (const editor of ['WINWORD.EXE', 'POWERPNT.EXE', 'ONENOTE.EXE', 'notepad++.exe', 'Notion.exe', 'Slack.exe', 'WhatsApp.exe', 'Zed.exe', 'Code.exe']) {
+      expect(canReplaceCopiedSelection(editor, undefined, false, true)).toBe(true);
+    }
+    expect(canReplaceCopiedSelection('chrome.exe', undefined, false, true, 'Project Plan - Google Docs - Google Chrome')).toBe(true);
+    expect(canReplaceCopiedSelection('msedge.exe', undefined, false, true, 'Design System – Figma')).toBe(true);
+    expect(canReplaceCopiedSelection('firefox.exe', undefined, false, true, 'Poster - Canva — Mozilla Firefox')).toBe(true);
+    expect(canReplaceCopiedSelection('brave.exe', undefined, false, true, 'Paper - Overleaf, Online LaTeX Editor')).toBe(true);
+    expect(canReplaceCopiedSelection('chrome.exe', undefined, false, true, 'Wikipedia, the free encyclopedia - Google Chrome')).toBe(false);
+    expect(canReplaceCopiedSelection('WINWORD.EXE', false, false, true)).toBe(false);
+    expect(isCanvasWebEditorTitle('Meeting Notes - Notion')).toBe(true);
+    expect(isCanvasWebEditorTitle('GitHub Pull Request')).toBe(false);
   });
 
   it('copies the selection and puts the user\'s clipboard back', async () => {
@@ -96,18 +123,52 @@ describe('Copying the selection', () => {
     expect(fake.clipboard()).toBe('user clipboard');
   });
 
-  it('copies with Ctrl+Insert in terminals and code editors, and never in apps where copying is unsafe', () => {
-    for (const app of ['WindowsTerminal', 'powershell', 'Zed', 'Code', 'Cursor', 'idea64']) {
+  it('uses explicit terminal and IDE copy shortcuts without misclassifying unrelated *64 apps', () => {
+    for (const app of ['WindowsTerminal', 'powershell', 'mintty', 'Zed', 'Code', 'Cursor', 'idea64', 'pycharm64']) {
       expect(copyPlanFor(app)?.keys).toBe('ctrl+insert');
     }
-    for (const app of ['firefox', 'chrome', 'Discord', 'WINWORD', 'Notepad']) {
+    for (const app of ['wezterm-gui', 'alacritty', 'kitty', 'tabby', 'warp', 'hyper']) {
+      expect(copyPlanFor(app)).toEqual({ keys: 'ctrl+shift+c', dropLineCopy: false });
+    }
+    for (const app of ['firefox', 'chrome', 'Discord', 'WINWORD', 'powerpnt', 'Notepad', 'obs64', 'totalcmd64']) {
       expect(copyPlanFor(app)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
     }
-    for (const app of ['mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer', 'mintty', '']) {
+    for (const app of ['mstsc', 'AnyDesk', 'pythonw', 'EXCEL', 'explorer', 'putty', '']) {
       expect(mayCopySelection(app)).toBe(false);
     }
     expect(copyPlanFor('powershell')?.dropLineCopy).toBe(false);
     expect(copyPlanFor('Zed')?.dropLineCopy).toBe(true);
+  });
+
+  it('falls back from Ctrl+Insert to Ctrl+C in code editors only when allowed outside terminals', async () => {
+    expect(copyPlanFor('Code', false, true)).toEqual({ keys: 'ctrl+insert', fallbackKeys: 'ctrl+c', dropLineCopy: true });
+    expect(copyPlanFor('Code', false, false)).toEqual({ keys: 'ctrl+insert', dropLineCopy: true });
+    expect(copyPlanFor('Zed', false, true)).toEqual({ keys: 'ctrl+insert', dropLineCopy: true });
+
+    let seq = 1;
+    let clip = 'old';
+    const sendCopy = vi.fn((keys: string) => {
+      if (keys === 'ctrl+c') {
+        clip = 'From webview chat';
+        seq += 1;
+      }
+    });
+    const result = await copySelection(1, {
+      foregroundWindow: () => 1,
+      modifiersDown: () => false,
+      clipboardSequence: () => seq,
+      sendCopy,
+      readCopied: async () => clip,
+      saveClipboard: async () => async (copied) => {
+        if (clip === copied) clip = 'old';
+      },
+      wait: async () => undefined,
+    }, copyPlanFor('Code', false, true));
+
+    expect(result).toBe('From webview chat');
+    expect(sendCopy).toHaveBeenNthCalledWith(1, 'ctrl+insert', 1);
+    expect(sendCopy).toHaveBeenNthCalledWith(2, 'ctrl+c', 1);
+    expect(clip).toBe('old');
   });
 
   it('limits Excel Copy and replacement to the in-cell text editor', () => {
@@ -116,7 +177,6 @@ describe('Copying the selection', () => {
     expect(canReplaceCopiedSelection('EXCEL.EXE', false, true)).toBe(false);
     expect(copyPlanFor('EXCEL.EXE')).toBeUndefined();
     expect(copyPlanFor('EXCEL.EXE', true)).toEqual({ keys: 'ctrl+c', dropLineCopy: false });
-    expect(copyPlanFor('powerpnt.exe', true)).toBeUndefined();
   });
 
   it('distinguishes Zed highlights with a newline from implicit line copies', async () => {
@@ -130,6 +190,29 @@ describe('Copying the selection', () => {
 
     fake.deps.readCopiedKind = async () => classifyZedCopy(null);
     expect(await copySelection(1, fake.deps, plan)).toBe('sample text\r\n');
+  });
+
+  it('distinguishes VS Code empty-selection line copies and PowerPoint slide/shape objects', async () => {
+    expect(classifyVsCodeCopy('{"version":1,"isFromEmptySelection":true}')).toBe('implicit-line');
+    expect(classifyVsCodeCopy('{"version":1,"isFromEmptySelection":false}')).toBe('selection');
+    expect(classifyVsCodeCopy(null)).toBe('plain');
+
+    expect(classifyPowerPointCopy(['PowerPoint 12.0 Internal Slides', 'UnicodeText'])).toBe('object');
+    expect(classifyPowerPointCopy(['PowerPoint 12.0 Internal Shapes'])).toBe('object');
+    expect(classifyPowerPointCopy(['UnicodeText'])).toBe('plain');
+
+    const codePlan = copyPlanFor('Code');
+    const lineFake = desktop({ selection: 'const a = 1;\r\n' });
+    lineFake.deps.readCopiedKind = async () => classifyVsCodeCopy('{"isFromEmptySelection":true}');
+    expect(await copySelection(1, lineFake.deps, codePlan)).toBeUndefined();
+
+    const selFake = desktop({ selection: 'const a = 1;\r\n' });
+    selFake.deps.readCopiedKind = async () => classifyVsCodeCopy('{"isFromEmptySelection":false}');
+    expect(await copySelection(1, selFake.deps, codePlan)).toBe('const a = 1;\r\n');
+
+    const pptFake = desktop({ selection: 'Slide Title' });
+    pptFake.deps.readCopiedKind = async () => classifyPowerPointCopy(['PowerPoint 12.0 Internal Shapes']);
+    expect(await copySelection(1, pptFake.deps, copyPlanFor('powerpnt'))).toBeUndefined();
   });
 
   it('ignores the whole line an editor copies when nothing is selected', async () => {

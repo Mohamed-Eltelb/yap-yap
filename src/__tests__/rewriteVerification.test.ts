@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { confirmRewrite, expectedRewrite, type RewriteField } from '../../electron/rewriteVerification';
+import { confirmRewrite, expectedRewrite, normalizeSelectionText, type RewriteField } from '../../electron/rewriteVerification';
 
 describe('Windows rewrite verification', () => {
   const original: RewriteField = { id: 'field', text: 'One then One', selectionStart: 9 };
@@ -39,5 +39,9 @@ describe('Windows rewrite verification', () => {
     const read = vi.fn(async () => field);
     await expect(confirmRewrite(original, after.text, read)).resolves.toBe(false);
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes line breaks and strips zero-width characters when comparing captured selections', () => {
+    expect(normalizeSelectionText('Hello\r\n\u200BWorld\r\uFEFF!')).toBe('Hello\nWorld\n!');
   });
 });

@@ -11,6 +11,10 @@ export interface RewriteField {
 
 const normalizeNewlines = (text: string) => text.replace(/\r\n?/g, '\n');
 
+/** Normalizes line endings and strips zero-width characters for reliable selection equality checks. */
+export const normalizeSelectionText = (text: string) =>
+  normalizeNewlines(text).replace(/[\u200b-\u200d\ufeff]/g, '');
+
 /** Compute the expected field value while the highlight is still selected. */
 export function expectedRewrite(field: RewriteField, original: string, replacement: string): string | undefined {
   const text = normalizeNewlines(field.text);

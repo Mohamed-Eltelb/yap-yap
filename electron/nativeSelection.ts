@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SELECTION_LIMIT } from './selectionLimit';
 import type { RewriteField } from './rewriteVerification';
+import type { CopiedTextKind, CopyKeys } from './selectionCopy';
 
 // koffi ships CommonJS, but its types are marked as an ES module.
 type Koffi = typeof import('koffi', { with: { 'resolution-mode': 'import' } });
@@ -12,18 +13,29 @@ export interface NativeSelection {
   editable: boolean;
   password: boolean;
   writableField?: boolean;
+  readOnlyDocument?: boolean;
+  inTerminal?: boolean;
+  uiaOpaque?: boolean;
   process: string;
 }
 
 type ReadSelection = {
   async: (
     text: Buffer, capacity: number, flags: Buffer, process: Buffer, processCapacity: number,
-    done: (error: unknown, length: number) => void,
+    fast: number, done: (error: unknown, length: number) => void,
   ) => void;
 };
 
-type SendShortcut = (window: bigint, sequence: number, key: number, excelEditor: bigint, focusedWindow: bigint) => number;
+type SendShortcut = (
+  window: bigint, sequence: number, key: number, withShift: number, excelEditor: bigint, focusedWindow: bigint,
+) => number;
 type WindowProbe = (window: bigint) => number | bigint;
+type WindowTitle = (window: bigint, title: Buffer, capacity: number) => number;
+type InspectCopyMetadata = () => number;
+type ClipboardSave = () => number | bigint;
+type ClipboardWriteText = (text: Buffer, length: number, excludeFromHistory: number) => number;
+type ClipboardRestore = (token: bigint, expectedSequence: number) => number;
+type ClipboardDiscard = (token: bigint) => void;
 
 type ReadRewriteField = {
   async: (
@@ -36,6 +48,12 @@ let read: ReadSelection | null | undefined;
 let sendShortcut: SendShortcut | undefined;
 let excelCellEditor: WindowProbe | undefined;
 let focusedWindow: WindowProbe | undefined;
+let windowTitle: WindowTitle | undefined;
+let inspectCopyMetadata: InspectCopyMetadata | undefined;
+let clipboardSave: ClipboardSave | undefined;
+let clipboardWriteText: ClipboardWriteText | undefined;
+let clipboardRestore: ClipboardRestore | undefined;
+let clipboardDiscard: ClipboardDiscard | undefined;
 let readRewriteField: ReadRewriteField | undefined;
 
 // Installed builds keep the DLL beside the app's resources; development uses the fresh build.
@@ -57,14 +75,20 @@ function load(): ReadSelection | null {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
     sendShortcut = lib.func(
-      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, intptr_t excelEditor, intptr_t focusedWindow)',
+      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, int withShift, intptr_t excelEditor, intptr_t focusedWindow)',
     ) as SendShortcut;
     excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as WindowProbe;
     focusedWindow = lib.func('intptr_t ys_focused_window(intptr_t window)') as WindowProbe;
+    windowTitle = lib.func('int ys_window_title(intptr_t window, void *title, int capacity)') as WindowTitle;
+    inspectCopyMetadata = lib.func('int ys_inspect_copy_metadata()') as InspectCopyMetadata;
+    clipboardSave = lib.func('uint64_t ys_clipboard_save()') as ClipboardSave;
+    clipboardWriteText = lib.func('uint32_t ys_clipboard_write_text(void *text, int length, int excludeFromHistory)') as ClipboardWriteText;
+    clipboardRestore = lib.func('int ys_clipboard_restore(uint64_t token, uint32_t expectedSequence)') as ClipboardRestore;
+    clipboardDiscard = lib.func('void ys_clipboard_discard(uint64_t token)') as ClipboardDiscard;
     readRewriteField = lib.func(
       'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
     ) as unknown as ReadRewriteField;
-    read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity)') as unknown as ReadSelection;
+    read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity, int fast)') as unknown as ReadSelection;
   } catch (error) {
     console.warn('Yap Yap could not load its selection reader; using PowerShell instead', error);
   }
@@ -83,12 +107,54 @@ export function nativeFocusedWindow(window: string): bigint {
   return BigInt(focusedWindow(BigInt(window)));
 }
 
+export function nativeWindowTitle(window: string): string {
+  if (!load() || !windowTitle || !/^[0-9]+$/.test(window)) return '';
+  const buf = Buffer.alloc(512 * 2);
+  const length = windowTitle(BigInt(window), buf, 512);
+  return length > 0 ? buf.toString('utf16le', 0, Math.min(length, 511) * 2) : '';
+}
+
+export function nativeInspectCopyMetadata(): CopiedTextKind {
+  if (!load() || !inspectCopyMetadata) return 'unknown';
+  const code = inspectCopyMetadata();
+  if (code === 1) return 'selection';
+  if (code === 2) return 'implicit-line';
+  if (code === 3) return 'object';
+  return 'plain';
+}
+
+export function nativeSaveClipboard(): bigint {
+  if (!load() || !clipboardSave) return 0n;
+  return BigInt(clipboardSave());
+}
+
+export function nativeWriteClipboardText(text: string, excludeFromHistory: boolean): number {
+  if (!load() || !clipboardWriteText) return 0;
+  const buf = Buffer.from(`${text}\0`, 'utf16le');
+  return clipboardWriteText(buf, text.length, excludeFromHistory ? 1 : 0);
+}
+
+export function nativeRestoreClipboard(token: bigint, expectedSequence: number): boolean {
+  if (!token || !load() || !clipboardRestore) return false;
+  return clipboardRestore(token, expectedSequence) === 1;
+}
+
+export function nativeDiscardClipboard(token: bigint): void {
+  if (!token || !load() || !clipboardDiscard) return;
+  clipboardDiscard(token);
+}
+
 export function sendNativeClipboardShortcut(
-  window: string, sequence: number, key: 'ctrl+c' | 'ctrl+insert' | 'ctrl+v', excelEditor = 0n, focus = 0n,
+  window: string, sequence: number, key: CopyKeys | 'ctrl+v', excelEditor = 0n, focus = 0n,
 ): boolean {
   if (!load() || !sendShortcut || !/^[0-9]+$/.test(window)) return false;
-  const virtualKey = { 'ctrl+c': 0x43, 'ctrl+insert': 0x2d, 'ctrl+v': 0x56 }[key];
-  return sendShortcut(BigInt(window), sequence, virtualKey, excelEditor, focus) === 1;
+  const spec = {
+    'ctrl+c': { vk: 0x43, shift: 0 },
+    'ctrl+shift+c': { vk: 0x43, shift: 1 },
+    'ctrl+insert': { vk: 0x2d, shift: 0 },
+    'ctrl+v': { vk: 0x56, shift: 0 },
+  }[key];
+  return sendShortcut(BigInt(window), sequence, spec.vk, spec.shift, excelEditor, focus) === 1;
 }
 
 /**
@@ -96,7 +162,7 @@ export function sendNativeClipboardShortcut(
  * caller falls back to PowerShell. The DLL sets its own UI Automation time limits; this one only
  * guards against a call that never returns.
  */
-export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection | undefined> {
+export function readNativeSelection(timeoutMs = 4000, fast = false): Promise<NativeSelection | undefined> {
   const fn = load();
   if (!fn) return Promise.resolve(undefined);
   // One character more than is kept, so a cut can be noticed.
@@ -107,7 +173,7 @@ export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection |
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(undefined), timeoutMs);
     try {
-      fn.async(text, capacity, flags, name, 260, (error, length) => {
+      fn.async(text, capacity, flags, name, 260, fast ? 1 : 0, (error, length) => {
         clearTimeout(timer);
         if (error || length < 0) return resolve(undefined);
         const flagBits = flags.readInt32LE(0);
@@ -117,6 +183,9 @@ export function readNativeSelection(timeoutMs = 4000): Promise<NativeSelection |
           editable: (flagBits & 1) !== 0,
           password: (flagBits & 2) !== 0,
           writableField: flagBits & 4 ? true : flagBits & 8 ? false : undefined,
+          inTerminal: (flagBits & 16) !== 0,
+          uiaOpaque: (flagBits & 32) !== 0,
+          readOnlyDocument: (flagBits & 64) !== 0,
           process: processName,
         });
       });
