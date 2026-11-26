@@ -46,6 +46,8 @@ type ReadRewriteField = {
 };
 
 let read: ReadSelection | null | undefined;
+let lastLoadAttempt = 0;
+const LOAD_RETRY_COOLDOWN_MS = 30_000;
 let sendShortcut: SendShortcut | undefined;
 let excelCellEditor: WindowProbe | undefined;
 let focusedWindow: WindowProbe | undefined;
@@ -66,8 +68,20 @@ function dllPath(): string | undefined {
   return candidates.find((file) => fs.existsSync(file));
 }
 
+function bindOptional<T>(lib: { func: (signature: string) => unknown }, signature: string): T | undefined {
+  try {
+    return lib.func(signature) as T;
+  } catch (error) {
+    console.warn(`Yap Yap could not bind optional native export (${signature.split('(')[0]})`, error);
+    return undefined;
+  }
+}
+
 function load(): ReadSelection | null {
-  if (read !== undefined) return read;
+  if (read) return read;
+  const now = Date.now();
+  if (read === null && now - lastLoadAttempt < LOAD_RETRY_COOLDOWN_MS) return null;
+  lastLoadAttempt = now;
   read = null;
   if (process.platform !== 'win32') return read;
   const file = dllPath();
@@ -75,23 +89,28 @@ function load(): ReadSelection | null {
   try {
     const koffi = require('koffi') as Koffi;
     const lib = koffi.load(file);
-    sendShortcut = lib.func(
-      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, int withShift, intptr_t excelEditor, intptr_t focusedWindow)',
-    ) as SendShortcut;
-    excelCellEditor = lib.func('intptr_t ys_excel_cell_editor(intptr_t window)') as WindowProbe;
-    focusedWindow = lib.func('intptr_t ys_focused_window(intptr_t window)') as WindowProbe;
-    inspectCopyMetadata = lib.func('int ys_inspect_copy_metadata()') as InspectCopyMetadata;
-    clipboardSave = lib.func('uint64_t ys_clipboard_save()') as ClipboardSave;
-    clipboardWriteText = lib.func('uint32_t ys_clipboard_write_text(void *text, int length, int excludeFromHistory)') as ClipboardWriteText;
-    clipboardWriteRichText = lib.func(
-      'uint32_t ys_clipboard_write_rich_text(void *text, int length, void *cfHtml, int cfHtmlBytes, int excludeFromHistory)',
-    ) as ClipboardWriteRichText;
-    clipboardRestore = lib.func('int ys_clipboard_restore(uint64_t token, uint32_t expectedSequence)') as ClipboardRestore;
-    clipboardDiscard = lib.func('void ys_clipboard_discard(uint64_t token)') as ClipboardDiscard;
-    readRewriteField = lib.func(
-      'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
-    ) as unknown as ReadRewriteField;
     read = lib.func('int ys_read_selection(void *text, int capacity, void *flags, void *process, int processCapacity, int fast)') as unknown as ReadSelection;
+    sendShortcut = bindOptional<SendShortcut>(
+      lib,
+      'int ys_send_clipboard_shortcut(intptr_t window, uint32_t sequence, uint16_t key, int withShift, intptr_t excelEditor, intptr_t focusedWindow)',
+    );
+    excelCellEditor = bindOptional<WindowProbe>(lib, 'intptr_t ys_excel_cell_editor(intptr_t window)');
+    focusedWindow = bindOptional<WindowProbe>(lib, 'intptr_t ys_focused_window(intptr_t window)');
+    inspectCopyMetadata = bindOptional<InspectCopyMetadata>(lib, 'int ys_inspect_copy_metadata()');
+    clipboardSave = bindOptional<ClipboardSave>(lib, 'uint64_t ys_clipboard_save()');
+    clipboardWriteText = bindOptional<ClipboardWriteText>(
+      lib, 'uint32_t ys_clipboard_write_text(void *text, int length, int excludeFromHistory)',
+    );
+    clipboardWriteRichText = bindOptional<ClipboardWriteRichText>(
+      lib, 'uint32_t ys_clipboard_write_rich_text(void *text, int length, void *cfHtml, int cfHtmlBytes, int excludeFromHistory)',
+    );
+    clipboardRestore = bindOptional<ClipboardRestore>(
+      lib, 'int ys_clipboard_restore(uint64_t token, uint32_t expectedSequence)',
+    );
+    clipboardDiscard = bindOptional<ClipboardDiscard>(lib, 'void ys_clipboard_discard(uint64_t token)');
+    readRewriteField = bindOptional<ReadRewriteField>(
+      lib, 'int ys_read_rewrite_field(intptr_t window, void *text, int capacity, void *id, int idCapacity, void *info, int includeSelection)',
+    );
   } catch (error) {
     console.warn('Yap Yap could not load its selection reader; using PowerShell instead', error);
   }

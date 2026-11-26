@@ -208,8 +208,18 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 // Starting PowerShell and loading UI Automation takes about a second, so one helper stays
 // warm for the life of the app and answers each request in a few milliseconds.
 let helper: ChildProcessWithoutNullStreams | undefined;
+let helperStartedAt = 0;
+let helperTimeouts = 0;
 const waiting = new Map<number, (line: string) => void>();
 let requestId = 0;
+
+function recycleWindowsHelper(child: ChildProcessWithoutNullStreams): void {
+  if (helper !== child) return;
+  helper = undefined;
+  helperStartedAt = 0;
+  helperTimeouts = 0;
+  try { child.kill(); } catch { /* already exited */ }
+}
 
 function windowsHelper(): ChildProcessWithoutNullStreams {
   if (helper) return helper;
@@ -220,6 +230,7 @@ function windowsHelper(): ChildProcessWithoutNullStreams {
   let buffered = '';
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk: string) => {
+    helperTimeouts = 0;
     buffered += chunk;
     for (let end = buffered.indexOf('\n'); end >= 0; end = buffered.indexOf('\n')) {
       const [, id, json] = buffered.slice(0, end).match(/^(\d+) (.*)$/s) ?? [];
@@ -229,29 +240,44 @@ function windowsHelper(): ChildProcessWithoutNullStreams {
   });
   child.stderr.resume();
   const reset = () => {
-    if (helper === child) helper = undefined;
+    if (helper === child) {
+      helper = undefined;
+      helperStartedAt = 0;
+      helperTimeouts = 0;
+    }
     for (const done of [...waiting.values()]) done('');
   };
   child.on('exit', reset);
   child.on('error', reset);
   helper = child;
+  helperStartedAt = Date.now();
+  helperTimeouts = 0;
   return child;
 }
 
 function askWindowsHelper(command = '', timeoutMs = 1500): Promise<string> {
   return new Promise((resolve) => {
     const id = ++requestId;
+    const child = windowsHelper();
     const done = (line: string) => {
       clearTimeout(timer);
       waiting.delete(id);
       resolve(line);
     };
     // Context reading is skipped when it cannot finish quickly, so dictation is never held up.
-    const timer = setTimeout(() => done(''), timeoutMs);
+    // If a warm helper hangs on a wedged UIA provider, recycle it so later calls recover.
+    const timer = setTimeout(() => {
+      helperTimeouts += 1;
+      if (Date.now() - helperStartedAt > 4000 || helperTimeouts >= 2) {
+        recycleWindowsHelper(child);
+      }
+      done('');
+    }, timeoutMs);
     waiting.set(id, done);
     try {
-      windowsHelper().stdin.write(`${id} ${command}\n`);
+      child.stdin.write(`${id} ${command}\n`);
     } catch {
+      recycleWindowsHelper(child);
       done('');
     }
   });
@@ -321,8 +347,7 @@ export function warmDictationContext(): void {
 }
 
 export function stopDictationContext(): void {
-  helper?.kill();
-  helper = undefined;
+  if (helper) recycleWindowsHelper(helper);
 }
 
 // Context reading is skipped when it cannot finish quickly, so dictation is never held up.

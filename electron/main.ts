@@ -282,6 +282,9 @@ function newHudWindow(): BrowserWindow {
 // leaves a trail of the window replacements and the power and display events around it.
 let hudLogger: UpdateLogger | undefined;
 const hudLog = () => (hudLogger ??= createUpdateLogger(path.join(app.getPath('logs'), 'hud.log')));
+// Logs selection/rewrite metadata only (never user text) to diagnose missed captures or pastes.
+let selectionLogger: UpdateLogger | undefined;
+const selectionLog = () => (selectionLogger ??= createUpdateLogger(path.join(app.getPath('logs'), 'selection.log')));
 
 /** A new HUD window loading in the background, to replace the current one once ready. */
 let hudReplacement: BrowserWindow | null = null;
@@ -627,8 +630,15 @@ async function captureWindowsSelection(
         copyWindowsSelection(window, name, excelEditor, focus, options, original ? 500 : undefined)
     : undefined;
   const selection = await captureSelection(copy, !!original, excelEditor !== 0n);
-  if (!selection || foregroundWindow() !== window || nativeExcelCellEditor(window) !== excelEditor
-    || (focus && nativeFocusedWindow(window) !== focus)) return;
+  if (!selection) {
+    selectionLog().info(`capture missed (native=${nativeSelectionAvailable()}, allowCopy=${allowCopy}, rewrite=${!!original}, focus=${focus !== 0n})`);
+    return;
+  }
+  if (foregroundWindow() !== window || nativeExcelCellEditor(window) !== excelEditor
+    || (focus && nativeFocusedWindow(window) !== focus)) {
+    selectionLog().info(`capture dropped: target changed (process=${selection.process ?? '?'}, viaCopy=${!!selection.viaCopy})`);
+    return;
+  }
   return {
     ...selection,
     // Without a focused control to check before pasting, a copied selection is never typed over.
@@ -651,16 +661,25 @@ async function pasteWindowsRewrite(
   selection: SelectedText, text: string, keepOnClipboard: boolean, allowCopy: boolean,
 ): Promise<RewritePasteResult> {
   const window = selection.windowId;
-  if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) return 'not-sent';
+  if (!window || window === '0' || !win32Available() || foregroundWindow() !== window || selection.truncated) {
+    selectionLog().info(`rewrite not-sent: precheck failed (truncated=${!!selection.truncated}, fgMatch=${foregroundWindow() === window})`);
+    return 'not-sent';
+  }
 
-  if (!await waitForModifiersRelease(window, 600)) return 'not-sent';
+  if (!await waitForModifiersRelease(window, 600)) {
+    selectionLog().info(`rewrite not-sent: modifiers held or window changed (process=${selection.process ?? '?'})`);
+    return 'not-sent';
+  }
 
   // Re-reads the selection, and checks the Excel cell editor and focused control are unchanged.
   const now = await captureWindowsSelection(window, selection.viaCopy === true && allowCopy, selection);
   if (!now || now.truncated
     || normalizeSelectionText(now.text) !== normalizeSelectionText(selection.text)
     || now.editable !== true
-    || foregroundWindow() !== window) return 'not-sent';
+    || foregroundWindow() !== window) {
+    selectionLog().info(`rewrite not-sent: verification mismatch (process=${selection.process ?? '?'}, reread=${!!now}, editable=${now?.editable})`);
+    return 'not-sent';
+  }
   const excelEditor = now.excelCellEditor ? BigInt(now.excelCellEditor) : 0n;
   const focus = now.focusedWindowId ? BigInt(now.focusedWindowId) : 0n;
 
@@ -933,7 +952,11 @@ app.whenReady().then(() => {
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
   const freshHighlight = freshHighlights();
   ipcMain.handle('selection:capture', async (event, allowCopy?: boolean) => {
-    if (event.sender !== mainWindow?.webContents || mainWindow.isFocused()) return;
+    if (event.sender !== mainWindow?.webContents) return;
+    if (mainWindow.isFocused()) {
+      selectionLog().info('capture skipped: mainWindow is focused');
+      return;
+    }
     if (process.platform === 'linux' && allowCopy === true) {
       // Read at every Ask, even when accessibility finds the selection, so it is never reused later.
       const highlight = Promise.all([clipboard.selection?.readText(), linuxPrimaryStamp()])
@@ -942,7 +965,10 @@ app.whenReady().then(() => {
     }
     if (!win32Available()) return captureSelection();
     const windowId = foregroundWindow();
-    if (!windowId || windowId === '0') return;
+    if (!windowId || windowId === '0') {
+      selectionLog().info('capture skipped: no foreground window');
+      return;
+    }
     return captureWindowsSelection(windowId, allowCopy === true);
   });
   // A website the user asked Ask anything to open. Only web addresses: see webUrl.
