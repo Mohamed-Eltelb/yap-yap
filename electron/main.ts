@@ -55,6 +55,7 @@ import {
 import { markdownToClipboardHtml } from './richClipboard';
 import { confirmRewrite, expectedRewrite, normalizeSelectionText, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
+import { isOwnProcessWindow, isWindowActuallyFocused } from './windowFocus';
 import { captureDictationContext, captureSelection, insertWaylandText, isWayland, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
@@ -108,8 +109,12 @@ function applyAppearance(appearance: Appearance) {
   mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG);
 }
 
+function isMainWindowFocused(): boolean {
+  return isWindowActuallyFocused(mainWindow);
+}
+
 function syncShortcutSuspension() {
-  const suspended = shortcutEditorOpen && mainWindow?.isFocused() === true;
+  const suspended = shortcutEditorOpen && isMainWindowFocused();
   globalShortcut.setSuspended(suspended);
   setMenuMasking(!suspended);
 }
@@ -191,6 +196,8 @@ function createMainWindow(): void {
   });
   mainWindow.on('focus', syncShortcutSuspension);
   mainWindow.on('blur', syncShortcutSuspension);
+  mainWindow.on('hide', syncShortcutSuspension);
+  mainWindow.on('minimize', syncShortcutSuspension);
   mainWindow.webContents.on('render-process-gone', () => {
     shortcutEditorOpen = false;
     syncShortcutSuspension();
@@ -1004,7 +1011,8 @@ app.whenReady().then(() => {
   ipcMain.handle('selection:replace', async (
     event, selection: SelectedText, text: string, keepOnClipboard?: boolean, allowCopy?: boolean,
   ): Promise<RewritePasteResult> => {
-    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32' || mainWindow.isFocused()
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32'
+      || isMainWindowFocused() || isOwnProcessWindow(foregroundWindow())
       || !selection || typeof text !== 'string' || !text) return 'not-sent';
     return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
   });
@@ -1039,13 +1047,15 @@ app.whenReady().then(() => {
     if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();
   });
   ipcMain.handle('dictation:capture-context', (event) => {
-    if (event.sender === mainWindow?.webContents && !mainWindow.isFocused()) return withWaylandTarget(captureDictationContext);
+    if (event.sender !== mainWindow?.webContents || isMainWindowFocused()) return;
+    if (win32Available() && isOwnProcessWindow(foregroundWindow())) return;
+    return withWaylandTarget(captureDictationContext);
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
   const freshHighlight = freshHighlights();
   ipcMain.handle('selection:capture', async (event, allowCopy?: boolean) => {
     if (event.sender !== mainWindow?.webContents) return;
-    if (mainWindow.isFocused()) {
+    if (isMainWindowFocused()) {
       selectionLog().info('capture skipped: mainWindow is focused');
       return;
     }
@@ -1060,6 +1070,10 @@ app.whenReady().then(() => {
     const windowId = foregroundWindow();
     if (!windowId || windowId === '0') {
       selectionLog().info('capture skipped: no foreground window');
+      return;
+    }
+    if (isOwnProcessWindow(windowId)) {
+      selectionLog().info('capture skipped: own process is foreground');
       return;
     }
     return captureWindowsSelection(windowId, allowCopy === true);
