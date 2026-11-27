@@ -82,6 +82,18 @@ describe('pasteIntoWindowsField lifecycle', () => {
     expect(sendPaste).not.toHaveBeenCalled();
   });
 
+  it('sends paste and resolves false when the helper reports an unconfirmed target (exit 2)', async () => {
+    const mod = await import('../../electron/windowsPaste');
+    const sendPaste = vi.fn();
+    const pending = mod.pasteIntoWindowsField(sendPaste);
+
+    children[0].stdout.emit('data', 'paste\n');
+    expect(sendPaste).toHaveBeenCalledTimes(1);
+    children[0].exitCode = 2;
+    children[0].emit('close', 2);
+    await expect(pending).resolves.toBe(false);
+  });
+
   it('kills a hung helper after 6 seconds and resolves false', async () => {
     vi.useFakeTimers();
     const mod = await import('../../electron/windowsPaste');
@@ -96,15 +108,19 @@ describe('pasteIntoWindowsField lifecycle', () => {
 });
 
 interface PsElementSpec {
-  controlType: 'Edit' | 'Document' | 'Button' | 'Pane' | 'Custom';
-  isEnabled: boolean;
-  isPassword: boolean;
+  controlType?: 'Edit' | 'Document' | 'Button' | 'Pane' | 'Custom' | 'Group' | 'Menu' | 'Window';
+  isEnabled?: boolean;
+  isPassword?: boolean;
   frameworkId?: string;
+  nullElement?: boolean;
+  hasFocusableDescendant?: boolean;
+  hasWin32Caret?: boolean;
+  processName?: string;
   valuePattern?: { isReadOnly: boolean; initial: string; afterPaste?: string; throwOnRead?: boolean };
   textPattern?: { isReadOnly: boolean; initial: string; afterPaste?: string; throwOnRead?: boolean };
 }
 
-function captureVerifyPasteScript(): Promise<string> {
+function captureVerifyPasteScript(): Promise<{ script: string; encodedLength: number }> {
   return (async () => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -116,7 +132,7 @@ function captureVerifyPasteScript(): Promise<string> {
     });
     const mod = await import('../../electron/windowsPaste');
     mod.prepareWindowsPaste();
-    return Buffer.from(encoded, 'base64').toString('utf16le');
+    return { script: Buffer.from(encoded, 'base64').toString('utf16le'), encodedLength: encoded.length };
   })();
 }
 
@@ -155,58 +171,72 @@ foreach ($prop in $cases.PSObject.Properties) {
   $script:afterPaste = if ($spec.valuePattern -and $null -ne $spec.valuePattern.afterPaste) { $spec.valuePattern.afterPaste } elseif ($spec.textPattern -and $null -ne $spec.textPattern.afterPaste) { $spec.textPattern.afterPaste } else { $script:valueState }
   $errText = ''
 
-  $ctrlType = [Windows.Automation.ControlType]::($spec.controlType)
-  $el = New-Object PSObject
-  $el | Add-Member NoteProperty Current ([PSCustomObject]@{
-    IsEnabled = [bool]$spec.isEnabled
-    IsPassword = [bool]$spec.isPassword
-    ControlType = $ctrlType
-    ProcessId = $PID
-    FrameworkId = [string]$spec.frameworkId
-  })
-  $el | Add-Member NoteProperty _spec $spec
-  $el | Add-Member ScriptMethod FindFirst { param($scope, $cond) return $null }
-  $el | Add-Member ScriptMethod TryGetCurrentPattern {
-    param($pattern, [ref]$out)
-    if ($pattern -eq [Windows.Automation.ValuePattern]::Pattern -and $null -ne $this._spec.valuePattern) {
-      $vp = New-Object PSObject
-      $vpSpec = $this._spec.valuePattern
-      $cur = New-Object PSObject
-      $cur | Add-Member NoteProperty IsReadOnly ([bool]$vpSpec.isReadOnly)
-      $cur | Add-Member ScriptProperty Value {
-        if ($vpSpec.throwOnRead) { throw 'PASSWORD_VALUE_READ_VIOLATION' }
-        return $script:valueState
-      }
-      $vp | Add-Member NoteProperty Current $cur
-      $out.Value = $vp
-      return $true
+  $el = $null
+  if (-not $spec.nullElement) {
+    $ctrlType = [Windows.Automation.ControlType]::($spec.controlType)
+    $el = New-Object PSObject
+    $el | Add-Member NoteProperty Current ([PSCustomObject]@{
+      IsEnabled = [bool]$spec.isEnabled
+      IsPassword = [bool]$spec.isPassword
+      ControlType = $ctrlType
+      ProcessId = $PID
+      FrameworkId = [string]$spec.frameworkId
+    })
+    $el | Add-Member NoteProperty _spec $spec
+    $el | Add-Member ScriptMethod FindFirst {
+      param($scope, $cond)
+      if ($this._spec.hasFocusableDescendant) { return [PSCustomObject]@{ Name = 'Write a reply' } }
+      return $null
     }
-    if ($pattern -eq [Windows.Automation.TextPattern]::Pattern -and $null -ne $this._spec.textPattern) {
-      $tpSpec = $this._spec.textPattern
-      $docRange = New-Object PSObject
-      $docRange | Add-Member NoteProperty _ro ([bool]$tpSpec.isReadOnly)
-      $docRange | Add-Member NoteProperty _throw ([bool]$tpSpec.throwOnRead)
-      $docRange | Add-Member ScriptMethod GetAttributeValue { param($attr) return $this._ro }
-      $docRange | Add-Member ScriptMethod GetText {
-        param($max)
-        if ($this._throw) { throw 'PASSWORD_TEXT_READ_VIOLATION' }
-        return $script:valueState
+    $el | Add-Member ScriptMethod TryGetCurrentPattern {
+      param($pattern, [ref]$out)
+      if ($pattern -eq [Windows.Automation.ValuePattern]::Pattern -and $null -ne $this._spec.valuePattern) {
+        $vp = New-Object PSObject
+        $vpSpec = $this._spec.valuePattern
+        $cur = New-Object PSObject
+        $cur | Add-Member NoteProperty IsReadOnly ([bool]$vpSpec.isReadOnly)
+        $cur | Add-Member ScriptProperty Value {
+          if ($vpSpec.throwOnRead) { throw 'PASSWORD_VALUE_READ_VIOLATION' }
+          return $script:valueState
+        }
+        $vp | Add-Member NoteProperty Current $cur
+        $out.Value = $vp
+        return $true
       }
-      $tp = [PSCustomObject]@{ DocumentRange = $docRange }
-      $out.Value = $tp
-      return $true
+      if ($pattern -eq [Windows.Automation.TextPattern]::Pattern -and $null -ne $this._spec.textPattern) {
+        $tpSpec = $this._spec.textPattern
+        $docRange = New-Object PSObject
+        $docRange | Add-Member NoteProperty _ro ([bool]$tpSpec.isReadOnly)
+        $docRange | Add-Member NoteProperty _throw ([bool]$tpSpec.throwOnRead)
+        $docRange | Add-Member ScriptMethod GetAttributeValue { param($attr) return $this._ro }
+        $docRange | Add-Member ScriptMethod GetText {
+          param($max)
+          if ($this._throw) { throw 'PASSWORD_TEXT_READ_VIOLATION' }
+          return $script:valueState
+        }
+        $tp = [PSCustomObject]@{ DocumentRange = $docRange }
+        $out.Value = $tp
+        return $true
+      }
+      return $false
     }
-    return $false
   }
 
   $fakeAutomation = [PSCustomObject]@{
     FocusedElement = $el
     IsKeyboardFocusableProperty = [Windows.Automation.AutomationElement]::IsKeyboardFocusableProperty
   }
+  $fakeProcessName = if ($spec.processName) { [string]$spec.processName } else { 'comet' }
+  $fakeHasCaret = [bool]$spec.hasWin32Caret
 
-  # Use a minimal class wrapper so $automation::FocusedElement static syntax resolves to our test element.
+  # Substitute FocusedElement and optional Win32 caret/foreground probes for deterministic unit testing.
   $codeBlock = $testable -replace '\\$automation::FocusedElement', '$fakeAutomation.FocusedElement'
   $codeBlock = $codeBlock -replace '\\$automation::IsKeyboardFocusableProperty', '[Windows.Automation.AutomationElement]::IsKeyboardFocusableProperty'
+  $codeBlock = $codeBlock -replace '\\[YapYap\\.PasteWin32\\]::HasCaret\\(\\)', '$fakeHasCaret'
+  $codeBlock = $codeBlock -replace '\\[YapYap\\.PasteWin32\\]::ForegroundPid\\(\\)', '$PID'
+  $codeBlock = $codeBlock -replace '\\$proc\\.ProcessName', '$fakeProcessName'
+  # Skip the 12x80ms Chrome Pane sleep loop in unit tests where FocusedElement is static.
+  $codeBlock = $codeBlock -replace 'Start-Sleep -Milliseconds 80', ''
   try {
     & ([ScriptBlock]::Create($codeBlock))
   } catch {
@@ -221,15 +251,16 @@ $results | ConvertTo-Json -Compress
 
   const out = execFileSync(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', Buffer.from(harness, 'utf16le').toString('base64')],
-    { encoding: 'utf8', timeout: 15000, windowsHide: true },
+    ['-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    { input: harness, encoding: 'utf8', timeout: 15000, windowsHide: true },
   );
   return JSON.parse(out.trim());
 }
 
 describe.runIf(process.platform === 'win32')('windowsPaste real PowerShell target checks', () => {
   it('allows pasting into enabled non-read-only password fields without reading their value, while rejecting read-only, disabled, and non-text targets', async () => {
-    const script = await captureVerifyPasteScript();
+    const { script, encodedLength } = await captureVerifyPasteScript();
+    expect(encodedLength).toBeLessThan(24_000);
     const results = runVerifyPasteCases(script, {
       win32Password: {
         controlType: 'Edit',
@@ -294,5 +325,77 @@ describe.runIf(process.platform === 'win32')('windowsPaste real PowerShell targe
     expect(results.normalEditable).toEqual({ exitCode: 0, pasted: true, error: '' });
     expect(results.normalReadOnly).toEqual({ exitCode: 1, pasted: false, error: '' });
     expect(results.buttonControl).toEqual({ exitCode: 1, pasted: false, error: '' });
+  });
+
+  it('pastes into browser/custom overlay popups (like Comet AI box) while still rejecting File Explorer containers and read-only documents', async () => {
+    const { script } = await captureVerifyPasteScript();
+    const results = runVerifyPasteCases(script, {
+      cometPopupPane: {
+        controlType: 'Pane',
+        isEnabled: true,
+        isPassword: false,
+        frameworkId: 'Chrome',
+        hasFocusableDescendant: true,
+        processName: 'comet',
+      },
+      cometPopupMenu: {
+        controlType: 'Menu',
+        isEnabled: true,
+        isPassword: false,
+        frameworkId: 'Chrome',
+        hasFocusableDescendant: true,
+        processName: 'comet',
+      },
+      cometPopupWithCaret: {
+        controlType: 'Pane',
+        isEnabled: true,
+        isPassword: false,
+        frameworkId: 'Chrome',
+        hasFocusableDescendant: true,
+        hasWin32Caret: true,
+        processName: 'comet',
+      },
+      nullElementInBrowserPopup: {
+        nullElement: true,
+        processName: 'comet',
+      },
+      explorerContainerPane: {
+        controlType: 'Pane',
+        isEnabled: true,
+        isPassword: false,
+        hasFocusableDescendant: true,
+        processName: 'explorer',
+      },
+      readOnlyDocumentNoCaret: {
+        controlType: 'Document',
+        isEnabled: true,
+        isPassword: false,
+        frameworkId: 'Chrome',
+        textPattern: { isReadOnly: true, initial: 'Article text' },
+        processName: 'comet',
+      },
+      readOnlyDocumentWithCaret: {
+        controlType: 'Document',
+        isEnabled: true,
+        isPassword: false,
+        frameworkId: 'Chrome',
+        textPattern: { isReadOnly: true, initial: 'Article text' },
+        hasWin32Caret: true,
+        processName: 'comet',
+      },
+    });
+
+    // Browser/custom overlay popups without confirmed UIA patterns still paste as unconfirmed (exit 2).
+    expect(results.cometPopupPane).toEqual({ exitCode: 2, pasted: true, error: '' });
+    expect(results.cometPopupMenu).toEqual({ exitCode: 2, pasted: true, error: '' });
+    expect(results.nullElementInBrowserPopup).toEqual({ exitCode: 2, pasted: true, error: '' });
+
+    // An active Win32 caret confirms a live text input (exit 0), even inside a popup or Document wrapper.
+    expect(results.cometPopupWithCaret).toEqual({ exitCode: 0, pasted: true, error: '' });
+    expect(results.readOnlyDocumentWithCaret).toEqual({ exitCode: 0, pasted: true, error: '' });
+
+    // File Explorer containers and read-only web documents without a caret are still rejected safely.
+    expect(results.explorerContainerPane).toEqual({ exitCode: 1, pasted: false, error: '' });
+    expect(results.readOnlyDocumentNoCaret).toEqual({ exitCode: 1, pasted: false, error: '' });
   });
 });
