@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   isOwnProcessWindow,
   isWindowActuallyFocused,
   nativeWindowId,
+  reconcileWindowsMinimizeFocus,
+  reconcileWindowsShowFocus,
   type FocusableWindow,
   type WindowFocusDeps,
+  type WindowReconcileDeps,
 } from '../../electron/windowFocus';
 
 function handle64(hwnd: bigint): Buffer {
@@ -106,5 +109,79 @@ describe('isOwnProcessWindow', () => {
   it('returns false when Win32 is unavailable or on non-Windows platforms', () => {
     expect(isOwnProcessWindow('12345', makeDeps({ win32Available: () => false }))).toBe(false);
     expect(isOwnProcessWindow('12345', makeDeps({ platform: 'darwin' }))).toBe(false);
+  });
+});
+
+function makeReconcileDeps(overrides: Partial<WindowReconcileDeps> = {}): WindowReconcileDeps {
+  return {
+    platform: 'win32',
+    win32Available: () => true,
+    foregroundWindow: () => '999111',
+    placeWindowBehind: vi.fn(),
+    deactivateWindow: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('reconcileWindowsShowFocus', () => {
+  it('leaves the window alone when Windows granted it real foreground focus', () => {
+    const win = makeWindow({ getNativeWindowHandle: () => handle64(656788n) });
+    const deps = makeReconcileDeps({ foregroundWindow: () => '656788' });
+    expect(reconcileWindowsShowFocus(win, deps)).toBe(false);
+    expect(deps.placeWindowBehind).not.toHaveBeenCalled();
+    expect(deps.deactivateWindow).not.toHaveBeenCalled();
+  });
+
+  it('moves the window behind the foreground app and clears stale focus when Windows denied foreground', () => {
+    const win = makeWindow({ getNativeWindowHandle: () => handle64(656788n) });
+    const deps = makeReconcileDeps({ foregroundWindow: () => '999111' });
+    expect(reconcileWindowsShowFocus(win, deps)).toBe(true);
+    expect(deps.placeWindowBehind).toHaveBeenCalledWith('656788', '999111');
+    expect(deps.deactivateWindow).toHaveBeenCalledWith('656788');
+  });
+
+  it('still clears stale focus and drops topmost when there is no foreground window', () => {
+    const win = makeWindow({ getNativeWindowHandle: () => handle64(656788n) });
+    const deps = makeReconcileDeps({ foregroundWindow: () => '0' });
+    expect(reconcileWindowsShowFocus(win, deps)).toBe(true);
+    expect(deps.placeWindowBehind).toHaveBeenCalledWith('656788', '0');
+    expect(deps.deactivateWindow).toHaveBeenCalledWith('656788');
+  });
+
+  it('is a no-op on non-Windows, when Win32 is unavailable, or when the window is destroyed/hidden', () => {
+    const win = makeWindow();
+    const macDeps = makeReconcileDeps({ platform: 'darwin' });
+    expect(reconcileWindowsShowFocus(win, macDeps)).toBe(false);
+    expect(macDeps.placeWindowBehind).not.toHaveBeenCalled();
+
+    const noWin32 = makeReconcileDeps({ win32Available: () => false });
+    expect(reconcileWindowsShowFocus(win, noWin32)).toBe(false);
+    expect(noWin32.placeWindowBehind).not.toHaveBeenCalled();
+
+    const hiddenDeps = makeReconcileDeps();
+    expect(reconcileWindowsShowFocus(makeWindow({ isVisible: () => false }), hiddenDeps)).toBe(false);
+    expect(reconcileWindowsShowFocus(makeWindow({ isDestroyed: () => true }), hiddenDeps)).toBe(false);
+    expect(hiddenDeps.placeWindowBehind).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcileWindowsMinimizeFocus', () => {
+  it('clears stale focus when a minimized window is not the Windows foreground window', () => {
+    const win = makeWindow({ isMinimized: () => true, isVisible: () => false, getNativeWindowHandle: () => handle64(656788n) });
+    const deps = makeReconcileDeps({ foregroundWindow: () => '999111' });
+    expect(reconcileWindowsMinimizeFocus(win, deps)).toBe(true);
+    expect(deps.deactivateWindow).toHaveBeenCalledWith('656788');
+    expect(deps.placeWindowBehind).not.toHaveBeenCalled();
+  });
+
+  it('does not deactivate when the window is still foreground or on non-Windows', () => {
+    const win = makeWindow({ getNativeWindowHandle: () => handle64(656788n) });
+    const fgDeps = makeReconcileDeps({ foregroundWindow: () => '656788' });
+    expect(reconcileWindowsMinimizeFocus(win, fgDeps)).toBe(false);
+    expect(fgDeps.deactivateWindow).not.toHaveBeenCalled();
+
+    const linuxDeps = makeReconcileDeps({ platform: 'linux' });
+    expect(reconcileWindowsMinimizeFocus(win, linuxDeps)).toBe(false);
+    expect(linuxDeps.deactivateWindow).not.toHaveBeenCalled();
   });
 });

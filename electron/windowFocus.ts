@@ -1,4 +1,4 @@
-import { foregroundWindow, win32Available, windowProcessId } from './win32';
+import { deactivateWindow, foregroundWindow, placeWindowBehind, win32Available, windowProcessId } from './win32';
 
 export interface FocusableWindow {
   isDestroyed(): boolean;
@@ -16,12 +16,28 @@ export interface WindowFocusDeps {
   windowProcessId: (windowId: string) => number;
 }
 
+export interface WindowReconcileDeps {
+  platform: NodeJS.Platform;
+  win32Available: () => boolean;
+  foregroundWindow: () => string;
+  placeWindowBehind: (windowId: string, afterWindowId: string) => boolean | void;
+  deactivateWindow: (windowId: string) => void;
+}
+
 const defaultDeps: WindowFocusDeps = {
   platform: process.platform,
   pid: process.pid,
   win32Available,
   foregroundWindow,
   windowProcessId,
+};
+
+const defaultReconcileDeps: WindowReconcileDeps = {
+  platform: process.platform,
+  win32Available,
+  foregroundWindow,
+  placeWindowBehind,
+  deactivateWindow,
 };
 
 /** Reads the OS window handle (HWND on Windows) in the same decimal format as foregroundWindow(). */
@@ -72,4 +88,43 @@ export function isOwnProcessWindow(
   if (deps.platform !== 'win32' || !deps.win32Available() || !windowId || windowId === '0') return false;
   const fgPid = deps.windowProcessId(windowId);
   return fgPid !== 0 && fgPid === deps.pid;
+}
+
+/**
+ * Reconciles Z-order and activation right after `win.show()` on Windows.
+ *
+ * Electron's `NativeWindowViews::Show()` calls Chromium's `HWNDMessageHandler::Activate()`, which
+ * runs `SetWindowPos(hwnd, HWND_TOP)` followed by `SetForegroundWindow(hwnd)`. When Windows'
+ * foreground lock rejects `SetForegroundWindow`, the window stays trapped visually above the real
+ * foreground window (so clicking that window outside Yap Yap never raises it) and stuck thinking
+ * it is focused. Placing `win` behind the real foreground window and sending inactive messages
+ * restores normal Windows behavior.
+ */
+export function reconcileWindowsShowFocus(
+  win: FocusableWindow | null | undefined,
+  deps: WindowReconcileDeps = defaultReconcileDeps,
+): boolean {
+  if (deps.platform !== 'win32' || !deps.win32Available()) return false;
+  if (!win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return false;
+  const id = nativeWindowId(win.getNativeWindowHandle());
+  if (!id) return false;
+  const fg = deps.foregroundWindow();
+  if (fg === id) return false;
+  deps.placeWindowBehind(id, fg);
+  deps.deactivateWindow(id);
+  return true;
+}
+
+/** Clears stale Chromium active state after minimizing a window that does not own Windows foreground. */
+export function reconcileWindowsMinimizeFocus(
+  win: FocusableWindow | null | undefined,
+  deps: WindowReconcileDeps = defaultReconcileDeps,
+): boolean {
+  if (deps.platform !== 'win32' || !deps.win32Available()) return false;
+  if (!win || win.isDestroyed()) return false;
+  const id = nativeWindowId(win.getNativeWindowHandle());
+  if (!id) return false;
+  if (deps.foregroundWindow() === id) return false;
+  deps.deactivateWindow(id);
+  return true;
 }

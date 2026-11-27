@@ -55,7 +55,12 @@ import {
 import { markdownToClipboardHtml } from './richClipboard';
 import { confirmRewrite, expectedRewrite, normalizeSelectionText, type RewritePasteResult } from './rewriteVerification';
 import { clipboardSequence, foregroundWindow, modifiersDown, win32Available } from './win32';
-import { isOwnProcessWindow, isWindowActuallyFocused } from './windowFocus';
+import {
+  isOwnProcessWindow,
+  isWindowActuallyFocused,
+  reconcileWindowsMinimizeFocus,
+  reconcileWindowsShowFocus,
+} from './windowFocus';
 import { captureDictationContext, captureSelection, insertWaylandText, isWayland, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
@@ -111,6 +116,14 @@ function applyAppearance(appearance: Appearance) {
 
 function isMainWindowFocused(): boolean {
   return isWindowActuallyFocused(mainWindow);
+}
+
+function showMainWindow(focus = false): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  if (focus) mainWindow.focus();
+  if (reconcileWindowsShowFocus(mainWindow)) syncShortcutSuspension();
 }
 
 function syncShortcutSuspension() {
@@ -174,7 +187,7 @@ function createMainWindow(): void {
   });
 
   // The page paints its themed splash first, so the window never shows blank.
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => showMainWindow());
 
   if (isDev) {
     void mainWindow.loadURL('http://localhost:5173');
@@ -197,7 +210,10 @@ function createMainWindow(): void {
   mainWindow.on('focus', syncShortcutSuspension);
   mainWindow.on('blur', syncShortcutSuspension);
   mainWindow.on('hide', syncShortcutSuspension);
-  mainWindow.on('minimize', syncShortcutSuspension);
+  mainWindow.on('minimize', () => {
+    reconcileWindowsMinimizeFocus(mainWindow);
+    syncShortcutSuspension();
+  });
   mainWindow.webContents.on('render-process-gone', () => {
     shortcutEditorOpen = false;
     syncShortcutSuspension();
@@ -491,10 +507,7 @@ function createTray(): void {
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Open Yap Yap',
-        click: () => {
-          mainWindow?.show();
-          mainWindow?.focus();
-        },
+        click: () => showMainWindow(true),
       },
       { type: 'separator' },
       {
@@ -519,10 +532,7 @@ function createTray(): void {
       },
     ]);
     tray.setContextMenu(contextMenu);
-    tray.on('double-click', () => {
-      mainWindow?.show();
-      mainWindow?.focus();
-    });
+    tray.on('double-click', () => showMainWindow(true));
   } catch (error) {
     console.warn('Yap Yap could not create the system tray', error);
   }
@@ -952,9 +962,7 @@ app.on('second-instance', () => {
     if (app.isReady()) createMainWindow();
     return;
   }
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  showMainWindow(true);
 });
 
 app.whenReady().then(() => {
@@ -1184,9 +1192,7 @@ app.whenReady().then(() => {
       return;
     }
     if (action.type === 'edit-targets') {
-      if (mainWindow?.isMinimized()) mainWindow.restore();
-      mainWindow?.show();
-      mainWindow?.focus();
+      showMainWindow(true);
     }
     mainWindow?.webContents.send('hud:action', action);
   });
