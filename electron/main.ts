@@ -18,6 +18,12 @@ import * as path from 'path';
 import { canHookShortcut, keyHookAvailable, pasteWithKeyboard, registerModifierShortcuts, resetModifierShortcuts, setMenuMasking, stopModifierShortcuts, swallowsKeys } from './modifierShortcuts';
 import { removeDuplicateShortcuts, ShortcutGroup, shortcutModes, toElectronAccelerator } from './shortcutBindings';
 import { retargetLinuxAutostart, setLinuxAutostart } from './linuxAutostart';
+import {
+  launchedHiddenAtLogin,
+  linuxAutostartCommand,
+  loginItemSettings,
+  shouldShowMainWindowOnSecondInstance,
+} from './loginLaunch';
 import { setRecordingMute } from './systemAudio';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import { createUpdateLogger, type UpdateLogger } from './updateLog';
@@ -157,7 +163,7 @@ function resetHud() {
   syncEscapeCancel();
 }
 
-function createMainWindow(): void {
+function createMainWindow(options: { startHidden?: boolean } = {}): void {
   nativeTheme.themeSource = readSavedAppearance();
   mainWindow = new BrowserWindow({
     width: 1140,
@@ -187,7 +193,11 @@ function createMainWindow(): void {
   });
 
   // The page paints its themed splash first, so the window never shows blank.
-  mainWindow.once('ready-to-show', () => showMainWindow());
+  // On OS login launches, keep it tucked in the tray (falling back to showing if tray failed).
+  mainWindow.once('ready-to-show', () => {
+    if (options.startHidden && tray) return;
+    showMainWindow();
+  });
 
   if (isDev) {
     void mainWindow.loadURL('http://localhost:5173');
@@ -897,7 +907,7 @@ function inPlaceUpdater() {
     autoUpdater.on('error', () => undefined);
     autoUpdater.on('appimage-filename-updated', (file) => {
       try {
-        retargetLinuxAutostart(app.getPath('appData'), [file]);
+        retargetLinuxAutostart(app.getPath('appData'), linuxAutostartCommand(file));
       } catch (error) {
         console.warn(error);
       }
@@ -957,7 +967,8 @@ const updates = new UpdateController({
 // registering the shortcuts and checking for updates a second time. (Dev runs skip the lock so
 // `npm run dev` still starts while the installed app is open.)
 if (app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0);
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  if (!shouldShowMainWindowOnSecondInstance(argv)) return;
   if (!mainWindow || mainWindow.isDestroyed()) {
     if (app.isReady()) createMainWindow();
     return;
@@ -968,9 +979,14 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   if (isDev) app.dock?.setIcon(appIconPath);
   warmDictationContext();
-  createMainWindow();
-  createHudWindow();
   createTray();
+  const startHidden = launchedHiddenAtLogin({
+    platform: process.platform,
+    argv: process.argv,
+    loginItem: process.platform === 'darwin' ? app.getLoginItemSettings() : undefined,
+  });
+  createMainWindow({ startHidden });
+  createHudWindow();
   if (app.isPackaged) void updates.check(true);
 
   ipcMain.on('window:minimize', () => mainWindow?.minimize());
@@ -990,11 +1006,12 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('app:set-login-item', (event, enabled: boolean) => {
     if (!fromMainFrame(event) || typeof enabled !== 'boolean') return;
+    // Only installed builds can start independently of the development server.
+    if (!app.isPackaged) return;
     if (process.platform === 'linux') {
-      // Only installed builds can start independently of the development server.
-      if (app.isPackaged) setLinuxAutostart(app.getPath('appData'), enabled, [process.env.APPIMAGE || process.execPath]);
+      setLinuxAutostart(app.getPath('appData'), enabled, linuxAutostartCommand(process.env.APPIMAGE || process.execPath));
     } else {
-      app.setLoginItemSettings({ openAtLogin: enabled });
+      app.setLoginItemSettings(loginItemSettings(process.platform, enabled));
     }
   });
 
@@ -1385,10 +1402,10 @@ app.on('before-quit', (event) => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createMainWindow();
   } else {
-    mainWindow?.show();
+    showMainWindow(true);
   }
 });
 

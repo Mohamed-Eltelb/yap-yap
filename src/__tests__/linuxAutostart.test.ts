@@ -26,9 +26,9 @@ it('follows the AppImage to its new file name after an update, only while enable
     const entry = join(config, 'autostart', 'com.yapyap.desktop.desktop');
     retargetLinuxAutostart(config, ['/apps/Yap-Yap-1.1.0-linux-x64.AppImage']);
     expect(existsSync(entry)).toBe(false);
-    setLinuxAutostart(config, true, ['/apps/Yap-Yap-1.0.0-linux-x64.AppImage']);
-    retargetLinuxAutostart(config, ['/apps/Yap-Yap-1.1.0-linux-x64.AppImage']);
-    expect(readFileSync(entry, 'utf8')).toContain('Exec="/apps/Yap-Yap-1.1.0-linux-x64.AppImage"\n');
+    setLinuxAutostart(config, true, ['/apps/Yap-Yap-1.0.0-linux-x64.AppImage', '--hidden']);
+    retargetLinuxAutostart(config, ['/apps/Yap-Yap-1.1.0-linux-x64.AppImage', '--hidden']);
+    expect(readFileSync(entry, 'utf8')).toContain('Exec="/apps/Yap-Yap-1.1.0-linux-x64.AppImage" "--hidden"\n');
   } finally {
     rmSync(config, { recursive: true, force: true });
   }
