@@ -2292,10 +2292,12 @@ html.dark .yy-personalization-options > div {
 .yy-hud-answer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(592px, calc(100vw - 16px));
-  height: min(310px, calc(100vh - 20px));
-  padding: 10px 12px 12px;
+  gap: 10px;
+  width: min(736px, calc(100vw - 16px));
+  min-height: min(360px, calc(100vh - 20px));
+  max-height: min(636px, calc(100vh - 20px));
+  overflow: hidden;
+  padding: 12px 14px 14px;
 }
 
 .yy-hud-answer-brand,
@@ -2310,6 +2312,7 @@ html.dark .yy-personalization-options > div {
 
 .yy-hud-answer-brand {
   position: relative;
+  flex-shrink: 0;
   justify-content: center;
   min-height: 29px;
   font-size: 16px;
@@ -2321,7 +2324,18 @@ html.dark .yy-personalization-options > div {
   right: 0;
 }
 
+.yy-hud-answer-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .yy-hud-question {
+  flex-shrink: 0;
   padding: 0 5px;
   color: var(--text-secondary);
   font-size: 13px;
@@ -2357,7 +2371,7 @@ html.dark .yy-personalization-options > div {
 
 .yy-selection-quote p[data-open] {
   display: block;
-  max-height: 140px;
+  max-height: 220px;
   overflow: auto;
 }
 
@@ -2372,21 +2386,22 @@ html.dark .yy-personalization-options > div {
 }
 
 .yy-hud-selection {
+  flex-shrink: 0;
   margin: -2px 5px 0 28px;
   font-size: 12.5px;
 }
 
 .yy-hud-answer-card {
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
-  min-height: 0;
+  min-width: 0;
   border-radius: 11px;
   background: var(--bg-card-solid);
 }
 
 .yy-hud-answer-card header {
-  padding: 7px 11px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 14px;
   font-weight: 650;
@@ -2424,11 +2439,10 @@ html.dark .yy-personalization-options > div {
 }
 
 .yy-hud-answer-content {
-  min-height: 0;
-  overflow: auto;
-  padding: 12px 13px;
+  min-width: 0;
+  padding: 14px 16px;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .yy-answer-markdown {

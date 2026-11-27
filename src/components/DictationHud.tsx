@@ -385,24 +385,26 @@ export function DictationHud({
             <span><YapLogo className="size-5" />Yap Yap</span>
             <button type="button" className="yy-hud-icon" aria-label="Close answer" onClick={onDismissResult}><X size={17} /></button>
           </header>
-          {questionText && (
-            <div className="yy-hud-question">
-              <Mic size={15} aria-hidden="true" />
-              <p dir="auto">{questionText}</p>
-              <CopyButton label="Copy question" onCopy={() => onCopyResult(questionText)} />
+          <div className="yy-hud-answer-body">
+            {questionText && (
+              <div className="yy-hud-question">
+                <Mic size={15} aria-hidden="true" />
+                <p dir="auto">{questionText}</p>
+                <CopyButton label="Copy question" onCopy={() => onCopyResult(questionText)} />
+              </div>
+            )}
+            {hud.selectionText && <SelectionQuote text={hud.selectionText} className="yy-hud-selection" />}
+            <div className="yy-hud-answer-card">
+              <header><Sparkles size={16} aria-hidden="true" /><h2>{hud.rewritePaste ? 'Rewrite' : 'Answer'}</h2>
+                {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}
+                {resultText && <CopyButton label={hud.rewritePaste ? 'Copy rewrite' : 'Copy answer'}
+                  onCopy={() => onCopyResult(hud.rewritePaste ? resultText : answerAsPlainText(resultText))} />}
+              </header>
+              {hud.rewritePaste && <p className="yy-hud-rewrite-status" role="status">
+                The rewrite could not be pasted.
+              </p>}
+              <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
             </div>
-          )}
-          {hud.selectionText && <SelectionQuote text={hud.selectionText} className="yy-hud-selection" />}
-          <div className="yy-hud-answer-card">
-            <header><Sparkles size={16} aria-hidden="true" /><h2>{hud.rewritePaste ? 'Rewrite' : 'Answer'}</h2>
-              {hud.searchedWeb && <span className="yy-hud-answer-source"><Globe size={13} aria-hidden="true" />Searched the web</span>}
-              {resultText && <CopyButton label={hud.rewritePaste ? 'Copy rewrite' : 'Copy answer'}
-                onCopy={() => onCopyResult(hud.rewritePaste ? resultText : answerAsPlainText(resultText))} />}
-            </header>
-            {hud.rewritePaste && <p className="yy-hud-rewrite-status" role="status">
-              The rewrite could not be pasted.
-            </p>}
-            <AnswerMarkdown text={resultText} className="yy-hud-answer-content" />
           </div>
         </section>
       )}

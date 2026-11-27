@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { HUD_SHRINK_DELAY_MS, hudHideDelay, HudPlacer, hudWindowSize } from '../../electron/hudBounds';
 
 it('uses one HUD window size for every screen, so it never resizes on screen', () => {
-  expect(hudWindowSize({ width: 2048, height: 1104 })).toEqual({ width: 620, height: 334 });
+  expect(hudWindowSize({ width: 2048, height: 1104 })).toEqual({ width: 760, height: 660 });
 });
 
 it('fits the HUD window on a small screen', () => {

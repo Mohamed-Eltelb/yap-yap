@@ -192,3 +192,22 @@ it('renders multi-line raw HTML and script tags safely as literal text, while un
   expect(html).toContain('<p>&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;</p>');
   expect(html).toContain('<p>See Docs .</p>');
 });
+
+it('keeps the brand header pinned above a single scrollable answer body containing quote and answer card', () => {
+  const html = renderHud({
+    status: 'result',
+    mode: 'ask',
+    levels: [],
+    questionText: 'What is the total?',
+    selectionText: 'Subtotal $300\nShipping $33\nTotal $333',
+    resultText: 'The total is $333.00.',
+  });
+
+  const brandEnd = html.indexOf('</header>');
+  const bodyStart = html.indexOf('<div class="yy-hud-answer-body">');
+  const quoteStart = html.indexOf('yy-hud-selection');
+  const cardStart = html.indexOf('yy-hud-answer-card');
+  expect(bodyStart).toBeGreaterThan(brandEnd);
+  expect(quoteStart).toBeGreaterThan(bodyStart);
+  expect(cardStart).toBeGreaterThan(quoteStart);
+});

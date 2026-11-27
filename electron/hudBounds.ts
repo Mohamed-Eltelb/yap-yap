@@ -11,7 +11,7 @@ export interface Size {
  * Resizing a transparent window while it is on screen makes Windows flash the old frame,
  * so it is never resized there; the empty part lets clicks through to the app below.
  */
-export const HUD_WINDOW_SIZE: Size = { width: 620, height: 334 };
+export const HUD_WINDOW_SIZE: Size = { width: 760, height: 660 };
 
 /** The HUD window size, made to fit the work area. */
 export function hudWindowSize(workArea: Size): Size {
