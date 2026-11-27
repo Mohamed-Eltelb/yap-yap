@@ -152,12 +152,12 @@ def insert_text(node, text):
                     Atspi.Text.add_selection(node, start, end)
     return False
 
-def read_field(pid, mode, browser):
+def read_field(pid, mode, browser, skip_pid=0):
     desktop = Atspi.get_desktop(0)
     for index in range(desktop.get_child_count()):
         app = desktop.get_child_at_index(index)
-        # pid 0: the foreground app is unknown (native Wayland); any app with the active window.
-        if not app or (pid and app.get_process_id() != pid):
+        # pid 0: the foreground app is unknown (native Wayland); any other app with the active window.
+        if not app or (pid and app.get_process_id() != pid) or (not pid and skip_pid and app.get_process_id() == skip_pid):
             continue
         # Limit the search to an active top-level window in the foreground process.
         queue = deque()
@@ -206,7 +206,7 @@ def read_field(pid, mode, browser):
                                 found = dict(text=text, editable=editable)
             elif mode == 'insert':
                 if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE):
-                    if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type') == 'password':
+                    if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type', '').lower() == 'password':
                         return
                     if node.get_text_iface():
                         return dict(inserted=insert_text(node, sys.stdin.read()))
@@ -251,7 +251,7 @@ def read_field(pid, mode, browser):
             return dict(editable=False) if focused_page and not queue else None
         return dict(url=url) if url and mode == 'context' else None
 
-print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2], len(sys.argv) > 3 and sys.argv[3] == 'browser') or {}, ensure_ascii=False))
+print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2], len(sys.argv) > 3 and sys.argv[3] == 'browser', int(sys.argv[4]) if len(sys.argv) > 4 else 0) or {}, ensure_ascii=False))
 `;
 
 // An X11 owner can tell when it took the primary selection. Ask separately: an owner that

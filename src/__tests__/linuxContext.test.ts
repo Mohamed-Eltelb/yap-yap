@@ -61,4 +61,18 @@ describe.runIf(process.platform === 'linux')('Wayland context', () => {
     finishInsert!(null, '{"inserted":true}');
     expect(await next).toBe(true);
   });
+
+  it('passes its own process id to skip Yap Yap windows when scanning with pid 0', async () => {
+    execFile.mockImplementation((_file, args, _options, done) => {
+      if (args[3] === 'selection') {
+        expect(args.slice(2)).toEqual(['0', 'selection', 'app', String(process.pid)]);
+        done(null, '{"text":"chosen","editable":true}');
+      } else {
+        throw new Error(`Unexpected probe: ${args.slice(2).join(' ')}`);
+      }
+      return {};
+    });
+    const { captureSelection } = await import('../../electron/dictationContext');
+    expect(await captureSelection()).toEqual({ text: 'chosen', truncated: false, editable: true });
+  });
 });

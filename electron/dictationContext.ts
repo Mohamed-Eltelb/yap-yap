@@ -299,7 +299,9 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 // The probe treats a focused field as an address bar only in a browser. Other apps can
 // put ordinary text fields, such as a find bar, in a toolbar.
 async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert', browser = false, input?: string): Promise<Record<string, unknown>> {
-  const output = await runContextProbe('/usr/bin/python3', ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'], 1 << 18, mode === 'insert' ? 4500 : 1500, input);
+  const args = ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'];
+  if (pid === '0') args.push(String(process.pid));
+  const output = await runContextProbe('/usr/bin/python3', args, 1 << 18, mode === 'insert' ? 4500 : 1500, input);
   try {
     return JSON.parse(output);
   } catch {
