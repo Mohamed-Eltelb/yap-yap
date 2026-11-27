@@ -184,6 +184,20 @@ describe('Ask anything rewrite', () => {
     expect(desktop.api.replaceSelection).toHaveBeenCalledTimes(1);
     expect(desktop.api.pasteText).not.toHaveBeenCalled();
   });
+
+  it('hands a Linux editable selection rewrite to desktop.replaceSelection', async () => {
+    (window as unknown as { yapyap: Record<string, unknown> }).yapyap.platform = 'linux';
+    seed({ settings: { askReplaceSelection: true } });
+    const selection = { text: 'Original', truncated: false, editable: true };
+    desktop.api.captureSelection.mockResolvedValue(selection);
+    engine.processTranscriptWithLlm.mockResolvedValue({ finalText: 'Rewritten', replaceSelection: true });
+
+    await dictate('ask');
+
+    expect(desktop.api.replaceSelection).toHaveBeenCalledExactlyOnceWith(selection, 'Rewritten', false, true);
+    expect(desktop.api.pasteText).not.toHaveBeenCalled();
+    expect(lastHud()?.status).toBe('idle');
+  });
 });
 
 describe('Dictation flow', () => {
@@ -587,7 +601,7 @@ describe('Snippets', () => {
     const loadAudio = vi.fn(async () => 'data:audio/webm;base64,AAAA');
     (window as unknown as { yapyap: Record<string, unknown> }).yapyap.loadAudio = loadAudio;
     // The recording comes back as a data URL, which the app turns into audio with fetch.
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['audio']))));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('audio')));
     render(<App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /^History$/ }));

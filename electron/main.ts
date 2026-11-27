@@ -68,6 +68,7 @@ import {
   reconcileWindowsShowFocus,
 } from './windowFocus';
 import { captureDictationContext, captureSelection, insertWaylandText, isWayland, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
+import { plainTextFromClipboardSnapshot, writeLinuxClipboardText } from './linuxClipboard';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -430,14 +431,25 @@ const hudPlacer = new HudPlacer();
 
 // Mapping the HUD can take keyboard focus on Wayland, even with showInactive().
 let readingWaylandTarget = 0;
-async function withWaylandTarget<T>(read: () => Promise<T>): Promise<T> {
+async function withWaylandTarget<T>(read: () => Promise<T>, keepHidden?: (result: T) => boolean): Promise<T> {
   if (!isWayland) return read();
   readingWaylandTarget++;
+  const payloadBefore = hudPayload;
+  let shouldKeepHidden = false;
   try {
-    if (hudWindow?.isVisible()) hudWindow.hide();
-    return await read();
+    if (hudWindow?.isVisible()) {
+      hudWindow.hide();
+      // Give the compositor a moment to return window and text-input focus to the editor.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    const result = await read();
+    shouldKeepHidden = keepHidden?.(result) === true;
+    return result;
   } finally {
     readingWaylandTarget--;
+    if (shouldKeepHidden && hudPayload === payloadBefore) {
+      hudPayload = { show: false };
+    }
     updateHudWindow();
   }
 }
@@ -612,6 +624,31 @@ function registerAppShortcuts(shortcuts: ShortcutGroup): boolean {
 }
 
 type ClipboardSnapshot = Array<Record<string, Blob | Electron.ClipboardBookmark>>;
+const freshHighlight = freshHighlights();
+
+async function syncLinuxPrimaryAfterClipboardWrite(): Promise<void> {
+  if (process.platform !== 'linux' || isWayland) return;
+  const [text, stamp] = await Promise.all([
+    clipboard.selection?.readText().catch(() => undefined),
+    linuxPrimaryStamp().catch(() => undefined),
+  ]);
+  freshHighlight({ text, stamp });
+}
+
+async function writeClipboardText(text: string): Promise<void> {
+  if (isWayland) {
+    if (!isMainWindowFocused() && await writeLinuxClipboardText(text, true)) return;
+    await clipboard.writeText(text);
+    return;
+  }
+  if (process.platform === 'linux') {
+    if (await writeLinuxClipboardText(text, false)) return;
+    await clipboard.writeText(text);
+    await syncLinuxPrimaryAfterClipboardWrite();
+    return;
+  }
+  await clipboard.writeText(text);
+}
 
 // Payloads are read out now, since the items returned by read() follow the live clipboard.
 async function snapshotClipboard(): Promise<ClipboardSnapshot> {
@@ -628,8 +665,16 @@ async function snapshotClipboard(): Promise<ClipboardSnapshot> {
 
 async function restoreClipboard(previous: ClipboardSnapshot): Promise<void> {
   const items = previous.filter((item) => Object.keys(item).length).map((item) => new ClipboardItem(item));
-  if (items.length) await clipboard.write(items);
-  else clipboard.clear();
+  if (!items.length) {
+    clipboard.clear();
+    return;
+  }
+  if (process.platform === 'linux' && !isWayland) {
+    const plain = await plainTextFromClipboardSnapshot(previous);
+    if (plain !== undefined && await writeLinuxClipboardText(plain, false)) return;
+  }
+  await clipboard.write(items);
+  if (process.platform === 'linux' && !isWayland) await syncLinuxPrimaryAfterClipboardWrite();
 }
 
 async function readZedCopyMetadata(): Promise<string | null | undefined> {
@@ -1033,33 +1078,19 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  ipcMain.handle('selection:replace', async (
-    event, selection: SelectedText, text: string, keepOnClipboard?: boolean, allowCopy?: boolean,
-  ): Promise<RewritePasteResult> => {
-    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32'
-      || isMainWindowFocused() || isOwnProcessWindow(foregroundWindow())
-      || !selection || typeof text !== 'string' || !text) return 'not-sent';
-    return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
-  });
-  ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
-    if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
-    if (isWayland) {
-      const inserted = await withWaylandTarget(() => insertWaylandText(text));
-      if (keepOnClipboard === true) await clipboard.writeText(text).catch(console.warn);
-      return inserted;
-    }
+  async function pasteViaClipboard(text: string, keepOnClipboard: boolean): Promise<boolean> {
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
-      keepOnClipboard === true ? undefined : saveClipboardBackup(),
+      keepOnClipboard ? undefined : saveClipboardBackup(),
     ]);
     if (target === 'page') {
       if (previous) discardClipboardBackup(previous);
       return false;
     }
     const sequence = process.platform === 'win32' && nativeSelectionAvailable()
-      ? (nativeWriteClipboardText(text, keepOnClipboard !== true) || (await clipboard.writeText(text), clipboardSequence()))
-      : (await clipboard.writeText(text), undefined);
+      ? (nativeWriteClipboardText(text, !keepOnClipboard) || (await clipboard.writeText(text), clipboardSequence()))
+      : (await writeClipboardText(text), undefined);
     try {
       const sent = await pasteIntoFocusedField();
       return sent && target !== 'unconfirmed';
@@ -1067,6 +1098,40 @@ app.whenReady().then(() => {
       // The paste goes through the clipboard; put back what the user had there once the target has read it.
       if (previous) restoreAfterPaste(previous, text, 600, sequence);
     }
+  }
+
+  ipcMain.handle('selection:replace', async (
+    event, selection: SelectedText, text: string, keepOnClipboard?: boolean, allowCopy?: boolean,
+  ): Promise<RewritePasteResult> => {
+    if (event.sender !== mainWindow?.webContents || isMainWindowFocused()
+      || !selection || typeof text !== 'string' || !text) return 'not-sent';
+    if (isWayland) {
+      // Keep the HUD hidden across both the selection re-read and insertion so the editor
+      // and its text-input/IBus focus are never disturbed twice.
+      const inserted = await withWaylandTarget(async () => {
+        const now = await captureSelection();
+        if (now?.text !== selection.text) return false;
+        return insertWaylandText(text);
+      }, (ok) => ok);
+      if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
+      return inserted ? 'confirmed' : 'not-sent';
+    }
+    if (process.platform === 'linux') {
+      const now = await captureSelection();
+      if (now?.text !== selection.text) return 'not-sent';
+      return (await pasteViaClipboard(text, keepOnClipboard === true)) ? 'unverified' : 'not-sent';
+    }
+    if (process.platform !== 'win32' || isOwnProcessWindow(foregroundWindow())) return 'not-sent';
+    return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
+  });
+  ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
+    if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
+    if (isWayland) {
+      const inserted = await withWaylandTarget(() => insertWaylandText(text), (ok) => ok);
+      if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
+      return inserted;
+    }
+    return pasteViaClipboard(text, keepOnClipboard === true);
   });
   ipcMain.on('clipboard:prepare-paste', (event) => {
     if (event.sender === mainWindow?.webContents && process.platform === 'win32') prepareWindowsPaste();
@@ -1077,7 +1142,6 @@ app.whenReady().then(() => {
     return withWaylandTarget(captureDictationContext);
   });
   // Text selected in another app, for Ask anything. Text selected in Yap Yap's own window is not read.
-  const freshHighlight = freshHighlights();
   ipcMain.handle('selection:capture', async (event, allowCopy?: boolean) => {
     if (event.sender !== mainWindow?.webContents) return;
     if (isMainWindowFocused()) {
@@ -1124,7 +1188,7 @@ app.whenReady().then(() => {
     return Promise.all(readOtherApps(app.getPath('appData')).map(async (data) => ({ ...data, icon: await installedAppIcon(data.app) })));
   });
   ipcMain.handle('clipboard:copy', async (event, text: string) => {
-    if (event.sender === mainWindow?.webContents) await clipboard.writeText(text);
+    if (event.sender === mainWindow?.webContents) await writeClipboardText(text);
   });
 
   ipcMain.on('hud:toggle', (event, payload: typeof hudPayload) => {
@@ -1205,7 +1269,7 @@ app.whenReady().then(() => {
   ipcMain.on('hud:action', async (event, action: HudAction) => {
     if (event.sender !== hudWindow?.webContents) return;
     if (action.type === 'copy' && typeof action.text === 'string') {
-      await clipboard.writeText(action.text).catch(console.warn);
+      await writeClipboardText(action.text).catch(console.warn);
       return;
     }
     if (action.type === 'edit-targets') {

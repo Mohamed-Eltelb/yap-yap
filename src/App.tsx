@@ -113,7 +113,9 @@ async function replaceSelectedText(
   allowCopy: boolean,
 ): Promise<boolean | RewritePasteResult> {
   try {
-    if (desktop.platform === 'win32') return await desktop.replaceSelection(selection, text, keepOnClipboard, allowCopy);
+    if (desktop.platform === 'win32' || desktop.platform === 'linux') {
+      return await desktop.replaceSelection(selection, text, keepOnClipboard, allowCopy);
+    }
     const now = await desktop.captureSelection?.(false);
     if (now?.text !== selection.text) return false;
     return await desktop.pasteText(text, keepOnClipboard);
