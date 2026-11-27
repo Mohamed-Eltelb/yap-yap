@@ -58,6 +58,7 @@ declare global {
       toggleHud: (show: boolean, state?: unknown) => void;
       hudReady: () => void;
       setHudIgnoreMouse: (ignore: boolean) => void;
+      setHudHitRects?: (rects: { left: number; top: number; right: number; bottom: number }[]) => void;
       sendHudAction: (action: HudAction) => void;
       onTriggerMode: (cb: (mode: DictationMode) => void) => () => void;
       onShortcutPhase?: (cb: (phase: 'armed' | 'list' | 'closed' | 'busy') => void) => () => void;

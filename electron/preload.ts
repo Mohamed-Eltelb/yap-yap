@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('yapyap', {
     ipcRenderer.send('hud:toggle', { show, state }),
   hudReady: () => ipcRenderer.send('hud:ready'),
   setHudIgnoreMouse: (ignore: boolean) => ipcRenderer.send('hud:ignore-mouse', ignore),
+  setHudHitRects: (rects: { left: number; top: number; right: number; bottom: number }[]) =>
+    ipcRenderer.send('hud:hit-rects', rects),
   sendHudAction: (action: HudAction) =>
     ipcRenderer.send('hud:action', action),
   onTriggerMode: (cb: (mode: 'dictate' | 'translate' | 'ask') => void) => {

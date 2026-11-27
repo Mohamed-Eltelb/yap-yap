@@ -24,7 +24,16 @@ import { createUpdateLogger, type UpdateLogger } from './updateLog';
 import { checkForUpdate, downloadInstaller, installsUpdatesInPlace } from './updates';
 import { UpdateController, type UpdateState } from './updateController';
 import type { HudAction } from './hudActions';
-import { hudHideDelay, HUD_SHRINK_DELAY_MS, HUD_WINDOW_SIZE, HudPlacer, hudWindowSize } from './hudBounds';
+import {
+  cursorOverHud,
+  hudHideDelay,
+  HUD_SHRINK_DELAY_MS,
+  HUD_WINDOW_SIZE,
+  HudPlacer,
+  hudWindowSize,
+  isAskAnswerHud,
+  type HudHitRect,
+} from './hudBounds';
 import { HudRefresher } from './hudRefresh';
 import { pasteIntoWindowsField, prepareWindowsPaste } from './windowsPaste';
 import { classifyZedCopy, copyPlanFor, copySelection, isExcel, isPowerPoint, type CopiedSelection } from './selectionCopy';
@@ -232,8 +241,8 @@ function newHudWindow(): BrowserWindow {
   window.webContents.on('will-frame-navigate', (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   // The window is larger than the HUD it draws; clicks on the transparent part
-  // go to the app underneath. The HUD page turns this off while hovered.
-  if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
+  // go to the app underneath. Main-process cursor hit-testing switches this off over the HUD.
+  if (process.platform !== 'linux') window.setIgnoreMouseEvents(true);
 
   // Only a navigation that went through replaces the page, so only then wait for it to say it
   // is ready again. Blocked ones (see will-frame-navigate) still start loading but keep the page,
@@ -241,8 +250,10 @@ function newHudWindow(): BrowserWindow {
   window.webContents.on('did-navigate', () => {
     if (window !== hudWindow) return;
     hudReady = false;
-    if (process.platform !== 'linux') window.setIgnoreMouseEvents(true, { forward: true });
-    window.hide();
+    stopHudMouseTracking();
+    hudHitRects = [];
+    if (process.platform !== 'linux') applyHudIgnoreMouse(window, true, true);
+    if (window.isVisible()) window.hide();
     hudEmpty = true;
     hudLog().info(`HUD window ${id} page loading`);
   });
@@ -272,6 +283,8 @@ function newHudWindow(): BrowserWindow {
     hudReady = false;
     hudWindow = null;
     hudEmpty = true;
+    hudHitRects = [];
+    stopHudMouseTracking();
     clearHudTimer();
     hudPlacer.forget();
   });
@@ -317,6 +330,9 @@ function swapInHudReplacement(): void {
   hudWindow = next;
   hudReady = true;
   hudEmpty = true;
+  hudHitRects = [];
+  hudMouseIgnored = true;
+  stopHudMouseTracking();
   hudDisplayId = undefined;
   hudShownStatus = undefined;
   hudPlacer.forget();
@@ -325,14 +341,56 @@ function swapInHudReplacement(): void {
 }
 
 let hudHideTimer: ReturnType<typeof setTimeout> | undefined;
+let hudShrinkTimer: ReturnType<typeof setTimeout> | undefined;
 /** The HUD window shows nothing (it stays on screen, letting clicks through). */
 let hudEmpty = true;
 /** The status the HUD window last showed, to know if a pill has to shrink out. */
 let hudShownStatus: string | undefined;
+let hudHitRects: HudHitRect[] = [];
+let hudMouseIgnored = true;
+let hudMouseTimer: ReturnType<typeof setInterval> | undefined;
+
+function applyHudIgnoreMouse(window: BrowserWindow, ignore: boolean, force = false): void {
+  if (process.platform === 'linux' || window.isDestroyed()) return;
+  if (!force && ignore === hudMouseIgnored) return;
+  hudMouseIgnored = ignore;
+  window.setIgnoreMouseEvents(ignore);
+}
+
+function stopHudMouseTracking(): void {
+  if (hudMouseTimer !== undefined) {
+    clearInterval(hudMouseTimer);
+    hudMouseTimer = undefined;
+  }
+}
+
+function syncHudMouse(): void {
+  if (!hudWindow || hudWindow.isDestroyed() || process.platform === 'linux') {
+    stopHudMouseTracking();
+    return;
+  }
+  if (hudEmpty || hudHitRects.length === 0 || !hudWindow.isVisible()) {
+    applyHudIgnoreMouse(hudWindow, true);
+    if (hudEmpty || hudHitRects.length === 0) stopHudMouseTracking();
+    return;
+  }
+  const inside = cursorOverHud(screen.getCursorScreenPoint(), hudWindow.getBounds(), hudHitRects);
+  applyHudIgnoreMouse(hudWindow, !inside);
+}
+
+function startHudMouseTracking(): void {
+  if (process.platform === 'linux') return;
+  syncHudMouse();
+  if (hudMouseTimer === undefined && !hudEmpty && hudHitRects.length > 0) {
+    hudMouseTimer = setInterval(syncHudMouse, 32);
+  }
+}
 
 function clearHudTimer() {
   clearTimeout(hudHideTimer);
   hudHideTimer = undefined;
+  clearTimeout(hudShrinkTimer);
+  hudShrinkTimer = undefined;
 }
 
 const hudPlacer = new HudPlacer();
@@ -359,12 +417,26 @@ function updateHudWindow(): void {
     // On Windows, hiding and re-showing the window breaks HUD button input.
     const hide = (window: BrowserWindow) => {
       window.webContents.send('hud:state', { status: 'idle', mode: 'dictate', levels: [] });
+      stopHudMouseTracking();
+      hudHitRects = [];
       if (process.platform === 'linux') window.hide();
-      else window.setIgnoreMouseEvents(true, { forward: true });
+      else applyHudIgnoreMouse(window, true, true);
+      const previousDisplayId = hudDisplayId;
       hudEmpty = true;
       hudDisplayId = undefined;
       hudShownStatus = undefined;
-      if (window === hudWindow) hudRefresher.idle();
+      if (window === hudWindow) {
+        // After the blank idle frame paints, return an expanded Answer window to the compact size.
+        hudShrinkTimer = setTimeout(() => {
+          hudShrinkTimer = undefined;
+          if (!hudEmpty || window !== hudWindow || window.isDestroyed()) return;
+          const display = screen.getAllDisplays().find((item) => item.id === previousDisplayId)
+            ?? screen.getPrimaryDisplay();
+          const compact = hudPlacer.place(display.workArea, hudWindowSize(display.workArea, false));
+          if (compact) window.setBounds(compact);
+        }, 60);
+        hudRefresher.idle();
+      }
     };
     if (hudEmpty) return;
     if (!hudWindow.isVisible() || hudHideDelay(hudShownStatus) === 0) {
@@ -387,19 +459,20 @@ function updateHudWindow(): void {
     screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   hudDisplayId = display.id;
   const { workArea } = display;
-  // One size for every screen: the window only moves when the display changes.
-  const bounds = hudPlacer.place(workArea, hudWindowSize(workArea));
+  // Compact size for pills/notices; expand only when showing an Ask anything answer card.
+  const bounds = hudPlacer.place(workArea, hudWindowSize(workArea, isAskAnswerHud(state)));
   if (bounds) hudWindow.setBounds(bounds);
   hudShownStatus = state?.status;
   hudWindow.webContents.send('hud:state', state);
   if (hudEmpty) {
-    // Start letting clicks through and have the page ask again when hovered.
+    // Start letting clicks through until the renderer reports its visible HUD hit rects.
     hudEmpty = false;
     hudRefresher.busy();
-    if (process.platform !== 'linux') hudWindow.setIgnoreMouseEvents(true, { forward: true });
+    applyHudIgnoreMouse(hudWindow, true, true);
     hudWindow.webContents.send('hud:shown');
   }
   if (!hudWindow.isVisible()) hudWindow.showInactive();
+  if (hudHitRects.length > 0) startHudMouseTracking();
 }
 
 function createTray(): void {
@@ -1062,7 +1135,32 @@ app.whenReady().then(() => {
 
   ipcMain.on('hud:ignore-mouse', (event, ignore: boolean) => {
     if (event.sender !== hudWindow?.webContents || process.platform === 'linux') return;
-    hudWindow.setIgnoreMouseEvents(ignore === true, { forward: true });
+    applyHudIgnoreMouse(hudWindow, ignore === true);
+  });
+
+  ipcMain.on('hud:hit-rects', (event, rawRects: unknown) => {
+    if (event.sender !== hudWindow?.webContents || process.platform === 'linux') return;
+    const next: HudHitRect[] = [];
+    if (Array.isArray(rawRects)) {
+      for (const item of rawRects.slice(0, 8)) {
+        if (!item || typeof item !== 'object') continue;
+        const { left, top, right, bottom } = item as Record<string, unknown>;
+        if (typeof left === 'number' && typeof top === 'number'
+          && typeof right === 'number' && typeof bottom === 'number'
+          && Number.isFinite(left) && Number.isFinite(top)
+          && Number.isFinite(right) && Number.isFinite(bottom)
+          && right > left && bottom > top) {
+          next.push({ left, top, right, bottom });
+        }
+      }
+    }
+    hudHitRects = next;
+    if (hudHitRects.length > 0 && !hudEmpty) {
+      startHudMouseTracking();
+    } else {
+      stopHudMouseTracking();
+      applyHudIgnoreMouse(hudWindow, true);
+    }
   });
 
   ipcMain.on('hud:action', async (event, action: HudAction) => {
@@ -1249,6 +1347,8 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  stopHudMouseTracking();
+  clearHudTimer();
   stopDictationContext();
   globalShortcut.unregisterAll();
   stopModifierShortcuts();

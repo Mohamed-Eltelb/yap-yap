@@ -7,18 +7,54 @@ export interface Size {
 }
 
 /**
- * The HUD window keeps one size for every screen, the size of the largest (an Ask answer).
- * Resizing a transparent window while it is on screen makes Windows flash the old frame,
- * so it is never resized there; the empty part lets clicks through to the app below.
+ * Compact HUD window size for pills, shortcut list, translate menu, notices, and errors.
+ * Keeping one compact size across all non-answer states avoids resize flicker during recording.
  */
-export const HUD_WINDOW_SIZE: Size = { width: 760, height: 660 };
+export const HUD_WINDOW_SIZE: Size = { width: 500, height: 260 };
+
+/** Larger HUD window size used only while showing an Ask anything answer/rewrite card. */
+export const HUD_ANSWER_WINDOW_SIZE: Size = { width: 760, height: 660 };
+
+/** A visible interactive HUD region in window-relative DIP coordinates. */
+export interface HudHitRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Whether a HUD state shows the Ask anything answer/rewrite card. */
+export function isAskAnswerHud(state?: { status?: string; mode?: string }): boolean {
+  return state?.status === 'result' && state?.mode === 'ask';
+}
 
 /** The HUD window size, made to fit the work area. */
-export function hudWindowSize(workArea: Size): Size {
+export function hudWindowSize(workArea: Size, isAnswer = false): Size {
+  const target = isAnswer ? HUD_ANSWER_WINDOW_SIZE : HUD_WINDOW_SIZE;
   return {
-    width: Math.min(HUD_WINDOW_SIZE.width, workArea.width),
-    height: Math.min(HUD_WINDOW_SIZE.height, workArea.height - 12),
+    width: Math.min(target.width, workArea.width),
+    height: Math.min(target.height, workArea.height - 12),
   };
+}
+
+/** Whether a screen-space cursor point lies inside any visible HUD hit rect. */
+export function cursorOverHud(
+  cursor: { x: number; y: number },
+  windowBounds: Rect,
+  rects: readonly HudHitRect[],
+  padding = 2,
+): boolean {
+  if (rects.length === 0) return false;
+  const localX = cursor.x - windowBounds.x;
+  const localY = cursor.y - windowBounds.y;
+  return rects.some(
+    (rect) => rect.right > rect.left
+      && rect.bottom > rect.top
+      && localX >= rect.left - padding
+      && localX <= rect.right + padding
+      && localY >= rect.top - padding
+      && localY <= rect.bottom + padding,
+  );
 }
 
 /** Only a pill shrinks out when the HUD closes; other screens go at once. */

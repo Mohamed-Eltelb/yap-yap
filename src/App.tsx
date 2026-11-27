@@ -58,7 +58,7 @@ import {
 import { playInteractionSound } from './utils/sounds';
 import { deliverDictationResult } from './utils/dictationResult';
 import { answerAsPlainText } from './utils/answerText';
-import { createHudMouseGate } from './utils/hudMouseGate';
+import { createHudHitRectReporter } from './utils/hudMouseGate';
 
 function normalizeKey(e: KeyboardEvent): string {
   if (e.code === 'AltRight') return 'Right Alt';
@@ -253,24 +253,85 @@ export function App() {
     }
   }, [appState.settings.appearance, hud.appearance, hydrated, isHudRoute]);
 
-  // The HUD window is larger than what it draws, so it only takes the mouse
-  // while the pointer is over the HUD itself.
+  // Report the exact clickable bounds of visible HUD elements to Electron so main-process
+  // cursor hit-testing toggles click-through reliably without relying on Windows WH_MOUSE_LL forwarding.
+  const hudStatusRef = useRef(hud.status);
+  hudStatusRef.current = hud.status;
+  const hudMeasureRef = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
     if (!isHudRoute) return;
-    const gate = createHudMouseGate((ignore) => window.yapyap?.setHudIgnoreMouse?.(ignore));
-    const onMove = (event: MouseEvent) =>
-      gate.move(event.target instanceof Element && event.target.closest('.yy-hud') !== null);
-    const onLeave = () => gate.leave();
-    window.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseleave', onLeave);
-    // Each time the HUD shows again, Electron starts it letting the mouse through.
-    const unsubShown = window.yapyap?.onHudShown?.(gate.reset);
+    const reporter = createHudHitRectReporter((rects) => window.yapyap?.setHudHitRects?.(rects));
+    let rafId = 0;
+
+    const measure = () => {
+      if (hudStatusRef.current === 'idle') {
+        reporter.update([]);
+        return;
+      }
+      const nodes = document.querySelectorAll('.yy-hud, .yy-hud-targets');
+      const rects = Array.from(nodes).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      });
+      reporter.update(rects);
+    };
+
+    const scheduleMeasure = () => {
+      measure();
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+    hudMeasureRef.current = scheduleMeasure;
+
+    let observedHud: Element | null = null;
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(scheduleMeasure)
+      : undefined;
+
+    const syncObserved = () => {
+      if (!resizeObserver) return;
+      const el = document.querySelector('.yy-hud');
+      if (el !== observedHud) {
+        if (observedHud) resizeObserver.unobserve(observedHud);
+        observedHud = el;
+        if (el) resizeObserver.observe(el);
+      }
+    };
+
+    const root = document.getElementById('root') ?? document.body;
+    const mutationObserver = new MutationObserver(() => {
+      syncObserved();
+      scheduleMeasure();
+    });
+    mutationObserver.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-state', 'data-open'],
+    });
+    syncObserved();
+    scheduleMeasure();
+
+    window.addEventListener('resize', scheduleMeasure);
+    const unsubShown = window.yapyap?.onHudShown?.(() => {
+      reporter.reset();
+      syncObserved();
+      scheduleMeasure();
+    });
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseleave', onLeave);
+      hudMeasureRef.current = undefined;
+      cancelAnimationFrame(rafId);
+      resizeObserver?.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('resize', scheduleMeasure);
       unsubShown?.();
+      reporter.update([]);
     };
   }, [isHudRoute]);
+
+  useEffect(() => {
+    if (isHudRoute) hudMeasureRef.current?.();
+  }, [isHudRoute, hud]);
 
   // Sync Electron global shortcuts + login item
   useEffect(() => {
