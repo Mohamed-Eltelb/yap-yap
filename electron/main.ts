@@ -1106,9 +1106,9 @@ app.whenReady().then(() => {
     if (event.sender !== mainWindow?.webContents || isMainWindowFocused()
       || !selection || typeof text !== 'string' || !text) return 'not-sent';
     if (isWayland) {
-      if (selection.truncated || selection.editable !== true || !selection.text) return 'not-sent';
+      if (selection.truncated || selection.editable !== true || !selection.text || !selection.waylandTarget) return 'not-sent';
       // The same focused field must still contain the selection when the probe edits it.
-      const inserted = await withWaylandTarget(() => insertWaylandText(text, selection.text), (ok) => ok);
+      const inserted = await withWaylandTarget(() => insertWaylandText(text, selection), (ok) => ok);
       if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
       return inserted ? 'confirmed' : 'not-sent';
     }

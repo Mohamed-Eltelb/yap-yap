@@ -205,8 +205,8 @@ def commit_with_ibus(node, text, start, end, old, count, selected):
 def insertion_request(mode):
     if mode == 'replace':
         request = json.load(sys.stdin)
-        return request['text'], request['selectedText']
-    return sys.stdin.read(), None
+        return request['text'], request['selectedText'], request['target']
+    return sys.stdin.read(), None, None
 
 def input_method_field(mode):
     import time
@@ -225,10 +225,8 @@ def input_method_field(mode):
         if len(old.encode('utf-8')) >= 3997 and (start == 0 or end == len(old)):
             return False
         if mode == 'selection':
-            return dict(text=old[start:end], editable=True) if end > start else None
-        text, selected = insertion_request(mode)
-        if selected is not None and (start == end or old[start:end] != selected):
-            return False
+            return dict(text=old[start:end], editable=False) if end > start else None
+        text = sys.stdin.read()
         expected = old[:start] + text + old[end:]
         if not text or len(expected.encode('utf-8')) >= 3997:
             return False

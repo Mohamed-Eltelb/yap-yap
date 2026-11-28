@@ -66,13 +66,38 @@ describe.runIf(process.platform === 'linux')('Wayland context', () => {
     execFile.mockImplementation((_file, args, _options, done) => {
       if (args[3] === 'selection') {
         expect(args.slice(2)).toEqual(['0', 'selection', 'app', String(process.pid), 'wayland']);
-        done(null, '{"text":"chosen","editable":true}');
+        done(null, '{"text":"chosen","editable":true,"waylandTarget":[":1.23","/field",0,6]}');
       } else {
         throw new Error(`Unexpected probe: ${args.slice(2).join(' ')}`);
       }
       return {};
     });
     const { captureSelection } = await import('../../electron/dictationContext');
-    expect(await captureSelection()).toEqual({ text: 'chosen', truncated: false, editable: true });
+    expect(await captureSelection()).toEqual({ text: 'chosen', truncated: false, editable: true, waylandTarget: [':1.23', '/field', 0, 6] });
   });
+
+  it('allows reading a selection when the probe cannot identify the editable field', async () => {
+    execFile.mockImplementation((_file, _args, _options, done) => {
+      done(null, '{"text":"chosen","editable":true}');
+      return {};
+    });
+    const { captureSelection } = await import('../../electron/dictationContext');
+    expect(await captureSelection()).toEqual({ text: 'chosen', truncated: false, editable: false });
+  });
+
+  it('sends the captured field and range in the same probe that performs the rewrite', async () => {
+    const end = vi.fn();
+    execFile.mockImplementation((_file, args, _options, done) => {
+      expect(args.slice(2)).toEqual(['0', 'replace', 'app', String(process.pid), 'wayland']);
+      done(null, '{"inserted":true}');
+      return { stdin: { on: vi.fn(), end } };
+    });
+    const { insertWaylandText } = await import('../../electron/dictationContext');
+    const target: [string, string, number, number] = [':1.23', '/field', 2, 8];
+    expect(await insertWaylandText('updated', {
+      text: 'chosen', truncated: false, editable: true, waylandTarget: target,
+    })).toBe(true);
+    expect(JSON.parse(end.mock.calls[0][0])).toEqual({ text: 'updated', selectedText: 'chosen', target });
+  });
+
 });

@@ -118,6 +118,10 @@ def selection_offsets(node):
 
 ${linuxInputMethod}
 
+def rewrite_target(node, start, end):
+    if node.app and node.app.bus_name and node.path:
+        return [node.app.bus_name, node.path, start, end]
+
 def matches_rewrite(node, start, end, old, selected):
     if selected is None:
         return True
@@ -129,13 +133,15 @@ def matches_rewrite(node, start, end, old, selected):
     selection = selected_text(node, start, end)
     return selection is not None and selection[0] == selected
 
-def insert_text(node, text, selected=None):
+def insert_text(node, text, selected=None, target=None):
     # Check what arrived: some apps acknowledge an edit they did not apply.
     if not text:
         return False
     start, end = selection_offsets(node)
     count = node.get_character_count()
     if not 0 <= start <= end <= count:
+        return False
+    if selected is not None and (not target or rewrite_target(node, start, end) != target):
         return False
     old = Atspi.Text.get_text(node, start, end) if end > start else ''
     if not matches_rewrite(node, start, end, old, selected):
@@ -205,6 +211,7 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
         url = None
         text_hidden = False
         found = None
+        focused_selection = None
         first_window = queue[0] if queue else None
         page_seen = False
         for _ in range(LIMIT):
@@ -226,15 +233,23 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                     if attrs.get('text-input-type', '').lower() == 'password':
                         return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
-                    if found is None and span.end_offset > span.start_offset:
+                    focused = states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE)
+                    if (found is None or (wayland and focused)) and span.end_offset > span.start_offset:
                         selection = selected_text(node, span.start_offset, span.end_offset)
                         if selection is None:
                             # Part of it could not be read: the last highlight stands in for it.
-                            found = dict(incomplete=True)
+                            if found is None:
+                                found = dict(incomplete=True)
                         else:
                             text, editable = selection
                             if text.strip():
-                                found = dict(text=text, editable=editable)
+                                candidate = dict(text=text, editable=editable)
+                                if wayland and focused and node.get_n_selections() == 1:
+                                    target = rewrite_target(node, span.start_offset, span.end_offset)
+                                    if target:
+                                        focused_selection = dict(candidate, waylandTarget=target)
+                                if found is None:
+                                    found = candidate
             elif mode in ('insert', 'replace'):
                 if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE):
                     if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type', '').lower() == 'password':
@@ -287,20 +302,24 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                 GLib.timeout_add(120, loop.quit)
                 loop.run()
                 return read_field(app.get_process_id(), mode, browser, skip_pid, first_window)
+            if focused_selection:
+                return focused_selection
+            if wayland and found and found.get('editable'):
+                found['editable'] = False
             return found
         if mode == 'paste':
             # A search cut short by the limit can't tell that no field has focus.
             return dict(editable=False) if focused_page and not queue else None
         return dict(url=url) if url and mode == 'context' else None
 
-    if not pid and mode in ('selection', 'insert', 'replace') and wayland:
+    if not pid and mode in ('selection', 'insert') and wayland:
         return input_method_field(mode)
 
 pid, mode = int(sys.argv[1]), sys.argv[2]
 wayland = len(sys.argv) > 5 and sys.argv[5] == 'wayland'
 if Atspi:
     result = read_field(pid, mode, len(sys.argv) > 3 and sys.argv[3] == 'browser', int(sys.argv[4]) if len(sys.argv) > 4 else 0)
-elif wayland and mode in ('selection', 'insert', 'replace'):
+elif wayland and mode in ('selection', 'insert'):
     result = input_method_field(mode)
 else:
     result = None
