@@ -1100,8 +1100,11 @@ app.whenReady().then(() => {
     }
     let sent = false;
     try {
-      // Clipboard setup is asynchronous. Confirm the original selection again just before Ctrl+V.
-      if (verifyTarget && !await verifyTarget()) return false;
+      // Recheck the selection after clipboard setup, then make sure another application
+      // has not replaced the clipboard while the accessibility probe was running.
+      if (verifyTarget && (!await verifyTarget() || await clipboard.readText().catch(() => undefined) !== text)) {
+        return false;
+      }
       sent = await pasteIntoFocusedField();
       return sent && target !== 'unconfirmed';
     } finally {
