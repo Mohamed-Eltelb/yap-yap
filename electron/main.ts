@@ -69,6 +69,7 @@ import {
 } from './windowFocus';
 import { captureDictationContext, captureSelection, insertWaylandText, isWayland, linuxPasteTarget, linuxPrimaryStamp, readFocusedField, stopDictationContext, warmDictationContext, type SelectedText } from './dictationContext';
 import { plainTextFromClipboardSnapshot, writeLinuxClipboardText } from './linuxClipboard';
+import { writeX11RichClipboard } from './linuxRichClipboard';
 import { watchPasteCorrections } from './pasteCorrections';
 import { appExecutables, readOtherApps, type OtherAppData } from './otherApps';
 import { isAudioId, markSavedAudio } from './audioStore';
@@ -1078,7 +1079,7 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  async function pasteViaClipboard(text: string, keepOnClipboard: boolean): Promise<boolean> {
+  async function pasteViaClipboard(text: string, keepOnClipboard: boolean, html?: string): Promise<boolean> {
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
@@ -1088,9 +1089,13 @@ app.whenReady().then(() => {
       if (previous) discardClipboardBackup(previous);
       return false;
     }
-    const sequence = process.platform === 'win32' && nativeSelectionAvailable()
-      ? (nativeWriteClipboardText(text, !keepOnClipboard) || (await clipboard.writeText(text), clipboardSequence()))
-      : (await writeClipboardText(text), undefined);
+    let sequence: number | undefined;
+    if (process.platform === 'win32' && nativeSelectionAvailable()) {
+      sequence = nativeWriteClipboardText(text, !keepOnClipboard)
+        || (await clipboard.writeText(text), clipboardSequence());
+    } else if (!html || !await writeX11RichClipboard(text, html)) {
+      await writeClipboardText(text);
+    }
     try {
       const sent = await pasteIntoFocusedField();
       return sent && target !== 'unconfirmed';
@@ -1115,7 +1120,7 @@ app.whenReady().then(() => {
     if (process.platform === 'linux') {
       const now = await captureSelection();
       if (now?.text !== selection.text) return 'not-sent';
-      return (await pasteViaClipboard(text, keepOnClipboard === true)) ? 'unverified' : 'not-sent';
+      return (await pasteViaClipboard(text, keepOnClipboard === true, markdownToClipboardHtml(text)?.html)) ? 'unverified' : 'not-sent';
     }
     if (process.platform !== 'win32' || isOwnProcessWindow(foregroundWindow())) return 'not-sent';
     return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);
