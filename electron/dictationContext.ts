@@ -298,9 +298,9 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 
 // The probe treats a focused field as an address bar only in a browser. Other apps can
 // put ordinary text fields, such as a find bar, in a toolbar.
-async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert', browser = false, input?: string): Promise<Record<string, unknown>> {
+async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert' | 'replace', browser = false, input?: string): Promise<Record<string, unknown>> {
   const args = ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'];
-  const useInputMethod = isWayland && (mode === 'selection' || mode === 'insert');
+  const useInputMethod = isWayland && (mode === 'selection' || mode === 'insert' || mode === 'replace');
   if (pid === '0') args.push(String(process.pid));
   if (useInputMethod) args.push('wayland');
   const output = await runContextProbe('/usr/bin/python3', args, 1 << 18, useInputMethod ? 5500 : 1500, input);
@@ -320,7 +320,7 @@ export async function linuxPrimaryStamp(): Promise<number | undefined> {
 // Selection and paste can each briefly switch input methods. Overlapping requests
 // are declined so a queued operation never reaches a different editor.
 let usingWaylandField = false;
-async function waylandField(mode: 'selection' | 'insert', text?: string): Promise<Record<string, unknown>> {
+async function waylandField(mode: 'selection' | 'insert' | 'replace', text?: string): Promise<Record<string, unknown>> {
   if (usingWaylandField) return {};
   usingWaylandField = true;
   try {
@@ -330,8 +330,11 @@ async function waylandField(mode: 'selection' | 'insert', text?: string): Promis
   }
 }
 
-export async function insertWaylandText(text: string): Promise<boolean> {
-  return (await waylandField('insert', text)).inserted === true;
+export async function insertWaylandText(text: string, selectedText?: string): Promise<boolean> {
+  const result = selectedText === undefined
+    ? await waylandField('insert', text)
+    : await waylandField('replace', JSON.stringify({ text, selectedText }));
+  return result.inserted === true;
 }
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;

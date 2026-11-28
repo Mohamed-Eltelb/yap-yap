@@ -118,7 +118,18 @@ def selection_offsets(node):
 
 ${linuxInputMethod}
 
-def insert_text(node, text):
+def matches_rewrite(node, start, end, old, selected):
+    if selected is None:
+        return True
+    if start == end or end - start > SELECTION_LIMIT:
+        return False
+    if old == selected:
+        return True
+    # Compare the same rendered text that Ask captured from Firefox and rich editors.
+    selection = selected_text(node, start, end)
+    return selection is not None and selection[0] == selected
+
+def insert_text(node, text, selected=None):
     # Check what arrived: some apps acknowledge an edit they did not apply.
     if not text:
         return False
@@ -127,8 +138,10 @@ def insert_text(node, text):
     if not 0 <= start <= end <= count:
         return False
     old = Atspi.Text.get_text(node, start, end) if end > start else ''
+    if not matches_rewrite(node, start, end, old, selected):
+        return False
     if not node.get_editable_text_iface():
-        return commit_with_ibus(node, text, start, end, old, count)
+        return commit_with_ibus(node, text, start, end, old, count, selected)
     size = len(text)
 
     def matches(offset, expected):
@@ -222,12 +235,12 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                             text, editable = selection
                             if text.strip():
                                 found = dict(text=text, editable=editable)
-            elif mode == 'insert':
+            elif mode in ('insert', 'replace'):
                 if states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE):
                     if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type', '').lower() == 'password':
                         return
                     if node.get_text_iface():
-                        return dict(inserted=insert_text(node, sys.stdin.read()))
+                        return dict(inserted=insert_text(node, *insertion_request(mode)))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
                     if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type', '').lower() == 'password':
@@ -280,14 +293,14 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
             return dict(editable=False) if focused_page and not queue else None
         return dict(url=url) if url and mode == 'context' else None
 
-    if not pid and mode in ('selection', 'insert') and wayland:
+    if not pid and mode in ('selection', 'insert', 'replace') and wayland:
         return input_method_field(mode)
 
 pid, mode = int(sys.argv[1]), sys.argv[2]
 wayland = len(sys.argv) > 5 and sys.argv[5] == 'wayland'
 if Atspi:
     result = read_field(pid, mode, len(sys.argv) > 3 and sys.argv[3] == 'browser', int(sys.argv[4]) if len(sys.argv) > 4 else 0)
-elif wayland and mode in ('selection', 'insert'):
+elif wayland and mode in ('selection', 'insert', 'replace'):
     result = input_method_field(mode)
 else:
     result = None

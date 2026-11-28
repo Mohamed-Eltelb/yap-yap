@@ -31,13 +31,21 @@ field.commit_string = commits.append
 sys.stdin = io.StringIO('x')
 unconfirmed = input_method_field('insert')
 
+field.snapshot = ('a🦊éz', 3, 1)
+field.commit_string = commit
+def replace(selected):
+    sys.stdin = io.StringIO(json.dumps({'text': 'x', 'selectedText': selected}))
+    return input_method_field('replace')
+changed = replace('old')
+matched = replace('🦊é')
+
 field.snapshot = ('é' * 2000, 0, 2000)
 clipped = input_method_field('selection')
-print(json.dumps([selection, confirmed, unconfirmed, clipped, commits]))
+print(json.dumps([selection, confirmed, unconfirmed, changed, matched, clipped, commits]))
 `;
     const output = execFileSync('python3', ['-c', linuxInputMethod + fixture], { encoding: 'utf8' });
     expect(JSON.parse(output)).toEqual([
-      { text: '🦊é', editable: true }, { inserted: true }, { inserted: false }, false, ['x', 'x'],
+      { text: '🦊é', editable: true }, { inserted: true }, { inserted: false }, false, { inserted: true }, false, ['x', 'x', 'x'],
     ]);
   },
 );

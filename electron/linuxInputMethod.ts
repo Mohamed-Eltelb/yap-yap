@@ -166,7 +166,7 @@ def with_ibus(operation, surrounding=False):
             bus.set_global_engine(restore)
 
 
-def commit_with_ibus(node, text, start, end, old, count):
+def commit_with_ibus(node, text, start, end, old, count, selected):
     # A compositor may keep the same IBus context as focus moves between windows.
     # Recheck the original field and its selection just before asking the client to commit.
     def still_focused():
@@ -191,6 +191,8 @@ def commit_with_ibus(node, text, start, end, old, count):
             return False
         if end > start and Atspi.Text.get_text(node, start, end) != old:
             return False
+        if not matches_rewrite(node, start, end, old, selected):
+            return False
         engine.commit_string(text)
         caret = start + len(text)
         def inserted():
@@ -199,6 +201,12 @@ def commit_with_ibus(node, text, start, end, old, count):
                     and Atspi.Text.get_text(node, start, caret) == text and selection_offsets(node) == (caret, caret))
         return wait_for(inserted)
     return with_ibus(commit)
+
+def insertion_request(mode):
+    if mode == 'replace':
+        request = json.load(sys.stdin)
+        return request['text'], request['selectedText']
+    return sys.stdin.read(), None
 
 def input_method_field(mode):
     import time
@@ -218,7 +226,9 @@ def input_method_field(mode):
             return False
         if mode == 'selection':
             return dict(text=old[start:end], editable=True) if end > start else None
-        text = sys.stdin.read()
+        text, selected = insertion_request(mode)
+        if selected is not None and (start == end or old[start:end] != selected):
+            return False
         expected = old[:start] + text + old[end:]
         if not text or len(expected.encode('utf-8')) >= 3997:
             return False

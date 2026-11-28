@@ -1106,13 +1106,9 @@ app.whenReady().then(() => {
     if (event.sender !== mainWindow?.webContents || isMainWindowFocused()
       || !selection || typeof text !== 'string' || !text) return 'not-sent';
     if (isWayland) {
-      // Keep the HUD hidden across both the selection re-read and insertion so the editor
-      // and its text-input/IBus focus are never disturbed twice.
-      const inserted = await withWaylandTarget(async () => {
-        const now = await captureSelection();
-        if (now?.text !== selection.text) return false;
-        return insertWaylandText(text);
-      }, (ok) => ok);
+      if (selection.truncated || selection.editable !== true || !selection.text) return 'not-sent';
+      // The same focused field must still contain the selection when the probe edits it.
+      const inserted = await withWaylandTarget(() => insertWaylandText(text, selection.text), (ok) => ok);
       if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
       return inserted ? 'confirmed' : 'not-sent';
     }
