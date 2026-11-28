@@ -1,6 +1,6 @@
 // A temporary input method for the active Wayland text-input client.
 export const linuxInputMethod = String.raw`
-def with_ibus(operation, surrounding=False):
+def with_ibus(operation, surrounding=False, unavailable=False):
     import os
     import signal
     import time
@@ -8,11 +8,11 @@ def with_ibus(operation, surrounding=False):
         gi.require_version('IBus', '1.0')
         from gi.repository import GLib, IBus
     except (ValueError, ImportError):
-        return False
+        return unavailable
     IBus.init()
     bus = IBus.Bus.new()
     if not bus.is_connected():
-        return False
+        return unavailable
     context = bus.current_input_context()
     previous = bus.get_global_engine()
     # Switching away from an input method mid-composition could discard unfinished text.
@@ -186,21 +186,29 @@ def commit_with_ibus(node, text, start, end, old, count, selected):
             parent = parent.get_parent()
         return False
 
-    def commit(engine, wait_for):
+    def still_selected():
         if not still_focused() or selection_offsets(node) != (start, end) or node.get_character_count() != count:
             return False
         if end > start and Atspi.Text.get_text(node, start, end) != old:
             return False
-        if not matches_rewrite(node, start, end, old, selected):
+        return matches_rewrite(node, start, end, old, selected)
+
+    caret = start + len(text)
+    def inserted():
+        node.clear_cache()
+        return (node.get_character_count() == count - (end - start) + len(text)
+                and Atspi.Text.get_text(node, start, caret) == text and selection_offsets(node) == (caret, caret))
+
+    def commit(engine, wait_for):
+        if not still_selected():
             return False
         engine.commit_string(text)
-        caret = start + len(text)
-        def inserted():
-            node.clear_cache()
-            return (node.get_character_count() == count - (end - start) + len(text)
-                    and Atspi.Text.get_text(node, start, caret) == text and selection_offsets(node) == (caret, caret))
         return wait_for(inserted)
-    return with_ibus(commit)
+
+    result = with_ibus(commit, unavailable=None)
+    if result is None:
+        return paste_with_sway(text, still_selected, inserted)
+    return result
 
 def insertion_request(mode):
     if mode == 'replace':

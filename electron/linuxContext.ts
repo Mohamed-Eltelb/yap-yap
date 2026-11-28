@@ -1,6 +1,7 @@
 // AT-SPI exposes Unicode character offsets and stable object paths on the desktop bus.
 // The system Python uses the distro's PyGObject and AT-SPI bindings.
 import { linuxInputMethod } from './linuxInputMethod';
+import { linuxWaylandPaste } from './linuxWaylandPaste';
 import { SELECTION_LIMIT } from './selectionLimit';
 
 export const linuxContextProbe = String.raw`
@@ -115,6 +116,8 @@ def selection_offsets(node):
         span = Atspi.Text.get_selection(node, 0)
         return tuple(sorted((span.start_offset, span.end_offset)))
     return -1, -1
+
+${linuxWaylandPaste}
 
 ${linuxInputMethod}
 
