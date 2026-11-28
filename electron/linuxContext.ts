@@ -234,7 +234,7 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                         return dict(password=True)
                     span = Atspi.Text.get_selection(node, 0)
                     focused = states.contains(Atspi.StateType.FOCUSED) and states.contains(Atspi.StateType.EDITABLE)
-                    if (found is None or (wayland and focused)) and span.end_offset > span.start_offset:
+                    if (found is None or focused) and span.end_offset > span.start_offset:
                         selection = selected_text(node, span.start_offset, span.end_offset)
                         if selection is None:
                             # Part of it could not be read: the last highlight stands in for it.
@@ -244,10 +244,10 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                             text, editable = selection
                             if text.strip():
                                 candidate = dict(text=text, editable=editable)
-                                if wayland and focused and node.get_n_selections() == 1:
+                                if focused and node.get_n_selections() == 1:
                                     target = rewrite_target(node, span.start_offset, span.end_offset)
                                     if target:
-                                        focused_selection = dict(candidate, waylandTarget=target)
+                                        focused_selection = dict(candidate, linuxTarget=target)
                                 if found is None:
                                     found = candidate
             elif mode in ('insert', 'replace'):
@@ -304,7 +304,7 @@ def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
                 return read_field(app.get_process_id(), mode, browser, skip_pid, first_window)
             if focused_selection:
                 return focused_selection
-            if wayland and found and found.get('editable'):
+            if found and found.get('editable'):
                 found['editable'] = False
             return found
         if mode == 'paste':

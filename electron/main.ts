@@ -1079,11 +1079,13 @@ app.whenReady().then(() => {
     syncShortcutSuspension();
   });
 
-  async function pasteViaClipboard(text: string, keepOnClipboard: boolean, html?: string): Promise<boolean> {
+  async function pasteViaClipboard(
+    text: string, keepOnClipboard: boolean, html?: string, verifyTarget?: () => Promise<boolean>,
+  ): Promise<boolean> {
     // On Linux, the target check reads the accessibility tree, so take the clipboard snapshot meanwhile.
     const [target, previous] = await Promise.all([
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
-      keepOnClipboard ? undefined : saveClipboardBackup(),
+      keepOnClipboard && !verifyTarget ? undefined : saveClipboardBackup(),
     ]);
     if (target === 'blocked') {
       if (previous) discardClipboardBackup(previous);
@@ -1096,12 +1098,15 @@ app.whenReady().then(() => {
     } else if (!html || !await writeX11RichClipboard(text, html)) {
       await writeClipboardText(text);
     }
+    let sent = false;
     try {
-      const sent = await pasteIntoFocusedField();
+      // Clipboard setup is asynchronous. Confirm the original selection again just before Ctrl+V.
+      if (verifyTarget && !await verifyTarget()) return false;
+      sent = await pasteIntoFocusedField();
       return sent && target !== 'unconfirmed';
     } finally {
-      // The paste goes through the clipboard; put back what the user had there once the target has read it.
-      if (previous) restoreAfterPaste(previous, text, 600, sequence);
+      if (previous && (!sent || !keepOnClipboard)) restoreAfterPaste(previous, text, sent ? 600 : 0, sequence);
+      else if (previous) discardClipboardBackup(previous);
     }
   }
 
@@ -1111,16 +1116,23 @@ app.whenReady().then(() => {
     if (event.sender !== mainWindow?.webContents || isMainWindowFocused()
       || !selection || typeof text !== 'string' || !text) return 'not-sent';
     if (isWayland) {
-      if (selection.truncated || selection.editable !== true || !selection.text || !selection.waylandTarget) return 'not-sent';
+      if (selection.truncated || selection.editable !== true || !selection.text || !selection.linuxTarget) return 'not-sent';
       // The same focused field must still contain the selection when the probe edits it.
       const inserted = await withWaylandTarget(() => insertWaylandText(text, selection), (ok) => ok);
       if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
       return inserted ? 'confirmed' : 'not-sent';
     }
     if (process.platform === 'linux') {
-      const now = await captureSelection();
-      if (now?.text !== selection.text) return 'not-sent';
-      return (await pasteViaClipboard(text, keepOnClipboard === true, markdownToClipboardHtml(text)?.html)) ? 'unverified' : 'not-sent';
+      const target = selection.linuxTarget;
+      if (!target || selection.truncated || selection.editable !== true) return 'not-sent';
+      const verifyTarget = async () => {
+        const now = await captureSelection();
+        return now?.text === selection.text && now.editable === true && !now.truncated
+          && now.linuxTarget?.every((part, i) => part === target[i]) === true;
+      };
+      if (!await verifyTarget()) return 'not-sent';
+      const sent = await pasteViaClipboard(text, keepOnClipboard === true, markdownToClipboardHtml(text)?.html, verifyTarget);
+      return sent ? 'unverified' : 'not-sent';
     }
     if (process.platform !== 'win32' || isOwnProcessWindow(foregroundWindow())) return 'not-sent';
     return pasteWindowsRewrite(selection, text, keepOnClipboard === true, allowCopy === true);

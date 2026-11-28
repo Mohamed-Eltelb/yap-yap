@@ -14,7 +14,7 @@ export interface DictationContext {
   textAfter?: string;
 }
 
-type WaylandTarget = [busName: string, fieldPath: string, start: number, end: number];
+type LinuxTarget = [busName: string, fieldPath: string, start: number, end: number];
 
 /** Text the user selected in another app. Never stored. */
 export interface SelectedText {
@@ -23,8 +23,8 @@ export interface SelectedText {
   truncated: boolean;
   /** The selection sits in a field the user can type in, so it could be replaced. */
   editable?: boolean;
-  /** AT-SPI field and selection range captured for a Wayland rewrite. */
-  waylandTarget?: WaylandTarget;
+  /** AT-SPI field and selection range captured for a Linux rewrite. */
+  linuxTarget?: LinuxTarget;
   /** Windows foreground window at capture, used to verify a live rewrite. */
   windowId?: string;
   /** Windows control that had focus when the selection was captured. */
@@ -337,7 +337,7 @@ async function waylandField(mode: 'selection' | 'insert' | 'replace', text?: str
 export async function insertWaylandText(text: string, selection?: SelectedText): Promise<boolean> {
   const result = selection === undefined
     ? await waylandField('insert', text)
-    : await waylandField('replace', JSON.stringify({ text, selectedText: selection.text, target: selection.waylandTarget }));
+    : await waylandField('replace', JSON.stringify({ text, selectedText: selection.text, target: selection.linuxTarget }));
   return result.inserted === true;
 }
 
@@ -546,24 +546,20 @@ export async function captureSelection(
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
   }
   if (process.platform !== 'linux') return;
-  if (isWayland) {
-    const data = await waylandField('selection');
-    const selection = parseSelection(data);
-    if (!selection) return;
-    const target = data.waylandTarget;
+  const pid = isWayland ? '0' : await linuxForegroundPid() ?? '0';
+  const data = isWayland ? await waylandField('selection') : await linuxProbe(pid, 'selection');
+  const found = parseSelection(data);
+  if (found?.editable) {
+    const target = data.linuxTarget;
     if (Array.isArray(target) && target.length === 4
       && typeof target[0] === 'string' && typeof target[1] === 'string'
       && Number.isSafeInteger(target[2]) && Number.isSafeInteger(target[3])) {
-      selection.waylandTarget = [target[0], target[1], target[2], target[3]];
+      found.linuxTarget = [target[0], target[1], target[2], target[3]];
     } else {
-      selection.editable = false;
+      found.editable = false;
     }
-    return selection;
   }
-  const pid = await linuxForegroundPid() ?? '0';
-  const data = await linuxProbe(pid, 'selection');
-  const found = parseSelection(data);
-  if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
+  if (found || isWayland || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
   const copied = await copy('');
