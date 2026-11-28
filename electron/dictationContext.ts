@@ -300,8 +300,10 @@ const linuxProcessName = (pid: string) => runContextProbe('ps', ['-p', pid, '-o'
 // put ordinary text fields, such as a find bar, in a toolbar.
 async function linuxProbe(pid: string, mode: 'context' | 'field' | 'paste' | 'selection' | 'pid' | 'insert', browser = false, input?: string): Promise<Record<string, unknown>> {
   const args = ['-c', linuxContextProbe, pid, mode, browser ? 'browser' : 'app'];
+  const useInputMethod = isWayland && (mode === 'selection' || mode === 'insert');
   if (pid === '0') args.push(String(process.pid));
-  const output = await runContextProbe('/usr/bin/python3', args, 1 << 18, mode === 'insert' ? 4500 : 1500, input);
+  if (useInputMethod) args.push('wayland');
+  const output = await runContextProbe('/usr/bin/python3', args, 1 << 18, useInputMethod ? 5500 : 1500, input);
   try {
     return JSON.parse(output);
   } catch {
@@ -315,18 +317,21 @@ export async function linuxPrimaryStamp(): Promise<number | undefined> {
   return stamp ? Number(stamp) : undefined;
 }
 
-// A second paste must not switch input methods during the first, or reach a later field.
-let insertingWaylandText = false;
-export async function insertWaylandText(text: string): Promise<boolean> {
-  if (insertingWaylandText) return false;
-  insertingWaylandText = true;
+// Selection and paste can each briefly switch input methods. Overlapping requests
+// are declined so a queued operation never reaches a different editor.
+let usingWaylandField = false;
+async function waylandField(mode: 'selection' | 'insert', text?: string): Promise<Record<string, unknown>> {
+  if (usingWaylandField) return {};
+  usingWaylandField = true;
   try {
-    const pid = await linuxForegroundPid();
-    if (!pid) return false;
-    return (await linuxProbe(pid, 'insert', false, text)).inserted === true;
+    return await linuxProbe('0', mode, false, text);
   } finally {
-    insertingWaylandText = false;
+    usingWaylandField = false;
   }
+}
+
+export async function insertWaylandText(text: string): Promise<boolean> {
+  return (await waylandField('insert', text)).inserted === true;
 }
 
 const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|firefox-bin|firefox-esr|brave|msedge|vivaldi|opera)$/i;
@@ -334,7 +339,7 @@ const linuxBrowser = /^(chromium|chromium-browse|chrome|google-chrome|firefox|fi
 // Paste is still sent when it can't be confirmed, but the result card stays available
 // because a keypress alone does not prove the text arrived. That covers browsers that
 // expose no accessibility tree, and Wayland windows, which X11 tools cannot see.
-export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirmed' | undefined> {
+export async function linuxPasteTarget(): Promise<'field' | 'blocked' | 'unconfirmed' | undefined> {
   const pid = await linuxForegroundPid();
   if (!pid) return 'unconfirmed';
   const [probe, processName] = await Promise.all([
@@ -342,7 +347,7 @@ export async function linuxPasteTarget(): Promise<'field' | 'page' | 'unconfirme
     linuxProcessName(pid),
   ]);
   if (probe.editable === true) return 'field';
-  if (probe.editable === false) return 'page';
+  if (probe.editable === false) return 'blocked';
   if (linuxBrowser.test(processName)) return 'unconfirmed';
 }
 
@@ -534,10 +539,11 @@ export async function captureSelection(
     return parseSelection(parseJson(await runContextProbe('osascript', ['-l', 'JavaScript', '-e', macProbe('selection')], 1 << 20, 3000)));
   }
   if (process.platform !== 'linux') return;
-  const pid = isWayland ? '0' : await linuxForegroundPid() ?? '0';
+  if (isWayland) return parseSelection(await waylandField('selection'));
+  const pid = await linuxForegroundPid() ?? '0';
   const data = await linuxProbe(pid, 'selection');
   const found = parseSelection(data);
-  if (found || isWayland || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
+  if (found || !copy || (data as { password?: unknown } | undefined)?.password === true) return found;
   // Apps that share nothing (Chromium and Electron apps without accessibility on): the last
   // highlighted text. Where it came from is unknown, so it is never typed over.
   const copied = await copy('');

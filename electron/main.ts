@@ -1084,7 +1084,7 @@ app.whenReady().then(() => {
       process.platform === 'linux' ? linuxPasteTarget() : undefined,
       keepOnClipboard ? undefined : saveClipboardBackup(),
     ]);
-    if (target === 'page') {
+    if (target === 'blocked') {
       if (previous) discardClipboardBackup(previous);
       return false;
     }
@@ -1127,7 +1127,10 @@ app.whenReady().then(() => {
   ipcMain.handle('clipboard:paste', async (event, text: string, keepOnClipboard?: boolean) => {
     if (event.sender !== mainWindow?.webContents || typeof text !== 'string' || !text) return false;
     if (isWayland) {
-      const inserted = await withWaylandTarget(() => insertWaylandText(text), (ok) => ok);
+      const inserted = await withWaylandTarget(async () => {
+        if (!mainWindow || isMainWindowFocused()) return false;
+        return insertWaylandText(text);
+      }, (ok) => ok);
       if (keepOnClipboard === true) await writeClipboardText(text).catch(console.warn);
       return inserted;
     }

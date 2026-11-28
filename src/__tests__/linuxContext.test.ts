@@ -44,20 +44,20 @@ describe.runIf(process.platform === 'linux')('Wayland context', () => {
   it('declines an overlapping paste and releases the editor after a failed delivery', async () => {
     let finishInsert: (error: Error | null, output: string) => void;
     execFile.mockImplementation((_file, args, _options, done) => {
-      if (args[3] === 'pid') done(null, '{"pid":4321}');
-      else if (args[3] === 'insert') finishInsert = done;
+      if (args[3] === 'insert') finishInsert = done;
       else throw new Error('Unexpected probe');
       return {};
     });
-    const { insertWaylandText } = await import('../../electron/dictationContext');
+    const { captureSelection, insertWaylandText } = await import('../../electron/dictationContext');
     const first = insertWaylandText('first');
     expect(await insertWaylandText('second')).toBe(false);
+    expect(await captureSelection()).toBeUndefined();
     await vi.waitFor(() => expect(finishInsert).toBeTypeOf('function'));
     finishInsert!(new Error('Editor closed'), '');
     expect(await first).toBe(false);
     execFile.mockClear();
     const next = insertWaylandText('next');
-    await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(1));
     finishInsert!(null, '{"inserted":true}');
     expect(await next).toBe(true);
   });
@@ -65,7 +65,7 @@ describe.runIf(process.platform === 'linux')('Wayland context', () => {
   it('passes its own process id to skip Yap Yap windows when scanning with pid 0', async () => {
     execFile.mockImplementation((_file, args, _options, done) => {
       if (args[3] === 'selection') {
-        expect(args.slice(2)).toEqual(['0', 'selection', 'app', String(process.pid)]);
+        expect(args.slice(2)).toEqual(['0', 'selection', 'app', String(process.pid), 'wayland']);
         done(null, '{"text":"chosen","editable":true}');
       } else {
         throw new Error(`Unexpected probe: ${args.slice(2).join(' ')}`);

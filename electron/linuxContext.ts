@@ -9,13 +9,16 @@ import sys
 import warnings
 from collections import deque
 import gi
-gi.require_version('Atspi', '2.0')
-from gi.repository import Atspi
+try:
+    gi.require_version('Atspi', '2.0')
+    from gi.repository import Atspi
+except (ValueError, ImportError):
+    Atspi = None
 
 warnings.simplefilter('ignore')
 LIMIT = 600
 SELECTION_LIMIT = ${SELECTION_LIMIT}
-PAGES = (Atspi.Role.DOCUMENT_WEB, Atspi.Role.DOCUMENT_FRAME)
+PAGES = (Atspi.Role.DOCUMENT_WEB, Atspi.Role.DOCUMENT_FRAME) if Atspi else ()
 
 def page_url(node):
     # Chromium names the attribute URI and Firefox DocURL. Older AT-SPI only has the deprecated getter.
@@ -152,18 +155,30 @@ def insert_text(node, text):
                     Atspi.Text.add_selection(node, start, end)
     return False
 
-def read_field(pid, mode, browser, skip_pid=0):
+def read_field(pid, mode, browser, skip_pid=0, retry_window=None):
     desktop = Atspi.get_desktop(0)
     for index in range(desktop.get_child_count()):
         app = desktop.get_child_at_index(index)
         # pid 0: the foreground app is unknown (native Wayland); any other app with the active window.
         if not app or (pid and app.get_process_id() != pid) or (not pid and skip_pid and app.get_process_id() == skip_pid):
             continue
+        # GNOME Shell's stage stays ACTIVE even while another application has focus.
+        # When only the shell is active (e.g. the overview), there is no target app.
+        if not pid and app.get_name() == 'gnome-shell' and app.get_toolkit_name() == 'clutter':
+            continue
         # Limit the search to an active top-level window in the foreground process.
         queue = deque()
         for i in range(app.get_child_count()):
             window = app.get_child_at_index(i)
+            if retry_window is not None:
+                if window != retry_window:
+                    continue
+                window.clear_cache()
             if window and window.get_state_set().contains(Atspi.StateType.ACTIVE):
+                # Asking for attributes tells Chromium an accessibility client needs the
+                # page tree. Until then it may expose only the browser window.
+                if app.get_toolkit_name() == 'Chromium':
+                    window.get_attributes()
                 queue.append(window)
         if mode == 'pid':
             if queue:
@@ -177,6 +192,8 @@ def read_field(pid, mode, browser, skip_pid=0):
         url = None
         text_hidden = False
         found = None
+        first_window = queue[0] if queue else None
+        page_seen = False
         for _ in range(LIMIT):
             if not queue:
                 break
@@ -184,6 +201,7 @@ def read_field(pid, mode, browser, skip_pid=0):
             role = node.get_role()
             states = node.get_state_set()
             if mode == 'selection':
+                page_seen = page_seen or role in PAGES
                 # A focused password field: nothing is read, and the highlight fallback is not used.
                 # The search goes on past a selection found first, since another field (an old
                 # selection in a sibling field) may come before the focused password field.
@@ -212,7 +230,9 @@ def read_field(pid, mode, browser, skip_pid=0):
                         return dict(inserted=insert_text(node, sys.stdin.read()))
             elif mode == 'paste':
                 if states.contains(Atspi.StateType.FOCUSED):
-                    if states.contains(Atspi.StateType.EDITABLE) or role == Atspi.Role.PASSWORD_TEXT:
+                    if role == Atspi.Role.PASSWORD_TEXT or (node.get_attributes() or {}).get('text-input-type', '').lower() == 'password':
+                        return dict(editable=False)
+                    if states.contains(Atspi.StateType.EDITABLE):
                         return dict(editable=True)
                     if role in PAGES:
                         focused_page = True
@@ -245,13 +265,33 @@ def read_field(pid, mode, browser, skip_pid=0):
                 if child:
                     queue.append(child)
         if mode == 'selection':
+            # Chromium publishes a newly requested renderer tree asynchronously.
+            # Retry only this read, while the same window is still active.
+            if (not found and not page_seen and first_window and retry_window is None
+                    and app.get_toolkit_name() == 'Chromium'):
+                from gi.repository import GLib
+                loop = GLib.MainLoop()
+                GLib.timeout_add(120, loop.quit)
+                loop.run()
+                return read_field(app.get_process_id(), mode, browser, skip_pid, first_window)
             return found
         if mode == 'paste':
             # A search cut short by the limit can't tell that no field has focus.
             return dict(editable=False) if focused_page and not queue else None
         return dict(url=url) if url and mode == 'context' else None
 
-print(json.dumps(read_field(int(sys.argv[1]), sys.argv[2], len(sys.argv) > 3 and sys.argv[3] == 'browser', int(sys.argv[4]) if len(sys.argv) > 4 else 0) or {}, ensure_ascii=False))
+    if not pid and mode in ('selection', 'insert') and wayland:
+        return input_method_field(mode)
+
+pid, mode = int(sys.argv[1]), sys.argv[2]
+wayland = len(sys.argv) > 5 and sys.argv[5] == 'wayland'
+if Atspi:
+    result = read_field(pid, mode, len(sys.argv) > 3 and sys.argv[3] == 'browser', int(sys.argv[4]) if len(sys.argv) > 4 else 0)
+elif wayland and mode in ('selection', 'insert'):
+    result = input_method_field(mode)
+else:
+    result = None
+print(json.dumps(result or {}, ensure_ascii=False))
 `;
 
 // An X11 owner can tell when it took the primary selection. Ask separately: an owner that
